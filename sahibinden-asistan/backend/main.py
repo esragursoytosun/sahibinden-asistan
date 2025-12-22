@@ -1,4 +1,4 @@
-# backend/main.py - TANI VE ÇÖZ SÜRÜMÜ (DIAGNOSTIC MODE)
+# backend/main.py - GEMINI 2.0 FLASH (EN YENİ & HIZLI SÜRÜM) 🚀
 import os
 from datetime import datetime
 from fastapi import FastAPI
@@ -29,13 +29,13 @@ if MONGO_URL:
 else:
     print("UYARI: Database bagli degil!")
 
-# 2. AI BAĞLANTISI
+# 2. AI BAĞLANTISI (GEMINI 2.0 FLASH)
 model = None
 if GEMINI_KEY:
     try:
         genai.configure(api_key=GEMINI_KEY)
-        # Öncelikli olarak en hızlı modeli deniyoruz
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        # Senin listende açıkça görünen en iyi ve hızlı model bu:
+        model = genai.GenerativeModel('gemini-2.0-flash')
     except Exception as e:
         print(f"AI Model Yukleme Hatasi: {e}")
 else:
@@ -59,41 +59,10 @@ class LikeData(BaseModel):
 
 # --- ENDPOINTLER ---
 
-# YENİ: Hangi modellerin açık olduğunu gösteren dedektif endpoint
-@app.get("/models")
-def list_available_models():
-    if not GEMINI_KEY: 
-        return {"status": "error", "message": "API Key Yok"}
-    try:
-        genai.configure(api_key=GEMINI_KEY)
-        # API Key'in görebildiği tüm modelleri listele
-        all_models = list(genai.list_models())
-        # Sadece metin üretebilenleri filtrele
-        supported = [m.name for m in all_models if 'generateContent' in m.supported_generation_methods]
-        return {
-            "status": "success", 
-            "message": "API Anahtarınız bu modelleri görebiliyor:",
-            "available_models": supported
-        }
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
 @app.post("/analyze-ai")
 async def ask_ai(data: ListingData):
-    # Model yüklenmemişse tekrar denemeyi veya varsayılanı zorlayalım
-    local_model = model
-    if not local_model and GEMINI_KEY:
-        try:
-            genai.configure(api_key=GEMINI_KEY)
-            # Eğer yukarıdaki flash çalışmazsa burada pro'yu deneyebilir
-            local_model = genai.GenerativeModel('gemini-pro') 
-        except: pass
-    
-    if not local_model:
-        return {
-            "status": "error", 
-            "message": "AI Modeline Erişilemedi. Lütfen tarayıcıdan /models adresine gidip yetkili modelleri kontrol edin."
-        }
+    if not model:
+        return {"status": "error", "message": "AI Modeli Calismiyor (API Key kontrol ediniz)"}
     
     prompt = f"""
     Sen uzman bir oto ekspertizisin. Bu aracı analiz et:
@@ -110,10 +79,10 @@ async def ask_ai(data: ListingData):
     """
     
     try:
-        response = local_model.generate_content(prompt)
+        response = model.generate_content(prompt)
         return {"status": "success", "ai_response": response.text}
     except Exception as e:
-        return {"status": "error", "message": f"AI Hatasi: {str(e)}. (Model ismini /models sayfasindan kontrol edin)"}
+        return {"status": "error", "message": f"AI Hatasi: {str(e)}"}
 
 @app.post("/analyze")
 async def analyze_listing(data: ListingData):
