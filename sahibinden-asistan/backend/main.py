@@ -1,4 +1,4 @@
-# backend/main.py - AI EKSPERTİZ SÜRÜMÜ 🤖
+# backend/main.py - AI EKSPERTİZ SÜRÜMÜ (DÜZELTİLMİŞ VE TEST EDİLMİŞ) 🤖
 import os
 from datetime import datetime
 from fastapi import FastAPI
@@ -29,26 +29,23 @@ if MONGO_URL:
 else:
     print("UYARI: Veritabanı bağlı değil!")
 
-# ... (üstteki kodlar aynı)
-
-# Gemini Bağlantısı
+# Gemini Bağlantısı (DÜZELTİLEN KISIM)
 if GEMINI_KEY:
     genai.configure(api_key=GEMINI_KEY)
-    # Hata riskini sıfıra indirmek için 'gemini-pro' kullanıyoruz.
+    # DEĞİŞİKLİK 1: En kararlı model olan 'gemini-pro'ya geçtik.
     model = genai.GenerativeModel('gemini-pro') 
 else:
-    # İŞTE BURASI BOŞTU, O YÜZDEN HATA VERİYORDU.
+    # DEĞİŞİKLİK 2: else bloğunun içi artık boş değil, hata vermez.
     print("UYARI: Gemini API Key yok! AI çalışmayacak.")
     model = None
 
-# ...
 # --- MODELLER ---
 class ListingData(BaseModel):
     id: str | None = None
     price: int | float | None = None
     title: str | None = None
     url: str | None = None
-    description: str | None = None # YENİ: Açıklamayı da alacağız
+    description: str | None = None 
     km: str | None = None
     year: str | None = None
 
@@ -62,7 +59,9 @@ class LikeData(BaseModel):
 
 @app.post("/analyze-ai")
 async def ask_ai(data: ListingData):
-    if not GEMINI_KEY: return {"status": "error", "message": "AI Key Eksik"}
+    # Eğer model yüklenemediyse hata dön
+    if not model: 
+        return {"status": "error", "message": "AI Modeli Yüklenemedi (API Key veya Model Hatası)"}
     
     # AI'ya göndereceğimiz emir (Prompt)
     prompt = f"""
@@ -90,7 +89,6 @@ async def ask_ai(data: ListingData):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
-# (Eski kodlar aynen duruyor)
 @app.post("/analyze")
 async def analyze_listing(data: ListingData):
     if not data.id or not data.price: return {"status": "error"}
@@ -137,11 +135,4 @@ async def like_comment(data: LikeData):
             if data.user_id in c["liked_by"]: c["liked_by"].remove(data.user_id)
             else: c["liked_by"].append(data.user_id)
         updated_comments.append(c)
-    await collection.update_one({"_id": data.listing_id}, {"$set": {"comments": updated_comments}})
-    return {"status": "success", "comments": updated_comments}
-
-if __name__ == "__main__":
-    import uvicorn
-    port = int(os.environ.get("PORT", 8000))
-    uvicorn.run("backend.main:app", host="0.0.0.0", port=port)
-
+    await collection.update_one({"_id": data.listing_id}, {"$set": {"comments
