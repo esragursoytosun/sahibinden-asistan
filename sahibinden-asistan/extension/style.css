@@ -1,0 +1,76 @@
+#smart-buyer-overlay {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  width: 300px;
+  background-color: white;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border-radius: 12px;
+  z-index: 10000;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+#smart-buyer-header {
+  background-color: #2d3e50;
+  color: white;
+  padding: 12px 16px;
+  font-weight: 600;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+#smart-buyer-content {
+  padding: 16px;
+}
+
+.sb-metric {
+  margin-bottom: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.sb-label {
+  color: #666;
+  font-size: 14px;
+}
+
+.sb-value {
+  font-size: 16px;
+  font-weight: 700;
+  color: #333;
+}
+
+.sb-badge {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.sb-badge.green {
+  background-color: #d4edda;
+  color: #155724;
+}
+
+.sb-badge.red {
+  background-color: #f8d7da;
+  color: #721c24;
+}
+
+.sb-badge.gray {
+  background-color: #e2e3e5;
+  color: #383d41;
+}
+
+#smart-buyer-footer {
+  background-color: #f8f9fa;
+  padding: 8px 16px;
+  font-size: 11px;
+  color: #999;
+  text-align: center;
+  border-top: 1px solid #eee;
+}
