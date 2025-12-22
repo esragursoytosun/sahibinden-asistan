@@ -1,4 +1,4 @@
-# backend/main.py - GEMINI 2.0 FLASH (EN YENİ & HIZLI SÜRÜM) 🚀
+# backend/main.py - AKILLI YEDEKLİ SÜRÜM (KOTA DOSTU) 🧠
 import os
 from datetime import datetime
 from fastapi import FastAPI
@@ -29,15 +29,9 @@ if MONGO_URL:
 else:
     print("UYARI: Database bagli degil!")
 
-# 2. AI BAĞLANTISI (GEMINI 2.0 FLASH)
-model = None
+# 2. AI AYARLARI
 if GEMINI_KEY:
-    try:
-        genai.configure(api_key=GEMINI_KEY)
-        # Senin listende açıkça görünen en iyi ve hızlı model bu:
-        model = genai.GenerativeModel('gemini-2.0-flash')
-    except Exception as e:
-        print(f"AI Model Yukleme Hatasi: {e}")
+    genai.configure(api_key=GEMINI_KEY)
 else:
     print("UYARI: API Key yok!")
 
@@ -61,8 +55,19 @@ class LikeData(BaseModel):
 
 @app.post("/analyze-ai")
 async def ask_ai(data: ListingData):
-    if not model:
-        return {"status": "error", "message": "AI Modeli Calismiyor (API Key kontrol ediniz)"}
+    if not GEMINI_KEY:
+        return {"status": "error", "message": "API Key Eksik"}
+    
+    # Denenecek Modeller Listesi (Sırasıyla dener)
+    # 1. gemini-flash-latest: En yüksek kotalı, kararlı sürüm.
+    # 2. gemini-2.0-flash: Yeni ve hızlı ama kotası çabuk doluyor.
+    # 3. gemini-pro: Eski ama sağlam kale.
+    models_to_try = [
+        "gemini-flash-latest",  
+        "gemini-2.0-flash", 
+        "gemini-2.0-flash-lite-preview-02-05",
+        "gemini-pro"
+    ]
     
     prompt = f"""
     Sen uzman bir oto ekspertizisin. Bu aracı analiz et:
@@ -77,12 +82,28 @@ async def ask_ai(data: ListingData):
     2. FİYAT YORUMU (Pahalı mı?)
     3. RİSK ANALİZİ
     """
+
+    last_error = ""
     
-    try:
-        response = model.generate_content(prompt)
-        return {"status": "success", "ai_response": response.text}
-    except Exception as e:
-        return {"status": "error", "message": f"AI Hatasi: {str(e)}"}
+    # Döngü ile modelleri tek tek dene
+    for model_name in models_to_try:
+        try:
+            print(f"Denenen Model: {model_name}") # Loglara yazar
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(prompt)
+            # Başarılı olursa hemen döndür
+            return {"status": "success", "ai_response": response.text, "used_model": model_name}
+        except Exception as e:
+            # Hata alırsak (429 veya 404), bir sonraki modele geç
+            print(f"Hata ({model_name}): {str(e)}")
+            last_error = str(e)
+            continue
+            
+    # Eğer hiçbiri çalışmazsa
+    return {
+        "status": "error", 
+        "message": f"Tüm modeller denendi ancak başarısız oldu. Son hata: {last_error}. Lütfen 1 dakika bekleyip tekrar deneyin."
+    }
 
 @app.post("/analyze")
 async def analyze_listing(data: ListingData):
