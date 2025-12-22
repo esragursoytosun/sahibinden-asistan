@@ -3,5 +3,4 @@ uvicorn
 pydantic
 motor
 dnspython
-google-generativeai>=0.8.3  <-- (Sürümü yükselttik ve sabitledik)
-
+google-generativeai>=0.8.3
