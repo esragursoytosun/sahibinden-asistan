@@ -29,14 +29,18 @@ if MONGO_URL:
 else:
     print("UYARI: Veritabanı bağlı değil!")
 
+# ... (üstteki kodlar aynı)
+
 # Gemini Bağlantısı
-# backend/main.py (Yeni hali)
-# ...
 if GEMINI_KEY:
     genai.configure(api_key=GEMINI_KEY)
-    # Flash yerine Pro modeline geçiyoruz, bu model çok daha garantidir.
+    # Hata riskini sıfıra indirmek için 'gemini-pro' kullanıyoruz.
     model = genai.GenerativeModel('gemini-pro') 
 else:
+    # İŞTE BURASI BOŞTU, O YÜZDEN HATA VERİYORDU.
+    print("UYARI: Gemini API Key yok! AI çalışmayacak.")
+    model = None
+
 # ...
 # --- MODELLER ---
 class ListingData(BaseModel):
