@@ -1,4 +1,4 @@
-# backend/main.py - SANAYİ USTASI SÜRÜMÜ (HAFIZALI, YEDEKLİ & SAĞLAM) 🛠️
+# backend/main.py - HATASIZ FİNAL SÜRÜM (PYMONGO FIX) 🛠️
 import os
 import uuid
 from datetime import datetime
@@ -23,6 +23,7 @@ MONGO_URL = os.environ.get("MONGO_URL")
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY")
 
 # 1. DB BAĞLANTISI
+collection = None
 if MONGO_URL:
     try:
         client = motor.motor_asyncio.AsyncIOMotorClient(MONGO_URL)
@@ -33,7 +34,6 @@ if MONGO_URL:
         collection = None
 else:
     print("UYARI: Database URL yok!")
-    collection = None
 
 # 2. AI AYARLARI
 if GEMINI_KEY:
@@ -62,7 +62,8 @@ class LikeData(BaseModel):
 # --- YARDIMCI FONKSİYON: EMSAL BULUCU ---
 async def find_similars(title, current_id):
     """Veritabanındaki benzer araçların ortalama fiyatını bulur."""
-    if not title or not collection: return None
+    # DÜZELTME 1: collection is None kontrolü
+    if not title or collection is None: return None
     
     try:
         # Başlıktaki kelimeleri ayır
@@ -150,8 +151,7 @@ async def ask_ai(data: ListingData):
     """
 
     last_error = ""
-    used_model = ""
-
+    
     # Modelleri sırayla dene
     for model_name in models_to_try:
         try:
@@ -167,7 +167,8 @@ async def ask_ai(data: ListingData):
 
 @app.post("/analyze")
 async def analyze_listing(data: ListingData):
-    if not collection: return {"status": "error", "message": "Veritabanı bağlantısı yok"}
+    # DÜZELTME 2: collection is None kontrolü
+    if collection is None: return {"status": "error", "message": "Veritabanı bağlantısı yok"}
     if not data.id or not data.price: return {"status": "error"}
     
     try:
@@ -195,7 +196,8 @@ async def analyze_listing(data: ListingData):
 
 @app.post("/add_comment")
 async def add_comment(comment: CommentData):
-    if not collection: return {"status": "error"}
+    # DÜZELTME 3: collection is None kontrolü
+    if collection is None: return {"status": "error"}
     new_comment = {"id": str(uuid.uuid4()), "user": comment.username, "text": comment.text, "date": datetime.now().strftime("%Y-%m-%d %H:%M"), "liked_by": []}
     await collection.update_one({"_id": comment.listing_id}, {"$push": {"comments": new_comment}})
     updated = await collection.find_one({"_id": comment.listing_id})
@@ -203,7 +205,8 @@ async def add_comment(comment: CommentData):
 
 @app.post("/like_comment")
 async def like_comment(data: LikeData):
-    if not collection: return {"status": "error"}
+    # DÜZELTME 4: collection is None kontrolü
+    if collection is None: return {"status": "error"}
     doc = await collection.find_one({"_id": data.listing_id})
     if not doc: return {"status": "error"}
     
