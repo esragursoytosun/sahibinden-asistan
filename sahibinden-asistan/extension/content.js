@@ -1,13 +1,13 @@
-// content.js - AI EXPERT SÜRÜMÜ 🤖 ✨
+// content.js - SCROLL DÜZELTİLMİŞ FİNAL SÜRÜM 🖱️✨
 
-const API_URL = "https://sahiden.onrender.com"; // KENDİ LİNKİNİ YAZ
+const API_URL = "https://sahiden.onrender.com"; // Render URL'in
 
 // --- KİMLİK ---
 let userId = localStorage.getItem("sahibinden_userid");
 if (!userId) { userId = "uid_" + Math.random().toString(36).substr(2, 9); localStorage.setItem("sahibinden_userid", userId); }
 let currentUser = localStorage.getItem("sahibinden_user") || "Misafir";
 
-// --- VERİ OKUMA (GELİŞMİŞ) ---
+// --- VERİ OKUMA ---
 function getListingData() {
     try {
         let priceText = document.querySelector('.classifiedInfo h3')?.innerText || document.querySelector('div.price-info')?.innerText;
@@ -17,10 +17,9 @@ function getListingData() {
         const titleElement = document.querySelector('.classifiedDetailTitle h1');
         const title = titleElement ? titleElement.innerText.trim() : document.title;
         
-        // YENİ: Detaylı Bilgileri Oku
+        // Detaylı Bilgiler
         const description = document.querySelector('#classifiedDescription')?.innerText || "Açıklama yok";
         
-        // KM ve Yılı bulmak için detay listesini tarayalım
         let km = "Bilinmiyor";
         let year = "Bilinmiyor";
         const details = document.querySelectorAll('.classifiedInfoList li');
@@ -65,7 +64,7 @@ function showOverlay(data, result) {
     let chartHtml = createPriceChart(result.history);
 
     overlay.innerHTML = `
-        <div style="display: flex; align-items: center; justify-content: space-between; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:8px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:8px; margin-bottom: 10px;">
             <span style="font-weight: 800; font-size:14px;">🤖 AI ASİSTAN</span>
             <input type="text" id="usernameInput" value="${currentUser}" style="width:70px; background:rgba(0,0,0,0.3); border:none; color:white; padding:3px; border-radius:4px; font-size:10px; text-align:center;">
         </div>
@@ -79,7 +78,8 @@ function showOverlay(data, result) {
         <button id="askAiBtn" style="width:100%; background:linear-gradient(90deg, #8e44ad, #9b59b6); color:white; border:none; padding:10px; border-radius:8px; cursor:pointer; font-size:12px; font-weight:bold; margin-top:10px; box-shadow:0 4px 10px rgba(142, 68, 173, 0.4);">
             ✨ YAPAY ZEKA EKSPERTİZİ
         </button>
-        <div id="aiResult" style="display:none; font-size:11px; margin-top:10px; background:rgba(255,255,255,0.1); padding:10px; border-radius:8px; line-height:1.4;"></div>
+        
+        <div id="aiResult" style="display:none; font-size:11px; margin-top:10px; background:rgba(255,255,255,0.1); padding:10px; border-radius:8px; line-height:1.5; max-height: 250px; overflow-y: auto; border: 1px solid rgba(255,255,255,0.1);"></div>
 
         <button id="toggleCommentsBtn" style="width:100%; background:white; color:#333; border:none; padding:8px; border-radius:6px; margin-top:8px; font-size:11px; font-weight:bold;">💬 Yorumlar (${result.comments ? result.comments.length : 0})</button>
 
@@ -92,13 +92,25 @@ function showOverlay(data, result) {
         </div>
     `;
 
-    // Stil
+    // Stil: Ana kutuya da scroll ve max-height ekledik
     Object.assign(overlay.style, {
-        position: 'fixed', top: '160px', right: '20px', width: '260px',
-        backgroundColor: boxColor, color: 'white', padding: '15px', borderRadius: '16px',
-        boxShadow: '0 10px 30px rgba(0,0,0,0.3)', zIndex: '999999', fontFamily: "'Segoe UI', sans-serif",
-        backdropFilter: 'blur(10px)'
+        position: 'fixed', 
+        top: '120px', 
+        right: '20px', 
+        width: '280px',
+        maxHeight: '85vh',       // Ekranın %85'inden fazla uzamasın
+        overflowY: 'auto',       // İçerik taşarsa ana kutuda scroll çıksın
+        backgroundColor: boxColor, 
+        color: 'white', 
+        padding: '15px', 
+        borderRadius: '16px',
+        boxShadow: '0 10px 30px rgba(0,0,0,0.3)', 
+        zIndex: '999999', 
+        fontFamily: "'Segoe UI', sans-serif",
+        backdropFilter: 'blur(10px)',
+        scrollbarWidth: 'thin'   // Firefox için ince scrollbar
     });
+    
     document.body.appendChild(overlay);
 
     // --- AI BUTON OLAYI ---
@@ -106,19 +118,21 @@ function showOverlay(data, result) {
         const btn = document.getElementById('askAiBtn');
         const resultBox = document.getElementById('aiResult');
         
-        btn.innerHTML = "⏳ Analiz Ediliyor... (Biraz sürer)";
+        btn.innerHTML = "⏳ Analiz Ediliyor...";
         btn.disabled = true;
 
         try {
             const response = await fetch(`${API_URL}/analyze-ai`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data) // Tüm veriyi gönderiyoruz (açıklama dahil)
+                body: JSON.stringify(data) 
             });
             const json = await response.json();
             
             resultBox.style.display = "block";
             if(json.status === "success") {
-                resultBox.innerHTML = json.ai_response;
+                // Hangi modelin kullanıldığını da küçük bir not olarak ekleyelim
+                const modelInfo = json.used_model ? `<div style='font-size:9px; color:#aaa; margin-top:5px; text-align:right;'>Model: ${json.used_model}</div>` : "";
+                resultBox.innerHTML = json.ai_response + modelInfo;
                 btn.innerHTML = "✅ Analiz Tamamlandı";
             } else {
                 resultBox.innerHTML = "Hata: " + (json.message || "Bilinmiyor");
@@ -126,18 +140,20 @@ function showOverlay(data, result) {
             }
         } catch (e) {
             btn.innerHTML = "❌ Bağlantı Hatası";
+            resultBox.style.display = "block";
+            resultBox.innerHTML = "Sunucuya bağlanılamadı. İnternetini kontrol et veya biraz bekle.";
+        } finally {
+            btn.disabled = false;
         }
     };
 
-    // Diğer Butonlar (Yorum vs.)
+    // Diğer Butonlar
     document.getElementById('toggleCommentsBtn').onclick = () => {
         const section = document.getElementById('commentSection');
         section.style.display = section.style.display === 'none' ? 'block' : 'none';
     };
-    // ... (Yorum gönderme ve beğeni kodları aynı kalıyor, buraya eklenebilir) ...
-    // Kısaltmak için buraya yazmadım ama önceki kodlardaki yorum/beğeni eventlerini buraya eklemelisin.
     
-     // YORUM GÖNDERME
+    // YORUM GÖNDERME
     document.getElementById('sendCommentBtn').onclick = async () => {
         const text = document.getElementById('commentInput').value;
         if (!text) return;
@@ -155,7 +171,7 @@ function showOverlay(data, result) {
         } catch (err) {} 
     };
 
-    // YORUM BEĞENME (Delegation)
+    // YORUM BEĞENME
     document.getElementById('commentList').addEventListener('click', async (e) => {
         const btn = e.target.closest('.like-btn');
         if (btn) {
@@ -182,21 +198,4 @@ function renderComments(comments) {
     if (!comments || comments.length === 0) return '<div style="font-size:11px; text-align:center; padding:5px;">Henüz yorum yok.</div>';
     return comments.map(c => `
         <div style="background:white; padding:5px; margin-bottom:5px; border-radius:5px; font-size:11px;">
-            <b>${c.user}</b>: ${c.text}
-            <div style="text-align:right;"><button class="like-btn" data-id="${c.id}" style="border:none; bg:none; cursor:pointer;">❤️ ${c.liked_by?.length||0}</button></div>
-        </div>`).join('');
-}
-
-async function analyzeListing() {
-    const data = getListingData();
-    if (!data || data.price === 0) return;
-    try {
-        const response = await fetch(`${API_URL}/analyze`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data)
-        });
-        const result = await response.json();
-        showOverlay(data, result);
-    } catch (error) {}
-}
-
-setTimeout(analyzeListing, 1000);
+            <b>${c.user}</b>: ${c
