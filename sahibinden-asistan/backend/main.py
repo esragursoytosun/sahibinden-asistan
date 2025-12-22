@@ -1,4 +1,4 @@
-# backend/main.py - AI EKSPERTİZ SÜRÜMÜ (DÜZELTİLMİŞ VE TEST EDİLMİŞ) 🤖
+# backend/main.py - HATASIZ SÜRÜM (SON KONTROL YAPILDI)
 import os
 from datetime import datetime
 from fastapi import FastAPI
@@ -29,13 +29,11 @@ if MONGO_URL:
 else:
     print("UYARI: Veritabanı bağlı değil!")
 
-# Gemini Bağlantısı (DÜZELTİLEN KISIM)
+# Gemini Bağlantısı (DÜZELTİLDİ: gemini-pro kullanılıyor)
 if GEMINI_KEY:
     genai.configure(api_key=GEMINI_KEY)
-    # DEĞİŞİKLİK 1: En kararlı model olan 'gemini-pro'ya geçtik.
-    model = genai.GenerativeModel('gemini-pro') 
+    model = genai.GenerativeModel('gemini-pro')
 else:
-    # DEĞİŞİKLİK 2: else bloğunun içi artık boş değil, hata vermez.
     print("UYARI: Gemini API Key yok! AI çalışmayacak.")
     model = None
 
@@ -50,23 +48,25 @@ class ListingData(BaseModel):
     year: str | None = None
 
 class CommentData(BaseModel):
-    listing_id: str; username: str; text: str
+    listing_id: str
+    username: str
+    text: str
 
 class LikeData(BaseModel):
-    listing_id: str; comment_id: str; user_id: str
+    listing_id: str
+    comment_id: str
+    user_id: str
 
 # --- ENDPOINTLER ---
 
 @app.post("/analyze-ai")
 async def ask_ai(data: ListingData):
-    # Eğer model yüklenemediyse hata dön
     if not model: 
-        return {"status": "error", "message": "AI Modeli Yüklenemedi (API Key veya Model Hatası)"}
+        return {"status": "error", "message": "AI Modeli Yüklenemedi (API Key Sorunu)"}
     
-    # AI'ya göndereceğimiz emir (Prompt)
     prompt = f"""
     Sen uzman bir oto ekspertizisin ve piyasa analistisin. 
-    Aşağıdaki araç ilanını analiz et ve maddeler halinde Türkçe yanıt ver.
+    Aşağıdaki araç ilanını analiz et ve Türkçe yanıt ver.
     
     ARAÇ BİLGİLERİ:
     Başlık: {data.title}
@@ -76,11 +76,11 @@ async def ask_ai(data: ListingData):
     İlan Açıklaması: {data.description}
 
     GÖREVLER:
-    1. ARACIN DURUMU: Açıklamaya göre boya, değişen, tramer durumu nedir? Satıcı samimi mi yoksa gizlediği bir şeyler olabilir mi?
-    2. FİYAT ANALİZİ: Bu km ve hasar durumuna göre fiyat {data.price} TL makul mü? Emsallerine göre pahalı mı ucuz mu?
-    3. RİSKLER & TAVSİYE: Bu model araçlarda (başlıktan anla) kronik ne sorunlar olur? Alırken neye dikkat edilmeli?
+    1. ARACIN DURUMU: Açıklamaya göre boya, değişen, tramer durumu nedir? Satıcı samimi mi?
+    2. FİYAT ANALİZİ: Bu km ve hasar durumuna göre fiyat {data.price} TL makul mü?
+    3. RİSKLER & TAVSİYE: Bu modelde nelere dikkat edilmeli?
     
-    Yanıtı HTML formatında (<b>, <br> kullanarak) ver ama <html> etiketi kullanma. Kısa, net ve vurucu ol.
+    Yanıtı HTML formatında (<b>, <br> kullanarak) ver ama <html> etiketi kullanma. Kısa, net ol.
     """
     
     try:
@@ -127,12 +127,27 @@ async def add_comment(comment: CommentData):
 async def like_comment(data: LikeData):
     doc = await collection.find_one({"_id": data.listing_id})
     if not doc: return {"status": "error"}
+    
     comments = doc.get("comments", [])
     updated_comments = []
+    
     for c in comments:
         if c.get("id") == data.comment_id:
-            if "liked_by" not in c or not isinstance(c["liked_by"], list): c["liked_by"] = []
-            if data.user_id in c["liked_by"]: c["liked_by"].remove(data.user_id)
-            else: c["liked_by"].append(data.user_id)
+            if "liked_by" not in c or not isinstance(c["liked_by"], list): 
+                c["liked_by"] = []
+            
+            if data.user_id in c["liked_by"]: 
+                c["liked_by"].remove(data.user_id)
+            else: 
+                c["liked_by"].append(data.user_id)
         updated_comments.append(c)
-    await collection.update_one({"_id": data.listing_id}, {"$set": {"comments
+    
+    # HATA VEREN SATIR BURASIYDI, DÜZELTİLDİ:
+    await collection.update_one({"_id": data.listing_id}, {"$set": {"comments": updated_comments}})
+    
+    return {"status": "success", "comments": updated_comments}
+
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("backend.main:app", host="0.0.0.0", port=port)
