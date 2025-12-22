@@ -49,20 +49,27 @@ class LikeData(BaseModel):
 
 # --- ENDPOINTLER ---
 
+# Sadece bu fonksiyonu güncelle (main.py içindeki)
 @app.post("/analyze")
 async def analyze_listing(data: ListingData):
     if not data.id or not data.price: return {"status": "error"}
     
-    # MongoDB'den veriyi çek
     existing = await collection.find_one({"_id": data.id})
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
-    response = {"status": "success", "comments": [], "is_price_drop": False}
+    # 1. TEMEL CEVAP YAPISI
+    response = {
+        "status": "success", 
+        "comments": [], 
+        "is_price_drop": False,
+        "history": [] # YENİ: Tarihçeyi de göndereceğiz
+    }
 
     if existing:
         last_price = existing["current_price"]
+        
+        # Fiyat değişimi varsa kaydet
         if last_price != data.price:
-            # Fiyat değişmiş, geçmişe ekle ve güncelle
             await collection.update_one(
                 {"_id": data.id},
                 {
@@ -74,11 +81,19 @@ async def analyze_listing(data: ListingData):
                 response["is_price_drop"] = True
                 response["change_percentage"] = int(((last_price - data.price)/last_price)*100)
         
+        # VERİLERİ DOLDUR
         response["comments"] = existing.get("comments", [])
+        
+        # YENİ: Geçmiş verisini ekle (Grafik için)
+        # Mevcut geçmiş + Şu anki fiyat (Grafikte bugünü de gösterelim)
+        full_history = existing.get("history", [])
+        full_history.append({"date": "Şimdi", "price": data.price})
+        response["history"] = full_history
+        
     else:
-        # Yeni kayıt oluştur
+        # Yeni Kayıt
         new_record = {
-            "_id": data.id, # MongoDB'de ID "_id" olarak tutulur
+            "_id": data.id,
             "title": data.title, 
             "url": data.url, 
             "first_seen_at": now, 
@@ -87,6 +102,8 @@ async def analyze_listing(data: ListingData):
             "comments": []
         }
         await collection.insert_one(new_record)
+        # Yeni kayıtta grafik için tek bir nokta (şu an) gönder
+        response["history"] = [{"date": "Şimdi", "price": data.price}]
 
     return response
 
