@@ -44,22 +44,26 @@ class ListingData(BaseModel):
     year: str | None = None
 
 class CommentData(BaseModel):
-    listing_id: str; username: str; text: str
+    listing_id: str
+    username: str
+    text: str
 
 class LikeData(BaseModel):
-    listing_id: str; comment_id: str; user_id: str
+    listing_id: str
+    comment_id: str
+    user_id: str
 
 # --- YARDIMCI FONKSİYON: EMSAL BULUCU ---
 async def find_similars(title, current_id):
     """Veritabanındaki benzer araçların ortalama fiyatını bulur."""
     if not title or not collection: return None
     
-    # Başlıktaki kelimeleri ayır (Örn: "Volkswagen Passat 2015" -> {"volkswagen", "passat", "2015"})
+    # Başlıktaki kelimeleri ayır
     keywords = set(title.lower().split())
     # Gereksiz kısa kelimeleri at
     keywords = {k for k in keywords if len(k) > 2}
     
-    # Veritabanından son 100 ilanı çek (Performans için limitli)
+    # Veritabanından son 100 ilanı çek
     cursor = collection.find().sort("first_seen_at", -1).limit(100)
     all_listings = await cursor.to_list(length=100)
     
@@ -170,4 +174,29 @@ async def analyze_listing(data: ListingData):
 @app.post("/add_comment")
 async def add_comment(comment: CommentData):
     import uuid
-    new_comment = {"id": str(uuid.uuid4()), "
+    new_comment = {"id": str(uuid.uuid4()), "user": comment.username, "text": comment.text, "date": datetime.now().strftime("%Y-%m-%d %H:%M"), "liked_by": []}
+    await collection.update_one({"_id": comment.listing_id}, {"$push": {"comments": new_comment}})
+    updated = await collection.find_one({"_id": comment.listing_id})
+    return {"status": "success", "comments": updated.get("comments", [])}
+
+@app.post("/like_comment")
+async def like_comment(data: LikeData):
+    doc = await collection.find_one({"_id": data.listing_id})
+    if not doc: return {"status": "error"}
+    comments = doc.get("comments", [])
+    updated_comments = []
+    for c in comments:
+        if c.get("id") == data.comment_id:
+            likes = c.get("liked_by", [])
+            if not isinstance(likes, list): likes = []
+            if data.user_id in likes: likes.remove(data.user_id)
+            else: likes.append(data.user_id)
+            c["liked_by"] = likes
+        updated_comments.append(c)
+    await collection.update_one({"_id": data.listing_id}, {"$set": {"comments": updated_comments}})
+    return {"status": "success", "comments": updated_comments}
+
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("backend.main:app", host="0.0.0.0", port=port)
