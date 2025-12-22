@@ -32,7 +32,9 @@ else:
 # Gemini Bağlantısı
 if GEMINI_KEY:
     genai.configure(api_key=GEMINI_KEY)
-    model = genai.GenerativeModel('gemini-1.5-flash') # Hızlı ve Bedava model
+    # DEĞİŞİKLİK BURADA: İsmi 'gemini-1.5-flash-latest' yaptık.
+    # Eğer yine hata verirse 'gemini-pro' yazarak da deneyebilirsin (o kesin çalışır ama flash daha hızlıdır).
+    model = genai.GenerativeModel('gemini-1.5-flash-latest') 
 else:
     print("UYARI: Gemini API Key yok!")
 
@@ -138,3 +140,4 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run("backend.main:app", host="0.0.0.0", port=port)
+
