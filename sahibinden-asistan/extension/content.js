@@ -1,8 +1,8 @@
-// content.js - HATA GÖSTEREN & SCROLL DÜZELTİLMİŞ SÜRÜM 🛠️
+// content.js - EKSİKSİZ FİNAL SÜRÜM (KAYDIRMA + HATA GÖSTERİMİ) 🚀
 
 const API_URL = "https://sahiden.onrender.com"; 
 
-console.log("SAHIBINDEN ASISTAN: Başlatılıyor..."); // Konsola bilgi bas
+console.log("SAHIBINDEN ASISTAN: Başlatılıyor..."); 
 
 // --- KİMLİK ---
 let userId = localStorage.getItem("sahibinden_userid");
@@ -33,7 +33,7 @@ function getListingData() {
             if(label?.includes("Yıl")) year = value;
         });
 
-        // Eğer fiyat yoksa (yani ilan sayfası değilse) null dön
+        // Fiyat yoksa ilan sayfası değildir
         if (price === 0) {
             console.log("SAHIBINDEN ASISTAN: Fiyat bulunamadı, bu bir ilan sayfası olmayabilir.");
             return null;
@@ -74,7 +74,6 @@ function showOverlay(data, result) {
     const overlay = document.createElement('div');
     overlay.id = 'sahibinden-asistan-box';
     
-    // Eğer sunucudan hata geldiyse veya veri yoksa güvenli modda aç
     const isError = !result || result.status === "error";
     let boxColor = isError ? "#e74c3c" : (result.is_price_drop ? "#27ae60" : "#2c3e50");
     let chartHtml = isError ? "" : createPriceChart(result.history);
@@ -108,21 +107,136 @@ function showOverlay(data, result) {
         </div>
     `;
 
+    // Stil Ayarları (Scroll dahil)
     Object.assign(overlay.style, {
-        position: 'fixed', top: '120px', right: '20px', width: '280px',
-        maxHeight: '85vh', overflowY: 'auto', // SCROLL AYARI
-        backgroundColor: boxColor, color: 'white', padding: '15px', borderRadius: '16px',
-        boxShadow: '0 10px 30px rgba(0,0,0,0.3)', zIndex: '999999', fontFamily: "'Segoe UI', sans-serif",
+        position: 'fixed', 
+        top: '120px', 
+        right: '20px', 
+        width: '280px',
+        maxHeight: '85vh',       // Ekran taşmasını engeller
+        overflowY: 'auto',       // Ana kutuda scroll çıkarır
+        backgroundColor: boxColor, 
+        color: 'white', 
+        padding: '15px', 
+        borderRadius: '16px',
+        boxShadow: '0 10px 30px rgba(0,0,0,0.3)', 
+        zIndex: '999999', 
+        fontFamily: "'Segoe UI', sans-serif",
         backdropFilter: 'blur(10px)'
     });
     
     document.body.appendChild(overlay);
 
-    // AI Butonu
+    // --- BUTON OLAYLARI ---
+
+    // 1. AI Butonu
     document.getElementById('askAiBtn').onclick = async () => {
         const btn = document.getElementById('askAiBtn');
         const resultBox = document.getElementById('aiResult');
+        
         btn.innerHTML = "⏳ Analiz Ediliyor...";
         btn.disabled = true;
+
         try {
             const response = await fetch(`${API_URL}/analyze-ai`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data) 
+            });
+            const json = await response.json();
+            
+            resultBox.style.display = "block";
+            if(json.status === "success") {
+                const modelInfo = json.used_model ? `<div style='font-size:9px; color:#aaa; margin-top:5px; text-align:right;'>Model: ${json.used_model}</div>` : "";
+                resultBox.innerHTML = json.ai_response + modelInfo;
+                btn.innerHTML = "✅ Analiz Tamamlandı";
+            } else {
+                resultBox.innerHTML = "Hata: " + (json.message || "Bilinmiyor");
+                btn.innerHTML = "❌ Hata";
+            }
+        } catch (e) {
+            btn.innerHTML = "❌ Bağlantı Hatası";
+            resultBox.style.display = "block";
+            resultBox.innerHTML = "Sunucuya bağlanılamadı. İnternetini kontrol et.";
+        } finally {
+            btn.disabled = false;
+        }
+    };
+
+    // 2. Yorumları Göster/Gizle
+    document.getElementById('toggleCommentsBtn').onclick = () => {
+        const section = document.getElementById('commentSection');
+        section.style.display = section.style.display === 'none' ? 'block' : 'none';
+    };
+    
+    // 3. Yorum Gönder
+    document.getElementById('sendCommentBtn').onclick = async () => {
+        const text = document.getElementById('commentInput').value;
+        if (!text) return;
+        try {
+            const response = await fetch(`${API_URL}/add_comment`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ listing_id: data.id, username: currentUser, text: text })
+            });
+            const json = await response.json();
+            if (json.status === "success") {
+                document.getElementById('commentList').innerHTML = renderComments(json.comments);
+                document.getElementById('commentInput').value = "";
+                document.getElementById('toggleCommentsBtn').innerText = `💬 Yorumlar (${json.comments.length})`;
+            }
+        } catch (err) { console.error(err); } 
+    };
+
+    // 4. Yorum Beğen (Event Delegation)
+    document.getElementById('commentList').addEventListener('click', async (e) => {
+        const btn = e.target.closest('.like-btn');
+        if (btn) {
+            const commentId = btn.getAttribute('data-id');
+            try {
+                const response = await fetch(`${API_URL}/like_comment`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ listing_id: data.id, comment_id: commentId, user_id: userId })
+                });
+                const json = await response.json();
+                if(json.status === "success") document.getElementById('commentList').innerHTML = renderComments(json.comments);
+            } catch (err) { console.error(err); }
+        }
+    });
+    
+    // Kullanıcı Adı Değişimi
+    document.getElementById('usernameInput').onchange = (e) => {
+        currentUser = e.target.value;
+        localStorage.setItem("sahibinden_user", currentUser);
+    };
+}
+
+// Yardımcı Fonksiyon: Yorumları HTML'e dök
+function renderComments(comments) {
+    if (!comments || comments.length === 0) return '<div style="font-size:11px; text-align:center; padding:5px;">Henüz yorum yok.</div>';
+    return comments.map(c => `
+        <div style="background:white; padding:5px; margin-bottom:5px; border-radius:5px; font-size:11px;">
+            <b>${c.user}</b>: ${c.text}
+            <div style="text-align:right;"><button class="like-btn" data-id="${c.id}" style="border:none; background:none; cursor:pointer;">❤️ ${c.liked_by?.length||0}</button></div>
+        </div>`).join('');
+}
+
+// Ana Başlatıcı
+async function analyzeListing() {
+    const data = getListingData();
+    if (!data) return; // Veri yoksa çık
+    
+    try {
+        console.log("Sunucuya istek atılıyor...");
+        const response = await fetch(`${API_URL}/analyze`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data)
+        });
+        const result = await response.json();
+        showOverlay(data, result);
+    } catch (error) {
+        console.error("Bağlantı hatası:", error);
+        // Hata olsa bile kutuyu göster (Kırmızı modda)
+        showOverlay(data, { status: "error" });
+    }
+}
+
+// Sayfa yüklendikten 1 saniye sonra çalış
+setTimeout(analyzeListing, 1000);
