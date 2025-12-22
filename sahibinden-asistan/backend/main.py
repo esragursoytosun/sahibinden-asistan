@@ -1,4 +1,4 @@
-# backend/main.py - SON DÜZELTİLMİŞ VERSİYON
+# backend/main.py - GEMINI PRO SURUMU (EN GARANTI MODEL)
 import os
 from datetime import datetime
 from fastapi import FastAPI
@@ -29,13 +29,13 @@ if MONGO_URL:
 else:
     print("UYARI: Database bagli degil!")
 
-# 2. AI BAĞLANTISI (MODELİ SABİTLEDİK)
+# 2. AI BAĞLANTISI (DEĞİŞİKLİK BURADA: 'gemini-pro' KULLANIYORUZ)
 model = None
 if GEMINI_KEY:
     try:
         genai.configure(api_key=GEMINI_KEY)
-        # Flash modeli en hizlisidir, kütüphane guncellendigi icin artik calisacak.
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        # Flash yerine Pro kullaniyoruz, bu model hata vermez.
+        model = genai.GenerativeModel('gemini-pro')
     except Exception as e:
         print(f"AI Yukleme Hatasi: {e}")
 else:
@@ -66,7 +66,7 @@ class LikeData(BaseModel):
 @app.post("/analyze-ai")
 async def ask_ai(data: ListingData):
     if not model:
-        return {"status": "error", "message": "AI Modeli Calismiyor (API Key veya Kutuphane Sorunu)"}
+        return {"status": "error", "message": "AI Modeli Calismiyor (API Key veya Model Hatasi)"}
     
     prompt = f"""
     Sen uzman bir oto ekspertizisin. Bu aracı analiz et:
@@ -86,6 +86,7 @@ async def ask_ai(data: ListingData):
         response = model.generate_content(prompt)
         return {"status": "success", "ai_response": response.text}
     except Exception as e:
+        # Hata olursa detayini gorelim
         return {"status": "error", "message": f"AI Hatasi: {str(e)}"}
 
 @app.post("/analyze")
