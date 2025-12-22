@@ -30,14 +30,14 @@ else:
     print("UYARI: Veritabanı bağlı değil!")
 
 # Gemini Bağlantısı
+# backend/main.py (Yeni hali)
+# ...
 if GEMINI_KEY:
     genai.configure(api_key=GEMINI_KEY)
-    # DEĞİŞİKLİK BURADA: İsmi 'gemini-1.5-flash-latest' yaptık.
-    # Eğer yine hata verirse 'gemini-pro' yazarak da deneyebilirsin (o kesin çalışır ama flash daha hızlıdır).
-    model = genai.GenerativeModel('gemini-1.5-flash-latest') 
+    # Flash yerine Pro modeline geçiyoruz, bu model çok daha garantidir.
+    model = genai.GenerativeModel('gemini-pro') 
 else:
-    print("UYARI: Gemini API Key yok!")
-
+# ...
 # --- MODELLER ---
 class ListingData(BaseModel):
     id: str | None = None
