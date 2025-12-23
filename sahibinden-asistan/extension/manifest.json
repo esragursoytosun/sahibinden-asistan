@@ -1,16 +1,16 @@
 {
-  "key": "occaebijehoboccgijineomfcaejfegc", 
+  "key": "occaebijehoboccgijineomfcaejfegc",
   "manifest_version": 3,
   "name": "Sahibinden AI Asistan (BAI Bilmiş)",
   "version": "1.0",
-  "description": "Sahibinden.com ilanlarını yapay zeka ile analiz eder.",
+  "description": "Sahibinden.com ilanlarını yapay zeka ile analiz eder ve Google ile giriş sağlar.",
   "permissions": [
     "activeTab",
     "scripting",
     "storage",
-    "identity" 
+    "identity"
   ],
-"oauth2": {
+  "oauth2": {
     "client_id": "1025920967974-67v172dj822e60elm4722g2egr8suc67.apps.googleusercontent.com",
     "scopes": [
       "openid",
@@ -30,14 +30,5 @@
       "matches": ["https://*.sahibinden.com/ilan/*"],
       "js": ["content.js"]
     }
-  ],
-  "action": {
-    "default_popup": "popup.html"
-  }
+  ]
 }
-
-
-
-
-
-
