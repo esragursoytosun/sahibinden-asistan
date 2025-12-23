@@ -1,26 +1,49 @@
-// background.js - Auth İşlemleri
+// background.js - Auth ve API İşlemleri
+
+// Backend Adresi (Canlı sunucu veya Localhost)
+// Test ederken: "http://localhost:8000" yapabilirsin.
+// Canlıda: "https://sahiden.onrender.com"
+const API_URL = "https://sahiden.onrender.com"; 
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    
+    // --- LOGIN İŞLEMİ ---
     if (request.action === "login") {
-        // Chrome'un kendi Login penceresini aç
+        console.log("BAI BILMIS: Google Login başlatılıyor...");
+
+        // 1. Chrome'dan Token İste (Access Token döner)
         chrome.identity.getAuthToken({ interactive: true }, function(token) {
-            if (chrome.runtime.lastError) {
-                sendResponse({ status: "error", message: chrome.runtime.lastError.message });
+            
+            if (chrome.runtime.lastError || !token) {
+                console.error("Token Hatası:", chrome.runtime.lastError);
+                sendResponse({ status: "error", message: "Google hesabına erişilemedi. Lütfen tarayıcıda oturum açın." });
                 return;
             }
-            // Token alındı, şimdi Backend'e gönderip kullanıcı bilgilerini alalım
-            fetch("https://sahiden.onrender.com/auth/google", {
+
+            console.log("BAI BILMIS: Token alındı, Backend'e gönderiliyor...");
+
+            // 2. Token'ı Python Backend'e Gönder
+            fetch(`${API_URL}/auth/google`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ token: token })
             })
             .then(res => res.json())
             .then(data => {
-                sendResponse({ status: "success", user: data.user, token: token });
+                if(data.status === "success") {
+                    console.log("BAI BILMIS: Giriş Başarılı!", data.user);
+                    sendResponse({ status: "success", user: data.user });
+                } else {
+                    console.error("BAI BILMIS: Backend Reddedildi", data);
+                    sendResponse({ status: "error", message: data.detail || "Sunucu girişi reddetti." });
+                }
             })
             .catch(err => {
-                sendResponse({ status: "error", message: err.toString() });
+                console.error("BAI BILMIS: Sunucu Hatası", err);
+                sendResponse({ status: "error", message: "Sunucuya bağlanılamadı." });
             });
         });
-        return true; // Asenkron cevap vereceğimizi belirtiyoruz
+
+        return true; // Asenkron cevap vereceğimizi Chrome'a bildiriyoruz
     }
 });
