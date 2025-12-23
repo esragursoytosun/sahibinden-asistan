@@ -1,13 +1,49 @@
-// content.js - SEKMELİ (TAB) MENÜ, SÜRÜKLENEBİLİR & PROFESYONEL 📊💬
+// content.js - BAI BİLMİŞ: TABS, AUTH & PRO UI (FULL PAKET) 🚀
 
 const API_URL = "https://sahiden.onrender.com"; 
 
-console.log("BAI BILMIS: Arayüz Güncellendi (V5 - Tabs)"); 
+console.log("BAI BILMIS: Sistem Hazır (V-Final)"); 
 
-// --- KİMLİK ---
+// --- KİMLİK & LOGİN KONTROLÜ ---
 let userId = localStorage.getItem("sahibinden_userid");
-if (!userId) { userId = "uid_" + Math.random().toString(36).substr(2, 9); localStorage.setItem("sahibinden_userid", userId); }
-let currentUser = localStorage.getItem("sahibinden_user") || "Misafir";
+// Profil bilgisini LocalStorage'dan al
+let userProfile = JSON.parse(localStorage.getItem("sahibinden_user_profile")) || null;
+
+if (!userId) { 
+    userId = "uid_" + Math.random().toString(36).substr(2, 9); 
+    localStorage.setItem("sahibinden_userid", userId); 
+}
+
+// --- LOGİN FONKSİYONU ---
+function loginWithGoogle() {
+    const btn = document.getElementById('googleLoginBtn');
+    if(btn) btn.innerHTML = "⌛";
+    
+    // Background.js'e mesaj gönder
+    chrome.runtime.sendMessage({ action: "login" }, (response) => {
+        if (response && response.status === "success") {
+            // Başarılıysa profili kaydet
+            userProfile = response.user;
+            localStorage.setItem("sahibinden_user_profile", JSON.stringify(userProfile));
+            localStorage.setItem("sahibinden_userid", userProfile.id); // Backend ID'si güncelle
+            alert(`Hoş geldin, ${userProfile.name}!`);
+            location.reload(); // Sayfayı yenile ki panel güncellensin
+        } else {
+            alert("Giriş başarısız: " + (response ? response.message : "Bilinmiyor"));
+            if(btn) btn.innerHTML = "G ile Giriş";
+        }
+    });
+}
+
+function logout() {
+    if(confirm("Çıkış yapmak istiyor musun?")) {
+        localStorage.removeItem("sahibinden_user_profile");
+        // Rastgele ID'ye geri dön
+        userId = "uid_" + Math.random().toString(36).substr(2, 9);
+        localStorage.setItem("sahibinden_userid", userId);
+        location.reload();
+    }
+}
 
 // --- VERİ OKUMA ---
 function getListingData() {
@@ -61,15 +97,20 @@ function makeDraggable(el) {
     if (!header) return;
 
     header.onmousedown = function(e) {
-        if(e.target.id === "closeOverlayBtn" || e.target.id === "usernameInput" || e.target.tagName === "BUTTON") return; 
+        // Butonlara veya inputlara basınca sürüklemeyi engelle
+        if(e.target.id === "closeOverlayBtn" || e.target.id === "googleLoginBtn" || e.target.id === "logoutText" || e.target.tagName === "BUTTON") return; 
+        
         e.preventDefault();
         isDragging = true;
         startX = e.clientX;
         startY = e.clientY;
         initialLeft = el.offsetLeft;
         initialTop = el.offsetTop;
+        
+        // Sağa yaslamayı iptal et
         el.style.right = "auto";
         header.style.cursor = "grabbing";
+        
         document.onmousemove = elementDrag;
         document.onmouseup = closeDragElement;
     };
@@ -103,15 +144,51 @@ function showOverlay(data, result) {
     let chartHtml = isError ? "" : createPriceChart(result.history);
     const commentCount = result.comments ? result.comments.length : 0;
 
+    // HEADER SAĞ KISIM (Login Durumuna Göre)
+    let headerRightHtml = "";
+    if (userProfile) {
+        // Giriş yapılmışsa: Profil Resmi ve İsim
+        headerRightHtml = `
+            <div style="display:flex; align-items:center; gap:6px;">
+                <img src="${userProfile.picture}" style="width:22px; height:22px; border-radius:50%; border:1px solid #fff;">
+                <div style="display:flex; flex-direction:column; line-height:1;">
+                    <span style="font-size:10px; font-weight:bold;">${userProfile.name.split(' ')[0]}</span>
+                    <span id="logoutText" style="font-size:9px; text-decoration:underline; cursor:pointer; color:#444;">Çıkış</span>
+                </div>
+                <span id="closeOverlayBtn" style="cursor:pointer; font-size:18px; font-weight:bold; color:#333; margin-left:5px;">&times;</span>
+            </div>
+        `;
+    } else {
+        // Giriş yapılmamışsa: Google Butonu
+        headerRightHtml = `
+            <div style="display:flex; align-items:center; gap:5px;">
+                <button id="googleLoginBtn" style="background:white; color:#333; border:none; padding:4px 8px; border-radius:4px; font-size:10px; cursor:pointer; font-weight:bold; display:flex; align-items:center; gap:3px;">
+                    <span style="color:#4285F4; font-weight:900;">G</span> Giriş
+                </button>
+                <span id="closeOverlayBtn" style="cursor:pointer; font-size:18px; font-weight:bold; color:#333; padding:0 4px;">&times;</span>
+            </div>
+        `;
+    }
+
     overlay.innerHTML = `
-        <div id="sahibinden-asistan-header" style="background: #FFD000; color: #222; padding: 10px 15px; border-top-left-radius: 8px; border-top-right-radius: 8px; display: flex; justify-content: space-between; align-items: center; cursor: grab; user-select: none; box-shadow: 0 2px 5px rgba(0,0,0,0.1); z-index: 10;">
+        <div id="sahibinden-asistan-header" style="
+            background: #FFD000; 
+            color: #222; 
+            padding: 10px 15px; 
+            border-top-left-radius: 8px; 
+            border-top-right-radius: 8px; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            cursor: grab; 
+            user-select: none; 
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1); 
+            z-index: 10;
+        ">
             <div style="font-weight: 900; font-size:14px; display:flex; align-items:center; gap:5px;">
                 <span>🤖</span> BAI BİLMİŞ
             </div>
-            <div style="display:flex; align-items:center; gap:6px;">
-                 <input type="text" id="usernameInput" value="${currentUser}" style="width:70px; background:rgba(255,255,255,0.9); border:none; padding:3px; border-radius:4px; font-size:11px; text-align:center; color:#333;">
-                <span id="closeOverlayBtn" style="cursor:pointer; font-size:18px; font-weight:bold; color:#333; padding:0 4px;">&times;</span>
-            </div>
+            ${headerRightHtml}
         </div>
 
         <div style="display:flex; background:#e9ecef; border-bottom:1px solid #ddd;">
@@ -160,7 +237,17 @@ function showOverlay(data, result) {
     document.body.appendChild(overlay);
     makeDraggable(overlay);
 
-    // --- SEKME GEÇİŞ MANTIĞI ---
+    // --- BUTON İŞLEVLERİ ---
+    
+    // Auth Butonları
+    if(document.getElementById('googleLoginBtn')) {
+        document.getElementById('googleLoginBtn').onclick = loginWithGoogle;
+    }
+    if(document.getElementById('logoutText')) {
+        document.getElementById('logoutText').onclick = logout;
+    }
+
+    // Tabs
     const tabAnaliz = document.getElementById('tabAnaliz');
     const tabYorumlar = document.getElementById('tabYorumlar');
     const viewAnaliz = document.getElementById('viewAnaliz');
@@ -183,9 +270,10 @@ function showOverlay(data, result) {
     tabAnaliz.onclick = () => switchTab('analiz');
     tabYorumlar.onclick = () => switchTab('yorumlar');
 
-    // --- DİĞER BUTONLAR ---
+    // Kapatma
     document.getElementById('closeOverlayBtn').onclick = () => overlay.remove();
 
+    // AI Analiz
     document.getElementById('askAiBtn').onclick = async () => {
         const btn = document.getElementById('askAiBtn');
         const resultBox = document.getElementById('aiResult');
@@ -219,8 +307,11 @@ function renderComments(comments) {
     if (!comments || comments.length === 0) return '<div style="font-size:11px; text-align:center; padding:20px; color:#999;">Henüz yorum yok.<br>İlk yorumu sen yaz!</div>';
     return comments.map(c => `
         <div style="border-bottom: 1px solid #eee; padding: 8px; margin-bottom: 4px; font-size: 11px;">
-            <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
-                <b style="color:#293542;">${c.user}</b>
+            <div style="display:flex; justify-content:space-between; margin-bottom:3px; align-items:center;">
+                <div style="display:flex; align-items:center; gap:4px;">
+                    ${c.user_pic ? `<img src="${c.user_pic}" style="width:16px; height:16px; border-radius:50%;">` : ''}
+                    <b style="color:#293542;">${c.user}</b>
+                </div>
                 <span style="color:#999; font-size:9px;">${c.date ? c.date.split(' ')[0] : ''}</span>
             </div>
             <span style="color:#555;">${c.text}</span>
@@ -234,16 +325,22 @@ function setupCommentEvents(data) {
     document.getElementById('sendCommentBtn').onclick = async () => {
         const text = document.getElementById('commentInput').value;
         if (!text) return;
+        
+        // Gönderirken mevcut userProfile id'sini kullan (varsa)
+        const currentUserId = userProfile ? userProfile.id : userId;
+        const currentUserName = userProfile ? userProfile.name : "Misafir";
+
         try {
             const response = await fetch(`${API_URL}/add_comment`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ listing_id: data.id, username: currentUser, text: text })
+                // user_id ve username gönderiyoruz
+                body: JSON.stringify({ listing_id: data.id, user_id: currentUserId, username: currentUserName, text: text })
             });
             const json = await response.json();
             if (json.status === "success") {
                 document.getElementById('commentList').innerHTML = renderComments(json.comments);
                 document.getElementById('commentInput').value = "";
-                document.getElementById('commentCountBadge').innerText = json.comments.length; // Sayıyı güncelle
+                document.getElementById('commentCountBadge').innerText = json.comments.length; 
             }
         } catch (err) {} 
     };
@@ -252,21 +349,17 @@ function setupCommentEvents(data) {
         const btn = e.target.closest('.like-btn');
         if (btn) {
             const commentId = btn.getAttribute('data-id');
+            const currentUserId = userProfile ? userProfile.id : userId;
             try {
                 const response = await fetch(`${API_URL}/like_comment`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ listing_id: data.id, comment_id: commentId, user_id: userId })
+                    body: JSON.stringify({ listing_id: data.id, comment_id: commentId, user_id: currentUserId })
                 });
                 const json = await response.json();
                 if(json.status === "success") document.getElementById('commentList').innerHTML = renderComments(json.comments);
             } catch (err) {}
         }
     });
-
-    document.getElementById('usernameInput').onchange = (e) => {
-        currentUser = e.target.value;
-        localStorage.setItem("sahibinden_user", currentUser);
-    };
 }
 
 async function analyzeListing() {
