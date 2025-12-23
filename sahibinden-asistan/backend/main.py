@@ -80,10 +80,10 @@ async def find_similars(title, current_id):
             if len(common) >= 2 and item_price > 0:
                 prices.append(item_price)
                 
-        if not prices: return "Veritabanımızda henüz yeterli kıyaslama verisi yok."
+        if not prices: return "Henüz yeterli kıyaslama verisi birikmedi."
         
         avg = sum(prices) / len(prices)
-        return f"Daha önce kaydettiğin {len(prices)} benzer ilanın ortalaması: {avg:,.0f} TL."
+        return f"Veritabanımdaki {len(prices)} benzer ilanın ortalaması: {avg:,.0f} TL."
     except: return "Veritabanı analizi yapılamadı."
 
 async def get_user_notes(listing_id):
@@ -157,7 +157,7 @@ async def google_login(data: GoogleLoginData):
 
 @app.post("/analyze-ai")
 async def ask_ai(data: ListingData):
-    """BAI Bilmiş Analiz Endpoint'i"""
+    """BAI Bilmiş - AKILLI Analiz Modu"""
     if not GEMINI_KEY: 
         return {"status": "error", "message": "API Key Eksik!"}
 
@@ -165,31 +165,52 @@ async def ask_ai(data: ListingData):
     db_context = await find_similars(data.title, data.id)
     user_notes = await get_user_notes(data.id)
     
-    # 2. Prompt Hazırlığı
+    # 2. AKILLI PROMPT (Zeka Burada!)
     prompt = f"""
-    Sen "BAI Bilmiş" adında bir emlak ve oto asistanısın.
-    GÖREV: Aşağıdaki ilanı analiz et ve HTML formatında (<ul>, <li>) çıktı ver.
+    KİMLİK:
+    Senin adın "BAI Bilmiş". Sen Türkiye'nin en tecrübeli galericisi, emlak uzmanı ve veri analistisin. 
+    Lafı dolandırmayı sevmezsin. Net, çarpıcı, esprili ve nokta atışı tespitler yaparsın.
     
-    İLAN BİLGİLERİ:
+    GÖREV:
+    Aşağıdaki ilanı benim için detaylıca analiz et.
+    
+    İLAN VERİLERİ:
     - Başlık: {data.title}
     - Fiyat: {data.price} TL
     - Yıl: {data.year}
-    - KM: {data.km}
-    - Açıklama: "{data.description}"
+    - KM/Özellik: {data.km}
+    - Satıcı Açıklaması: "{data.description}"
     
-    GEÇMİŞ VERİLER:
-    {db_context}
-    {user_notes}
+    EKSTRA BİLGİLER (Bunları mutlaka kullan):
+    - Veritabanı Ortalaması: {db_context}
+    - Kullanıcı Yorumları: {user_notes}
 
-    Lütfen şu başlıklarla analiz yap (HTML etiketleri kullan):
-    <b>🧐 BAI Bilmiş Analizi:</b> (Teknik yorumlar)
-    <b>💰 Fiyat Raporu:</b> (Pahalı mı ucuz mu?)
-    <b>⚠️ Tavsiyeler:</b> (Riskler neler?)
+    ANALİZ KURALLARI:
+    1. KM ve Yıl analizi yap. (Örn: "Bu yaşta bu KM çok temiz" veya "Bu KM'de taksi çıkması riski var" gibi.)
+    2. Fiyatı veritabanı ortalamasıyla kıyasla. Pahalı mı, kelepir mi?
+    3. Satıcı açıklamasındaki gizli anlamları çöz. ("Keyfe keder boyalı", "Çıtır hasarlı", "Gırtlak dolu" gibi tabirleri yorumla.)
+    4. HTML formatında (<ul>, <li>, <b>) çıktı ver.
+
+    ÇIKTI FORMATI:
+    <b>🏎️ Genel Durum ve Yorumum:</b>
+    <ul>
+       <li>(KM, Yıl ve Araç Yorgunluğu hakkında yorumun)</li>
+       <li>(Açıklamadan yakaladığın detaylar veya riskler)</li>
+    </ul>
+
+    <b>💰 Fiyat ve Piyasa Raporu:</b>
+    <ul>
+       <li>(Piyasa ortalamasına göre durumu. Yatırımlık mı? Biniciye mi?)</li>
+    </ul>
+
+    <b>🕵️ BAI Bilmiş'in Son Kararı:</b>
+    <ul>
+       <li>(Kısa ve net tavsiyen: "Kaçırma", "Uzak dur", "Ekspertizsiz alma" vb.)</li>
+    </ul>
     """
 
     try:
-        # SENİN LİSTENDEN ALDIĞIMIZ MODEL İSMİ:
-        # Bu model, senin debug listende "models/gemini-flash-latest" olarak görünüyor.
+        # Senin hesabında çalışan model ismi:
         model_name = "gemini-flash-latest"
         
         model = genai.GenerativeModel(model_name)
@@ -198,7 +219,7 @@ async def ask_ai(data: ListingData):
         return {"status": "success", "ai_response": response.text, "used_model": model_name}
         
     except Exception as e:
-        # Eğer yukarıdaki çalışmazsa yedek plan:
+        # Yedek plan (Pro Latest)
         try:
             print(f"Flash hatası: {e}, Pro deneniyor...")
             model = genai.GenerativeModel("gemini-pro-latest")
@@ -261,7 +282,7 @@ async def add_comment(comment: CommentData):
 
 @app.post("/like_comment")
 async def like_comment(data: LikeData):
-    """Yorumu beğenir/beğenmekten vazgeçer"""
+    """Yorumu beğenir"""
     doc = await listings_collection.find_one({"_id": data.listing_id})
     if not doc: return {"status": "error"}
     
@@ -285,7 +306,5 @@ async def like_comment(data: LikeData):
 
 if __name__ == "__main__":
     import uvicorn
-    # Render için PORT ayarı
     port = int(os.environ.get("PORT", 8000))
-    # Dosya yolu backend.main olduğu için:
     uvicorn.run("backend.main:app", host="0.0.0.0", port=port)
