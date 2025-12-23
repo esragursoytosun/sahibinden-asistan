@@ -152,12 +152,13 @@ async def ask_ai(data: ListingData):
     db_context = await find_similars(data.title, data.id)
     user_notes = await get_user_notes(data.id)
     
-    models_to_try = ["gemini-2.0-flash", "gemini-flash-latest", "gemini-pro"]
+    # 2. Modeller (En güncel ve kararlı modeller)
+    models_to_try = ["gemini-1.5-flash", "gemini-1.5-pro"]
     
     prompt = f"""
     KİMLİĞİN:
     Adın "BAI Bilmiş". Sen otomotiv, emlak ve teknoloji piyasasına hakim, veri odaklı ama samimi bir yapay zeka asistanısın.
-    Üslubun: "Cemil Usta" tecrübesinde ama nazik, yapıcı ve çözüm odaklısın.
+    Üslubun: tecrübeli ama nazik, yapıcı , kurnaz ve çözüm odaklısın.
     KURAL: Kendini uzun uzun tanıtma. Direkt analize gir.
     
     GÖREVİN:
@@ -287,3 +288,4 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run("backend.main:app", host="0.0.0.0", port=port)
+
