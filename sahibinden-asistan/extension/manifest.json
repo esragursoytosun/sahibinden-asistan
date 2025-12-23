@@ -10,7 +10,7 @@
     "identity" 
   ],
   "oauth2": {
-    "client_id": "BURAYA_GOOGLE_CLOUD_CONSOLE_DAN_ALDIGIN_CLIENT_ID_YAPISTIR.apps.googleusercontent.com",
+    "client_id": "1025920967974-1j01rfg3911cnsp58kaa2orh95fq26kv.apps.googleusercontent.com",
     "scopes": [
       "openid", "email", "profile"
     ]
@@ -32,3 +32,4 @@
     "default_popup": "popup.html"
   }
 }
+
