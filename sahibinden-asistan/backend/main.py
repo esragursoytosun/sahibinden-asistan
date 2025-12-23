@@ -147,13 +147,51 @@ async def google_login(data: GoogleLoginData):
 
 @app.post("/analyze-ai")
 async def ask_ai(data: ListingData):
-    """BAI Bilmiş Analiz Endpoint'i (Sadeleştirilmiş Versiyon)"""
+    """BAI Bilmiş Analiz Endpoint'i (Garanti Mod: Gemini Pro)"""
     if not GEMINI_KEY: 
-        return {"status": "error", "message": "API Key Render'da Tanımlı Değil!"}
+        return {"status": "error", "message": "API Key Eksik!"}
 
     # 1. Veri Toplama
     db_context = await find_similars(data.title, data.id)
     user_notes = await get_user_notes(data.id)
+    
+    # 2. Prompt
+    prompt = f"""
+    Sen "BAI Bilmiş" adında bir emlak ve oto asistanısın.
+    GÖREV: Aşağıdaki ilanı analiz et.
+    
+    İLAN:
+    - Başlık: {data.title}
+    - Fiyat: {data.price} TL
+    - Yıl: {data.year}
+    - KM: {data.km}
+    - Açıklama: "{data.description}"
+    
+    EK BİLGİLER:
+    {db_context}
+    {user_notes}
+
+    Lütfen şu başlıklarla analiz yap (HTML etiketleri kullan):
+    <b>🧐 BAI Bilmiş Analizi:</b> (Teknik yorumlar)
+    <b>💰 Fiyat Raporu:</b> (Pahalı mı ucuz mu?)
+    <b>⚠️ Tavsiyeler:</b> (Riskler neler?)
+    """
+
+    try:
+        # DEĞİŞİKLİK BURADA: "gemini-pro" kullanıyoruz.
+        # Bu model en kararlı ve her sürümde çalışan modeldir.
+        model = genai.GenerativeModel("gemini-pro")
+        
+        response = model.generate_content(prompt)
+        
+        if not response or not response.text:
+            return {"status": "error", "message": "AI cevap veremedi."}
+            
+        return {"status": "success", "ai_response": response.text, "used_model": "gemini-pro"}
+        
+    except Exception as e:
+        print(f"AI Hatası: {str(e)}")
+        return {"status": "error", "message": f"AI Servis Hatası: {str(e)}"}
     
     # 2. Prompt Hazırlığı
     prompt = f"""
@@ -327,6 +365,7 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run("backend.main:app", host="0.0.0.0", port=port)
+
 
 
 
