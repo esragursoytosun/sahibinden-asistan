@@ -12,10 +12,12 @@ from dotenv import load_dotenv
 
 # --- AYARLAR ---
 load_dotenv()
+# Database.py'den tabloları çekiyoruz
 from backend.database import listings_collection, users_collection
 
 app = FastAPI()
 
+# --- CORS AYARLARI ---
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -24,6 +26,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# --- API ANAHTARLARI ---
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY")
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
 
@@ -31,7 +34,7 @@ GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
 if GEMINI_KEY:
     genai.configure(api_key=GEMINI_KEY)
 
-# --- MODELLER ---
+# --- VERİ MODELLERİ ---
 class ListingData(BaseModel):
     id: str | None = None
     price: int | float | None = None
@@ -56,26 +59,35 @@ class GoogleLoginData(BaseModel):
     token: str
 
 # --- YARDIMCI FONKSİYONLAR ---
+
 async def find_similars(title, current_id):
+    """Veritabanındaki benzer ilanların fiyatlarını getirir."""
+    if not title: return "Veritabanı bağlantısı yok."
     try:
-        keywords = set(title.lower().split()) if title else set()
+        keywords = set(title.lower().split())
         keywords = {k for k in keywords if len(k) > 2}
+        
         cursor = listings_collection.find().sort("first_seen_at", -1).limit(50)
         all_listings = await cursor.to_list(length=50)
+        
         prices = []
         for item in all_listings:
             if str(item.get("_id")) == str(current_id): continue
             item_title = item.get("title", "").lower()
             item_price = item.get("current_price", 0)
+            
             common = keywords.intersection(set(item_title.split()))
             if len(common) >= 2 and item_price > 0:
                 prices.append(item_price)
-        if not prices: return "Veritabanında benzer ilan yok."
+                
+        if not prices: return "Veritabanımızda henüz yeterli kıyaslama verisi yok."
+        
         avg = sum(prices) / len(prices)
-        return f"Benzer ilan ortalaması: {avg:,.0f} TL."
-    except: return "Veri yok."
+        return f"Daha önce kaydettiğin {len(prices)} benzer ilanın ortalaması: {avg:,.0f} TL."
+    except: return "Veritabanı analizi yapılamadı."
 
 async def get_user_notes(listing_id):
+    """Bu ilana yapılan yorumları getirir."""
     try:
         doc = await listings_collection.find_one({"_id": listing_id})
         if not doc or "comments" not in doc: return ""
@@ -87,12 +99,11 @@ async def get_user_notes(listing_id):
 
 @app.get("/")
 async def root():
-    return {"status": "active", "message": "Sunucu Aktif 🚀"}
+    return {"status": "active", "message": "Sahibinden Asistan Sunucusu Calisiyor! 🚀"}
 
-# --- YENİ DEBUG ENDPOINT (Bunu tarayıcıda açıp bakacağız) ---
 @app.get("/debug-ai")
 async def check_models():
-    """Hangi modellerin çalıştığını listeler"""
+    """Hangi modellerin çalıştığını listeler (Debug için)"""
     if not GEMINI_KEY: return {"error": "API Key yok"}
     try:
         available_models = []
@@ -103,33 +114,83 @@ async def check_models():
     except Exception as e:
         return {"error": str(e)}
 
+@app.post("/auth/google")
+async def google_login(data: GoogleLoginData):
+    """Google Giriş İşlemi"""
+    try:
+        idinfo = None
+        try:
+            idinfo = id_token.verify_oauth2_token(data.token, google_requests.Request(), GOOGLE_CLIENT_ID)
+        except Exception:
+            pass
+
+        if not idinfo:
+            res = requests.get(f"https://www.googleapis.com/oauth2/v2/userinfo", headers={"Authorization": f"Bearer {data.token}"})
+            if res.status_code == 200:
+                idinfo = res.json()
+                if 'sub' not in idinfo and 'id' in idinfo:
+                    idinfo['sub'] = idinfo['id']
+            else:
+                raise ValueError("Token Google tarafından reddedildi.")
+
+        google_id = idinfo['sub']
+        email = idinfo.get('email')
+        name = idinfo.get('name')
+        picture = idinfo.get('picture')
+        
+        await users_collection.update_one(
+            {"_id": google_id}, 
+            {"$set": {
+                "email": email, 
+                "name": name, 
+                "picture": picture, 
+                "last_login": datetime.now()
+            }}, 
+            upsert=True
+        )
+            
+        return {"status": "success", "user": {"id": google_id, "name": name, "picture": picture}}
+        
+    except Exception as e:
+        print(f"Login Hatası: {e}")
+        raise HTTPException(status_code=401, detail=f"Giriş Başarısız: {str(e)}")
+
 @app.post("/analyze-ai")
 async def ask_ai(data: ListingData):
-    """AI Analiz Endpointi - Gemini 1.5 Flash (En Kararlı Sürüm)"""
+    """BAI Bilmiş Analiz Endpoint'i"""
     if not GEMINI_KEY: 
         return {"status": "error", "message": "API Key Eksik!"}
 
+    # 1. Veri Toplama
     db_context = await find_similars(data.title, data.id)
     user_notes = await get_user_notes(data.id)
     
+    # 2. Prompt Hazırlığı
     prompt = f"""
-    Sen BAI Bilmiş adında bir asistanın.
-    Şu ilanı kısaca analiz et (HTML liste formatında):
-    Başlık: {data.title}, Fiyat: {data.price}, KM: {data.km}, Yıl: {data.year}
-    Açıklama: {data.description}
-    Piyasa verisi: {db_context}
+    Sen "BAI Bilmiş" adında bir emlak ve oto asistanısın.
+    GÖREV: Aşağıdaki ilanı analiz et ve HTML formatında (<ul>, <li>) çıktı ver.
     
-    Format:
-    <b>🧐 Analiz:</b> <ul><li>...</li></ul>
-    <b>💰 Fiyat:</b> <ul><li>...</li></ul>
-    <b>⚠️ Tavsiye:</b> <ul><li>...</li></ul>
+    İLAN BİLGİLERİ:
+    - Başlık: {data.title}
+    - Fiyat: {data.price} TL
+    - Yıl: {data.year}
+    - KM: {data.km}
+    - Açıklama: "{data.description}"
+    
+    GEÇMİŞ VERİLER:
+    {db_context}
+    {user_notes}
+
+    Lütfen şu başlıklarla analiz yap (HTML etiketleri kullan):
+    <b>🧐 BAI Bilmiş Analizi:</b> (Teknik yorumlar)
+    <b>💰 Fiyat Raporu:</b> (Pahalı mı ucuz mu?)
+    <b>⚠️ Tavsiyeler:</b> (Riskler neler?)
     """
 
     try:
-        # FİNAL KARAR: "gemini-1.5-flash"
-        # Kütüphaneyi güncellediğimiz için artık bu 404 vermeyecek.
-        # Kotası en yüksek ve ücretsiz olan model budur.
-        model_name = "gemini-1.5-flash" 
+        # SENİN LİSTENDEN ALDIĞIMIZ MODEL İSMİ:
+        # Bu model, senin debug listende "models/gemini-flash-latest" olarak görünüyor.
+        model_name = "gemini-flash-latest"
         
         model = genai.GenerativeModel(model_name)
         response = model.generate_content(prompt)
@@ -137,89 +198,94 @@ async def ask_ai(data: ListingData):
         return {"status": "success", "ai_response": response.text, "used_model": model_name}
         
     except Exception as e:
-        # Eğer yine de bir aksilik olursa en eski ve garantili modele (Pro) düş
+        # Eğer yukarıdaki çalışmazsa yedek plan:
         try:
             print(f"Flash hatası: {e}, Pro deneniyor...")
-            model = genai.GenerativeModel("gemini-pro")
+            model = genai.GenerativeModel("gemini-pro-latest")
             response = model.generate_content(prompt)
-            return {"status": "success", "ai_response": response.text, "used_model": "gemini-pro (Yedek)"}
+            return {"status": "success", "ai_response": response.text, "used_model": "gemini-pro-latest (Yedek)"}
         except Exception as e2:
             return {"status": "error", "message": f"AI Hatası: {str(e)}"}
 
-@app.post("/auth/google")
-async def google_login(data: GoogleLoginData):
-    try:
-        idinfo = None
-        try:
-            idinfo = id_token.verify_oauth2_token(data.token, google_requests.Request(), GOOGLE_CLIENT_ID)
-        except: pass
-
-        if not idinfo:
-            res = requests.get(f"https://www.googleapis.com/oauth2/v2/userinfo", headers={"Authorization": f"Bearer {data.token}"})
-            if res.status_code == 200:
-                idinfo = res.json()
-                if 'sub' not in idinfo and 'id' in idinfo: idinfo['sub'] = idinfo['id']
-            else: raise ValueError("Geçersiz Token")
-
-        await users_collection.update_one(
-            {"_id": idinfo['sub']}, 
-            {"$set": {"email": idinfo.get('email'), "name": idinfo.get('name'), "picture": idinfo.get('picture'), "last_login": datetime.now()}}, 
-            upsert=True
-        )
-        return {"status": "success", "user": {"id": idinfo['sub'], "name": idinfo.get('name'), "picture": idinfo.get('picture')}}
-    except Exception as e:
-        raise HTTPException(status_code=401, detail=str(e))
-
 @app.post("/analyze")
 async def analyze_listing(data: ListingData):
+    """İlanı kaydeder ve geçmişi tutar"""
     if not data.id or not data.price: return {"status": "error"}
+    
     try:
         existing = await listings_collection.find_one({"_id": data.id})
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        response = {"status": "success", "comments": [], "history": []}
+        response = {"status": "success", "comments": [], "is_price_drop": False, "history": []}
 
         if existing:
             last_price = existing.get("current_price", data.price)
             if last_price != data.price:
                 await listings_collection.update_one({"_id": data.id}, {"$set": {"current_price": data.price}, "$push": {"history": {"date": now, "price": last_price}}})
+                if data.price < last_price: response["is_price_drop"] = True 
             full_history = existing.get("history", [])
             full_history.append({"date": "Şimdi", "price": data.price})
             response["history"] = full_history
             response["comments"] = existing.get("comments", [])
         else:
-            new_record = {"_id": data.id, "title": data.title, "current_price": data.price, "history": [], "comments": []}
+            new_record = {"_id": data.id, "title": data.title, "url": data.url, "first_seen_at": now, "current_price": data.price, "history": [], "comments": []}
             await listings_collection.insert_one(new_record)
             response["history"] = [{"date": "Şimdi", "price": data.price}]
         return response
     except: return {"status": "error"}
 
 @app.post("/add_comment")
-async def add_comment(c: CommentData):
-    u_name, u_pic = c.username or "Misafir", ""
-    if c.user_id:
-        user = await users_collection.find_one({"_id": c.user_id})
-        if user: u_name, u_pic = user.get("name", u_name), user.get("picture", "")
-    new_c = {"id": str(uuid.uuid4()), "user_id": c.user_id, "user": u_name, "user_pic": u_pic, "text": c.text, "date": datetime.now().strftime("%Y-%m-%d"), "liked_by": []}
-    await listings_collection.update_one({"_id": c.listing_id}, {"$push": {"comments": new_c}})
-    upd = await listings_collection.find_one({"_id": c.listing_id})
-    return {"status": "success", "comments": upd.get("comments", [])}
+async def add_comment(comment: CommentData):
+    """Yorum ekler"""
+    user_name = comment.username or "Misafir"
+    user_pic = ""
+    
+    if comment.user_id:
+        user = await users_collection.find_one({"_id": comment.user_id})
+        if user:
+            user_name = user.get("name", user_name)
+            user_pic = user.get("picture", "")
+
+    new_comment = {
+        "id": str(uuid.uuid4()), 
+        "user_id": comment.user_id,
+        "user": user_name,
+        "user_pic": user_pic,
+        "text": comment.text, 
+        "date": datetime.now().strftime("%Y-%m-%d %H:%M"), 
+        "liked_by": []
+    }
+    
+    await listings_collection.update_one({"_id": comment.listing_id}, {"$push": {"comments": new_comment}})
+    updated = await listings_collection.find_one({"_id": comment.listing_id})
+    return {"status": "success", "comments": updated.get("comments", [])}
 
 @app.post("/like_comment")
-async def like_comment(d: LikeData):
-    doc = await listings_collection.find_one({"_id": d.listing_id})
+async def like_comment(data: LikeData):
+    """Yorumu beğenir/beğenmekten vazgeçer"""
+    doc = await listings_collection.find_one({"_id": data.listing_id})
     if not doc: return {"status": "error"}
-    cmts = doc.get("comments", [])
-    for c in cmts:
-        if c.get("id") == d.comment_id:
+    
+    comments = doc.get("comments", [])
+    updated_comments = []
+    
+    for c in comments:
+        if c.get("id") == data.comment_id:
             likes = c.get("liked_by", [])
-            if d.user_id in likes: likes.remove(d.user_id)
-            else: likes.append(d.user_id)
+            if not isinstance(likes, list): likes = []
+            
+            if data.user_id in likes:
+                likes.remove(data.user_id)
+            else:
+                likes.append(data.user_id)
             c["liked_by"] = likes
-    await listings_collection.update_one({"_id": d.listing_id}, {"$set": {"comments": cmts}})
-    return {"status": "success", "comments": cmts}
+        updated_comments.append(c)
+    
+    await listings_collection.update_one({"_id": data.listing_id}, {"$set": {"comments": updated_comments}})
+    return {"status": "success", "comments": updated_comments}
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("backend.main:app", host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
-
-
+    # Render için PORT ayarı
+    port = int(os.environ.get("PORT", 8000))
+    # Dosya yolu backend.main olduğu için:
+    uvicorn.run("backend.main:app", host="0.0.0.0", port=port)
