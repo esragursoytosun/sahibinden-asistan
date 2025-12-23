@@ -1,4 +1,4 @@
-# backend/main.py - BAI BİLMİŞ SÜRÜMÜ (OKUNABİLİR & YAPICI) 🧠
+# backend/main.py - BAI BİLMİŞ: AZ LAF ÇOK İŞ & OKUNAKLI FORMAT 🧠
 import os
 import uuid
 from datetime import datetime
@@ -66,18 +66,16 @@ async def find_similars(title, current_id):
     try:
         keywords = set(title.lower().split())
         keywords = {k for k in keywords if len(k) > 2}
-        # Son 100 ilanı çekip analiz et
-        cursor = collection.find().sort("first_seen_at", -1).limit(100)
-        all_listings = await cursor.to_list(length=100)
+        cursor = collection.find().sort("first_seen_at", -1).limit(50)
+        all_listings = await cursor.to_list(length=50)
         
         prices = []
         for item in all_listings:
             if str(item.get("_id")) == str(current_id): continue
             item_title = item.get("title", "").lower()
             item_price = item.get("current_price", 0)
-            
-            # Başlık benzerliği kontrolü
             common = keywords.intersection(set(item_title.split()))
+            
             if len(common) >= 2 and item_price > 0:
                 prices.append(item_price)
                 
@@ -107,18 +105,18 @@ async def ask_ai(data: ListingData):
     db_context = await find_similars(data.title, data.id)
     user_notes = await get_user_notes(data.id)
     
-    # 2. Modeller (Google Search destekli 2.0 öncelikli)
+    # 2. Modeller
     models_to_try = ["gemini-2.0-flash", "gemini-flash-latest", "gemini-pro"]
     
-    # 3. BAI BİLMİŞ PROMPT'U (Okunabilirlik Odaklı)
+    # 3. BAI BİLMİŞ PROMPT'U (Direkt Analiz + HTML Liste)
     prompt = f"""
-    KİMLİĞİN:
-    Adın "BAI Bilmiş". Sen; otomotiv, emlak ve teknoloji piyasasına hakim, veri odaklı ama samimi bir yapay zeka asistanısın.
-    Üslubun: "Cemil Usta" gibi tecrübeli ama çok daha kibar ve yapıcı. Sorunları söylerken çözüm de önerirsin.
-
+    ROLÜN: Adın "BAI Bilmiş". Otomotiv ve emlak piyasası uzmanısın.
+    ÜSLUBUN: "Cemil Usta" tecrübesinde ama nazik, yapıcı ve çözüm odaklısın.
+    KURAL: Kendini uzun uzun tanıtma ("Ben BAI Bilmiş..." deme). Direkt analize gir.
+    
     GÖREVİN:
-    Bu ilanı incele, internetteki güncel piyasa verilerini ve aşağıdaki özel verileri kullanarak analiz yap.
-    Çıktılarını MUTLAKA HTML listeleri (<ul>, <li>) kullanarak madde madde yaz. Uzun paragraflar istemiyorum.
+    Aşağıdaki ilanı; bizim veritabanımız, kullanıcı notları ve genel piyasa bilginle analiz et.
+    Çıktıyı kesinlikle HTML listeleri (<ul>, <li>) kullanarak madde madde ver. Okuması kolay olsun.
 
     İLAN DETAYLARI:
     - Başlık: {data.title}
@@ -129,32 +127,32 @@ async def ask_ai(data: ListingData):
     
     ÖZEL BAĞLAM (BUNLARI KULLAN):
     - Bizim Veritabanı Durumu: {db_context}
-    - Kullanıcı Notları (Varsa çok önemli): {user_notes}
+    - Kullanıcı Notları (Varsa dikkate al): {user_notes}
 
     ANALİZ FORMATI (HTML KULLAN):
     
     <b>🧐 BAI Bilmiş Analizi:</b>
     <ul>
-        <li>(Buraya ilanın teknik durumu, gizli kusurlar veya avantajlar hakkında 2-3 madde yaz.)</li>
+        <li>(İlanın teknik durumu, gizli kusur ihtimali veya avantajları hakkında 2-3 kısa madde.)</li>
     </ul>
 
     <b>💰 Fiyat ve Piyasa Raporu:</b>
     <ul>
-        <li>(Fiyatı bizim veritabanı ve genel piyasa ile kıyasla. Pahalı mı, fırsat mı?)</li>
-        <li>(Yatırım değeri veya satılabilirlik hızı hakkında 1 madde yaz.)</li>
+        <li>(Fiyatı veritabanımızla ve piyasayla kıyasla. Pahalı mı, fırsat mı?)</li>
+        <li>(Satılabilirlik hızı ve yatırım değeri.)</li>
     </ul>
 
     <b>⚠️ Riskler ve Tavsiyeler:</b>
     <ul>
-        <li>(Alırken nelere dikkat etmeliyim? Kronik sorun var mı?)</li>
-        <li>(Yapıcı tavsiyen nedir? "Şu fiyata düşerse al" gibi.)</li>
+        <li>(Alırken nelere dikkat edilmeli? Kronik sorun riski var mı?)</li>
+        <li>(Yapıcı tavsiyen: "Şu fiyata düşerse kaçırma" veya "Ekspertiz şart" gibi.)</li>
     </ul>
     """
 
     last_error = ""
     for model_name in models_to_try:
         try:
-            # Google Search Tool Tanımlama (Sadece destekleyen modellerde çalışır)
+            # Google Search Tool (Varsa kullanır)
             tools = 'google_search_retrieval' if '2.0' in model_name else None
             
             if tools:
@@ -163,7 +161,6 @@ async def ask_ai(data: ListingData):
                 model = genai.GenerativeModel(model_name)
 
             response = model.generate_content(prompt)
-            
             if not response.text: raise Exception("Boş cevap")
             
             return {"status": "success", "ai_response": response.text, "used_model": model_name}
@@ -172,7 +169,7 @@ async def ask_ai(data: ListingData):
             print(f"Hata ({model_name}): {e}")
             continue
             
-    return {"status": "error", "message": f"BAI Bilmiş şu an çok yoğun. ({last_error})"}
+    return {"status": "error", "message": f"BAI Bilmiş şu an yoğun. ({last_error})"}
 
 @app.post("/analyze")
 async def analyze_listing(data: ListingData):
