@@ -10,7 +10,7 @@
     "identity" 
   ],
   "oauth2": {
-    "client_id": "1025920967974-rtgc4mhvnk0rvsfl7i5iqegi0c8ccu5o.apps.googleusercontent.com",
+    "client_id": "1025920967974-67v172dj822e60elm4722g2egr8suc67.apps.googleusercontent.com",
     "scopes": [
       "openid", "email", "profile"
     ]
@@ -32,6 +32,7 @@
     "default_popup": "popup.html"
   }
 }
+
 
 
 
