@@ -147,13 +147,52 @@ async def google_login(data: GoogleLoginData):
 
 @app.post("/analyze-ai")
 async def ask_ai(data: ListingData):
-    if not GEMINI_KEY: return {"status": "error", "message": "API Key Eksik"}
+    """BAI Bilmiş Analiz Endpoint'i (Sadeleştirilmiş Versiyon)"""
+    if not GEMINI_KEY: 
+        return {"status": "error", "message": "API Key Render'da Tanımlı Değil!"}
 
+    # 1. Veri Toplama
     db_context = await find_similars(data.title, data.id)
     user_notes = await get_user_notes(data.id)
     
-   # 2. Modeller (Sadece Flash - En Hızlı ve Kararlı)
-    models_to_try = ["gemini-1.5-flash"]
+    # 2. Prompt Hazırlığı
+    prompt = f"""
+    Sen "BAI Bilmiş" adında bir emlak ve oto asistanısın.
+    GÖREV: Aşağıdaki ilanı analiz et ve HTML formatında (<ul>, <li>) çıktı ver.
+    
+    İLAN BİLGİLERİ:
+    - Başlık: {data.title}
+    - Fiyat: {data.price} TL
+    - Yıl: {data.year}
+    - KM: {data.km}
+    - Açıklama: "{data.description}"
+    
+    GEÇMİŞ VERİLER:
+    {db_context}
+    {user_notes}
+
+    Lütfen şu başlıklarla analiz yap (HTML etiketleri kullan):
+    <b>🧐 BAI Bilmiş Analizi:</b> (Teknik yorumlar)
+    <b>💰 Fiyat Raporu:</b> (Pahalı mı ucuz mu?)
+    <b>⚠️ Tavsiyeler:</b> (Riskler neler?)
+    """
+
+    try:
+        # En kararlı model: gemini-1.5-flash
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        
+        # Basit istek gönder
+        response = model.generate_content(prompt)
+        
+        if not response or not response.text:
+            return {"status": "error", "message": "AI boş cevap döndü."}
+            
+        return {"status": "success", "ai_response": response.text, "used_model": "gemini-1.5-flash"}
+        
+    except Exception as e:
+        print(f"AI Hatası: {str(e)}")
+        # Hatayı kullanıcıya da gösterelim ki ne olduğunu anlayalım
+        return {"status": "error", "message": f"AI Servis Hatası: {str(e)}"}
     
     prompt = f"""
     KİMLİĞİN:
@@ -288,6 +327,7 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run("backend.main:app", host="0.0.0.0", port=port)
+
 
 
 
