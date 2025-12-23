@@ -404,3 +404,4 @@ async function analyzeListing() {
 
 // Sayfa yüklendikten 1 saniye sonra çalış
 setTimeout(analyzeListing, 1000);
+
