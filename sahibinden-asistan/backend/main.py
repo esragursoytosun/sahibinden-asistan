@@ -152,8 +152,8 @@ async def ask_ai(data: ListingData):
     db_context = await find_similars(data.title, data.id)
     user_notes = await get_user_notes(data.id)
     
-    # 2. Modeller (Garanti çalışan liste: Önce Flash, olmazsa Klasik Pro)
-    models_to_try = ["gemini-1.5-flash", "gemini-pro"]
+   # 2. Modeller (Sadece Flash - En Hızlı ve Kararlı)
+    models_to_try = ["gemini-1.5-flash"]
     
     prompt = f"""
     KİMLİĞİN:
@@ -288,6 +288,7 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run("backend.main:app", host="0.0.0.0", port=port)
+
 
 
 
