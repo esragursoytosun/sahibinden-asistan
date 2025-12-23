@@ -105,7 +105,7 @@ async def check_models():
 
 @app.post("/analyze-ai")
 async def ask_ai(data: ListingData):
-    """AI Analiz Endpointi"""
+    """AI Analiz Endpointi - Gemini 2.0 Flash (Senin Listendeki Model)"""
     if not GEMINI_KEY: 
         return {"status": "error", "message": "API Key Eksik!"}
 
@@ -126,10 +126,9 @@ async def ask_ai(data: ListingData):
     """
 
     try:
-        # En güvenli, en eski ve en yeni modelleri sırayla dener
-        # 'gemini-1.5-flash' -> Yeni ve Hızlı
-        # 'gemini-pro' -> Eski ve Sağlam
-        model_name = "gemini-1.5-flash" 
+        # SENİN LİSTENDEN SEÇTİĞİMİZ MODEL:
+        # "models/gemini-2.0-flash" -> Şu an senin hesabında aktif olan en iyi model.
+        model_name = "gemini-2.0-flash" 
         
         model = genai.GenerativeModel(model_name)
         response = model.generate_content(prompt)
@@ -137,14 +136,7 @@ async def ask_ai(data: ListingData):
         return {"status": "success", "ai_response": response.text, "used_model": model_name}
         
     except Exception as e:
-        # Eğer Flash hata verirse Pro'yu dene (Fallback)
-        try:
-            print(f"Flash hatası: {e}, Pro deneniyor...")
-            model = genai.GenerativeModel("gemini-pro")
-            response = model.generate_content(prompt)
-            return {"status": "success", "ai_response": response.text, "used_model": "gemini-pro (Yedek)"}
-        except Exception as e2:
-            return {"status": "error", "message": f"AI Hatası: {str(e)} | Yedek Hata: {str(e2)}"}
+        return {"status": "error", "message": f"AI Hatası ({model_name}): {str(e)}"}
 
 @app.post("/auth/google")
 async def google_login(data: GoogleLoginData):
@@ -221,3 +213,4 @@ async def like_comment(d: LikeData):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("backend.main:app", host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
+
