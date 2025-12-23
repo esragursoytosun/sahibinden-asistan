@@ -1,4 +1,4 @@
-# backend/main.py - HATASIZ FİNAL SÜRÜM (PYMONGO FIX) 🛠️
+# backend/main.py - AKILLI DANIŞMAN (ARABA + EMLAK + HER ŞEY) 🧠
 import os
 import uuid
 from datetime import datetime
@@ -31,7 +31,6 @@ if MONGO_URL:
         collection = db.listings
     except Exception as e:
         print(f"DB Bağlantı Hatası: {e}")
-        collection = None
 else:
     print("UYARI: Database URL yok!")
 
@@ -59,53 +58,47 @@ class LikeData(BaseModel):
     comment_id: str
     user_id: str
 
-# --- YARDIMCI FONKSİYON: EMSAL BULUCU ---
+# --- YARDIMCI FONKSİYONLAR ---
+
 async def find_similars(title, current_id):
-    """Veritabanındaki benzer araçların ortalama fiyatını bulur."""
-    # DÜZELTME 1: collection is None kontrolü
+    """Benzer ilanların fiyat geçmişini getirir."""
     if not title or collection is None: return None
-    
     try:
-        # Başlıktaki kelimeleri ayır
         keywords = set(title.lower().split())
-        keywords = {k for k in keywords if len(k) > 2} # Kısa kelimeleri at
-        
-        # Son 100 ilanı çek
+        keywords = {k for k in keywords if len(k) > 2}
         cursor = collection.find().sort("first_seen_at", -1).limit(100)
         all_listings = await cursor.to_list(length=100)
         
-        similar_prices = []
-        
+        prices = []
         for item in all_listings:
             if str(item.get("_id")) == str(current_id): continue
-            
             item_title = item.get("title", "").lower()
             item_price = item.get("current_price", 0)
+            common = keywords.intersection(set(item_title.split()))
             
-            # Benzerlik kontrolü: En az 2 kelime tutuyor mu?
-            item_keywords = set(item_title.split())
-            common = keywords.intersection(item_keywords)
-            
+            # Emlak veya Araba fark etmeksizin başlık benzerliğine bakar
             if len(common) >= 2 and item_price > 0:
-                similar_prices.append(item_price)
+                prices.append(item_price)
                 
-        if not similar_prices:
-            return "Veritabanında henüz yeterli emsal yok."
-        
-        avg_price = sum(similar_prices) / len(similar_prices)
-        min_price = min(similar_prices)
-        max_price = max(similar_prices)
+        if not prices: return "Veritabanında henüz yeterli kıyaslama verisi yok."
         
         return f"""
-        BİZİM VERİTABANI RAPORU:
-        Daha önce kaydettiğin {len(similar_prices)} benzer araç var.
-        - Ortalama Piyasa: {avg_price:,.0f} TL
-        - En Ucuzu: {min_price:,.0f} TL
-        - En Pahalı: {max_price:,.0f} TL
-        (Bu veriyi kullanarak şu anki ilanın fiyatını eleştir.)
+        VERİTABANI GEÇMİŞİ:
+        Daha önce incelediğin {len(prices)} benzer ilanın ortalaması: {sum(prices)/len(prices):,.0f} TL.
+        (Bu veriyi, şu anki fiyatın ({sum(prices)/len(prices):,.0f} TL) piyasaya göre ucuz mu pahalı mı olduğunu anlamak için kullan.)
         """
-    except Exception as e:
-        return f"Veritabanı hatası: {str(e)}"
+    except: return None
+
+async def get_user_notes(listing_id):
+    """Kullanıcının bu ilana yazdığı özel yorumları getirir."""
+    if collection is None: return "Kullanıcı notu yok."
+    try:
+        doc = await collection.find_one({"_id": listing_id})
+        if not doc or "comments" not in doc: return "Kullanıcı bu ilana henüz not düşmemiş."
+        
+        notes = [f"- {c.get('user')}: {c.get('text')}" for c in doc["comments"]]
+        return "\n".join(notes) if notes else "Kullanıcı notu yok."
+    except: return "Notlar alınamadı."
 
 # --- ENDPOINTLER ---
 
@@ -113,62 +106,60 @@ async def find_similars(title, current_id):
 async def ask_ai(data: ListingData):
     if not GEMINI_KEY: return {"status": "error", "message": "API Key Eksik"}
 
-    # 1. Emsal Kontrolü
+    # 1. Bilgi Toplama
     db_context = await find_similars(data.title, data.id)
+    user_notes = await get_user_notes(data.id)
     
-    # 2. Yedekli Model Listesi (Sırayla dener)
-    models_to_try = [
-        "gemini-flash-latest", 
-        "gemini-2.0-flash", 
-        "gemini-2.0-flash-lite-preview-02-05",
-        "gemini-pro"
-    ]
+    # 2. Modeller (Yedekli)
+    models = ["gemini-flash-latest", "gemini-2.0-flash", "gemini-pro"]
     
-    # 3. Sanayi Ustası Prompt'u
+    # 3. AKILLI DANIŞMAN PROMPT'U
     prompt = f"""
-    ROLÜN:
-    Sen "Sanayi Ustası Cemil Abi"sin. 30 yıldır araba tamir ediyorsun. 
-    Kibar konuşmayı sevmezsin, "dobra" ve teknik konuşursun. 
-    Bana "Kardeşim", "Hocam" diye hitap et.
-    Kısa, net, vurucu ve hafif iğneleyici analizler yap.
+    ROLÜN: "Tecrübeli Yatırım ve Alışveriş Danışmanı"sın.
+    
+    GÖREVİN: Aşağıdaki ilanı bir uzman gözüyle analiz etmek.
+    Bu bir ARABA ise: Motor, kaporta, kronik sorun ve sanayi masrafı odaklı ol.
+    Bu bir EV/ARSA ise: Konum, metrekare, tapu, kira çarpanı ve yatırım değeri odaklı ol.
+    Bu bir EŞYA ise: Fiyat/Performans ve kullanım ömrü odaklı ol.
 
-    ARAÇ BİLGİLERİ:
+    İLAN VERİLERİ:
     - Başlık: {data.title}
     - Fiyat: {data.price} TL
-    - Yıl: {data.year}
-    - KM: {data.km}
+    - Yıl/Yaş: {data.year}
+    - KM/Özellik: {data.km}
     - Satıcı Açıklaması: "{data.description}"
     
-    VERİTABANI BİLGİSİ (EMSALLER):
-    {db_context if db_context else "Veritabanında kayıtlı emsal yok."}
+    EKSTRA BAĞLAM:
+    1. BİZİM VERİTABANI: {db_context}
+    2. KULLANICI NOTLARI (Bunu dikkate al!): {user_notes}
 
-    GÖREVLERİN:
-    1. ARABANIN CİĞERİ: Açıklamayı oku. "Keyfe keder boyalı", "Çıtır hasarlı" gibi galerici yalanlarını yakala. Motor/Mekanik ne durumdadır tahmin et.
-    2. FİYAT ANALİZİ: Yıl, KM ve Hasar durumuna göre bu para eder mi? Veritabanındaki emsallere bak, pahalıysa "Kazık", ucuzsa "Kupon" de.
-    3. SANAYİDEN TAVSİYE: Bu modelin kronik sorunu (DSG, Enjektör, Zincir vb.) var mı? Alırsam sanayiden çıkamaz mıyım?
+    ÜSLUP:
+    - "Cemil Usta" kadar kaba olma, ama "Robot" kadar da soğuk olma.
+    - Gerçekçi, yapıcı ve samimi ol.
+    - Eleştirirken çözüm veya alternatif de sun.
+    - Güncel piyasa koşullarını (enflasyon, durgunluk vb.) yorumuna kat.
 
-    Yanıtı HTML formatında (<b>, <br>) ver. Destan yazma, sadede gel.
+    ÇIKTI FORMATI (HTML kullan: <b>, <br>):
+    1. GENEL DURUM & TESPİTLER: İlanın artıları, eksileri ve satıcının dilinden çıkan gizli anlamlar.
+    2. FİYAT VE PİYASA YORUMU: Fiyat makul mü? Pazarlık payı var mı? Yatırım yapılır mı?
+    3. RİSKLER VE ÖNERİLER: Alırsam başım ağrır mı? Satarken zorlanır mıyım? Ne tavsiye edersin?
     """
 
-    last_error = ""
-    
-    # Modelleri sırayla dene
-    for model_name in models_to_try:
+    last_err = ""
+    for m in models:
         try:
-            model = genai.GenerativeModel(model_name)
+            model = genai.GenerativeModel(m)
             response = model.generate_content(prompt)
-            return {"status": "success", "ai_response": response.text, "used_model": model_name}
+            return {"status": "success", "ai_response": response.text, "used_model": m}
         except Exception as e:
-            last_error = str(e)
-            print(f"Model Hatası ({model_name}): {e}")
+            last_err = str(e)
             continue
             
-    return {"status": "error", "message": f"Usta şu an çok yoğun, sunucu cevap veremiyor. (Hata: {last_error})"}
+    return {"status": "error", "message": f"Danışman şu an cevap veremiyor. ({last_err})"}
 
 @app.post("/analyze")
 async def analyze_listing(data: ListingData):
-    # DÜZELTME 2: collection is None kontrolü
-    if collection is None: return {"status": "error", "message": "Veritabanı bağlantısı yok"}
+    if collection is None: return {"status": "error", "message": "DB Hatası"}
     if not data.id or not data.price: return {"status": "error"}
     
     try:
@@ -190,13 +181,10 @@ async def analyze_listing(data: ListingData):
             await collection.insert_one(new_record)
             response["history"] = [{"date": "Şimdi", "price": data.price}]
         return response
-    except Exception as e:
-        print(f"Analyze Hatası: {e}")
-        return {"status": "error"}
+    except: return {"status": "error"}
 
 @app.post("/add_comment")
 async def add_comment(comment: CommentData):
-    # DÜZELTME 3: collection is None kontrolü
     if collection is None: return {"status": "error"}
     new_comment = {"id": str(uuid.uuid4()), "user": comment.username, "text": comment.text, "date": datetime.now().strftime("%Y-%m-%d %H:%M"), "liked_by": []}
     await collection.update_one({"_id": comment.listing_id}, {"$push": {"comments": new_comment}})
@@ -205,14 +193,12 @@ async def add_comment(comment: CommentData):
 
 @app.post("/like_comment")
 async def like_comment(data: LikeData):
-    # DÜZELTME 4: collection is None kontrolü
     if collection is None: return {"status": "error"}
     doc = await collection.find_one({"_id": data.listing_id})
     if not doc: return {"status": "error"}
     
     comments = doc.get("comments", [])
     updated_comments = []
-    
     for c in comments:
         if c.get("id") == data.comment_id:
             likes = c.get("liked_by", [])
