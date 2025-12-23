@@ -11,10 +11,8 @@ from google.auth.transport import requests as google_requests
 from dotenv import load_dotenv
 
 # --- AYARLAR VE VERİTABANI ---
-load_dotenv() # .env dosyasını yükle
+load_dotenv()
 
-# Database.py'den tabloları çekiyoruz (Modüler Yapı)
-# Not: Aynı klasörde oldukları için ".database" veya "backend.database" kullanılır.
 from backend.database import listings_collection, users_collection
 
 app = FastAPI()
@@ -34,7 +32,10 @@ GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
 
 # --- AI AYARLARI ---
 if GEMINI_KEY:
-    genai.configure(api_key=GEMINI_KEY)
+    try:
+        genai.configure(api_key=GEMINI_KEY)
+    except Exception as e:
+        print(f"Gemini Config Hatası: {e}")
 
 # --- VERİ MODELLERİ ---
 class ListingData(BaseModel):
@@ -60,10 +61,16 @@ class LikeData(BaseModel):
 class GoogleLoginData(BaseModel):
     token: str
 
+# --- YENİ EKLENEN: HEALTH CHECK ENDPOINT ---
+# Bu kısım Render'ın sunucunun çalıştığını anlamasını sağlar.
+@app.get("/")
+async def root():
+    return {"status": "active", "message": "Sahibinden Asistan Sunucusu Calisiyor! 🚀"}
+# -------------------------------------------
+
 # --- YARDIMCI FONKSİYONLAR ---
 
 async def find_similars(title, current_id):
-    """Veritabanındaki benzer ilanların fiyatlarını getirir."""
     if not title: return "Veritabanı bağlantısı yok."
     try:
         keywords = set(title.lower().split())
@@ -89,7 +96,6 @@ async def find_similars(title, current_id):
     except: return "Veritabanı analizi yapılamadı."
 
 async def get_user_notes(listing_id):
-    """Bu ilana yapılan yorumları getirir."""
     try:
         doc = await listings_collection.find_one({"_id": listing_id})
         if not doc or "comments" not in doc: return ""
@@ -101,33 +107,27 @@ async def get_user_notes(listing_id):
 
 @app.post("/auth/google")
 async def google_login(data: GoogleLoginData):
-    """Gelişmiş Google Giriş İşlemi (Hem ID Token Hem Access Token Destekler)"""
     try:
         idinfo = None
-        # 1. Yöntem: ID Token doğrulamayı dene
         try:
             idinfo = id_token.verify_oauth2_token(data.token, google_requests.Request(), GOOGLE_CLIENT_ID)
         except Exception:
             pass
 
-        # 2. Yöntem: Eğer ID Token çalışmadıysa, Access Token (Chrome Extension) olarak dene
         if not idinfo:
             res = requests.get(f"https://www.googleapis.com/oauth2/v2/userinfo", headers={"Authorization": f"Bearer {data.token}"})
             if res.status_code == 200:
                 idinfo = res.json()
-                # Google bazen 'sub' bazen 'id' döndürür, standartlaştıralım:
                 if 'sub' not in idinfo and 'id' in idinfo:
                     idinfo['sub'] = idinfo['id']
             else:
                 raise ValueError("Token Google tarafından reddedildi.")
 
-        # Kullanıcı bilgilerini al
         google_id = idinfo['sub']
         email = idinfo.get('email')
         name = idinfo.get('name')
         picture = idinfo.get('picture')
         
-        # Kullanıcıyı veritabanına kaydet (Varsa güncelle)
         await users_collection.update_one(
             {"_id": google_id}, 
             {"$set": {
@@ -147,17 +147,13 @@ async def google_login(data: GoogleLoginData):
 
 @app.post("/analyze-ai")
 async def ask_ai(data: ListingData):
-    """BAI Bilmiş Analiz Endpoint'i"""
     if not GEMINI_KEY: return {"status": "error", "message": "API Key Eksik"}
 
-    # 1. Veri Toplama
     db_context = await find_similars(data.title, data.id)
     user_notes = await get_user_notes(data.id)
     
-    # 2. Modeller
     models_to_try = ["gemini-2.0-flash", "gemini-flash-latest", "gemini-pro"]
     
-    # 3. Prompt
     prompt = f"""
     KİMLİĞİN:
     Adın "BAI Bilmiş". Sen otomotiv, emlak ve teknoloji piyasasına hakim, veri odaklı ama samimi bir yapay zeka asistanısın.
@@ -202,15 +198,10 @@ async def ask_ai(data: ListingData):
     last_error = ""
     for model_name in models_to_try:
         try:
-            tools = 'google_search_retrieval' if '2.0' in model_name else None
-            if tools:
-                model = genai.GenerativeModel(model_name, tools=tools)
-            else:
-                model = genai.GenerativeModel(model_name)
-
+            # Google Search Tool kullanımı (Versiyona göre değişebilir, basit tutuyoruz)
+            model = genai.GenerativeModel(model_name)
             response = model.generate_content(prompt)
             if not response.text: raise Exception("Boş cevap")
-            
             return {"status": "success", "ai_response": response.text, "used_model": model_name}
         except Exception as e:
             last_error = str(e)
@@ -221,7 +212,6 @@ async def ask_ai(data: ListingData):
 
 @app.post("/analyze")
 async def analyze_listing(data: ListingData):
-    """İlanı kaydeder ve geçmişi tutar"""
     if not data.id or not data.price: return {"status": "error"}
     
     try:
@@ -247,7 +237,6 @@ async def analyze_listing(data: ListingData):
 
 @app.post("/add_comment")
 async def add_comment(comment: CommentData):
-    """Yorum ekler"""
     user_name = comment.username or "Misafir"
     user_pic = ""
     
@@ -273,7 +262,6 @@ async def add_comment(comment: CommentData):
 
 @app.post("/like_comment")
 async def like_comment(data: LikeData):
-    """Yorumu beğenir/beğenmekten vazgeçer"""
     doc = await listings_collection.find_one({"_id": data.listing_id})
     if not doc: return {"status": "error"}
     
@@ -297,7 +285,5 @@ async def like_comment(data: LikeData):
 
 if __name__ == "__main__":
     import uvicorn
-    # Render için PORT ayarı
     port = int(os.environ.get("PORT", 8000))
-    # Dosya yolu backend.main olduğu için:
     uvicorn.run("backend.main:app", host="0.0.0.0", port=port)
