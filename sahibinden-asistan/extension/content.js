@@ -1,8 +1,8 @@
-// content.js - FINAL SÜRÜM (SÜRÜKLEME GARANTİLİ) 🚀
+// content.js - FINAL SÜRÜM: KONTRASTLI ARAYÜZ & GELİŞMİŞ SCROLL 🛠️
 
 const API_URL = "https://sahiden.onrender.com"; 
 
-console.log("BAI BILMIS: Yeni Sürüm Yüklendi! (V3)"); // Konsolda bunu görmelisin
+console.log("BAI BILMIS: Arayüz Güncellendi (V4)"); 
 
 // --- KİMLİK ---
 let userId = localStorage.getItem("sahibinden_userid");
@@ -52,7 +52,7 @@ function createPriceChart(history) {
     return `<svg width="100%" height="${height}"><polyline fill="none" stroke="#293542" stroke-width="2" points="${points}" /></svg>`;
 }
 
-// --- SÜRÜKLEME MANTIĞI (GÜÇLENDİRİLMİŞ) ---
+// --- SÜRÜKLEME ---
 function makeDraggable(el) {
     const header = document.getElementById("sahibinden-asistan-header");
     let isDragging = false;
@@ -61,24 +61,15 @@ function makeDraggable(el) {
     if (!header) return;
 
     header.onmousedown = function(e) {
-        e.preventDefault(); // Metin seçimini engelle
+        if(e.target.id === "closeOverlayBtn" || e.target.id === "usernameInput") return; // Butonlara basınca sürükleme
+        e.preventDefault();
         isDragging = true;
-        
-        // Mouse başlangıç pozisyonu
         startX = e.clientX;
         startY = e.clientY;
-        
-        // Elementin şu anki konumu
         initialLeft = el.offsetLeft;
         initialTop = el.offsetTop;
-
-        // "right" özelliğini iptal et ki "left" çalışsın
         el.style.right = "auto";
-        el.style.bottom = "auto";
-        
-        // Sürüklerken cursor değişsin
         header.style.cursor = "grabbing";
-
         document.onmousemove = elementDrag;
         document.onmouseup = closeDragElement;
     };
@@ -86,12 +77,8 @@ function makeDraggable(el) {
     function elementDrag(e) {
         if (!isDragging) return;
         e.preventDefault();
-
-        // Ne kadar hareket ettik?
         const dx = e.clientX - startX;
         const dy = e.clientY - startY;
-
-        // Yeni konumu uygula
         el.style.left = (initialLeft + dx) + "px";
         el.style.top = (initialTop + dy) + "px";
     }
@@ -106,7 +93,6 @@ function makeDraggable(el) {
 
 // --- ANA EKRAN ---
 function showOverlay(data, result) {
-    // Eski paneli temizle
     const oldOverlay = document.getElementById('sahibinden-asistan-box');
     if (oldOverlay) oldOverlay.remove();
 
@@ -128,58 +114,125 @@ function showOverlay(data, result) {
             align-items: center; 
             cursor: grab; 
             user-select: none;
-            border-bottom: 2px solid #e0b800;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            z-index: 10;
         ">
-            <div style="font-weight: 900; font-size:14px;">🧐 BAI BİLMİŞ</div>
-            <div style="display:flex; align-items:center; gap:5px;">
-                <span id="closeOverlayBtn" style="cursor:pointer; font-size:16px; font-weight:bold; color:#333; padding:0 5px;">✖</span>
+            <div style="font-weight: 900; font-size:14px; display:flex; align-items:center; gap:5px;">
+                <span>🤖</span> BAI BİLMİŞ
+            </div>
+            <div style="display:flex; align-items:center; gap:6px;">
+                 <input type="text" id="usernameInput" value="${currentUser}" 
+                    style="width:80px; background:rgba(255,255,255,0.9); border:none; padding:3px; border-radius:4px; font-size:11px; text-align:center; color:#333;">
+                <span id="closeOverlayBtn" style="cursor:pointer; font-size:18px; font-weight:bold; color:#333; padding:0 4px;">&times;</span>
             </div>
         </div>
         
-        <div style="padding: 15px; background: #fff; border-bottom-left-radius: 8px; border-bottom-right-radius: 8px;">
+        <div style="
+            padding: 15px; 
+            background: #F2F4F6; /* Kontrast Rengi */
+            border-bottom-left-radius: 8px; 
+            border-bottom-right-radius: 8px;
+            color: #333;
+        ">
             <div style="text-align:center; margin-bottom:15px;">
-                <div style="font-size: 22px; font-weight: 800; color:#293542;">${data.price.toLocaleString('tr-TR')} TL</div>
-                <div style="font-size:10px; color:#888;">İlan Fiyatı</div>
+                <div style="font-size: 24px; font-weight: 800; color:#293542; letter-spacing:-0.5px;">${data.price.toLocaleString('tr-TR')} TL</div>
+                <div style="font-size:11px; color:#777; font-weight:500;">İlan Fiyatı</div>
             </div>
+            
             ${chartHtml}
             
-            <button id="askAiBtn" style="width:100%; background: #293542; color: #FFD000; border: none; padding: 12px; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: bold; margin-top: 15px;">
+            <button id="askAiBtn" style="
+                width:100%; 
+                background: #293542; 
+                color: #FFD000; 
+                border: none; 
+                padding: 12px; 
+                border-radius: 6px; 
+                cursor: pointer; 
+                font-size: 13px; 
+                font-weight: bold; 
+                margin-top: 15px;
+                box-shadow: 0 3px 6px rgba(0,0,0,0.15);
+                transition: all 0.2s;
+            ">
                 ✨ ANALİZ ET
             </button>
             
-            <div id="aiResult" style="display:none; font-size:12px; margin-top:15px; background: #f9f9f9; padding: 10px; border: 1px solid #eee; border-radius: 4px; max-height: 300px; overflow-y: auto;"></div>
+            <div id="aiResult" style="
+                display:none; 
+                font-size:12px; 
+                margin-top:15px; 
+                background: #fff; /* İç kutu beyaz */
+                padding: 12px; 
+                border: 1px solid #ddd;
+                border-radius: 6px; 
+                max-height: 250px; 
+                overflow-y: auto;
+                line-height: 1.5;
+                box-shadow: inset 0 2px 4px rgba(0,0,0,0.03);
+            "></div>
 
-            <button id="toggleCommentsBtn" style="width:100%; background: #f1f1f1; color: #555; border: 1px solid #ddd; padding: 8px; border-radius: 4px; margin-top: 10px; font-size: 11px; font-weight: bold; cursor: pointer;">
+            <button id="toggleCommentsBtn" style="
+                width:100%; 
+                background: #e0e4e8; 
+                color: #444; 
+                border: none; 
+                padding: 8px; 
+                border-radius: 6px; 
+                margin-top: 12px; 
+                font-size: 11px; 
+                font-weight: bold; 
+                cursor: pointer;
+            ">
                 💬 Yorumlar (${result.comments ? result.comments.length : 0})
             </button>
 
             <div id="commentSection" style="display:none; margin-top:10px;">
-                <div id="commentList" style="max-height:150px; overflow-y:auto; margin-bottom:8px; word-break: break-word;">${renderComments(result.comments || [])}</div>
+                <div id="commentList" style="
+                    max-height: 180px; 
+                    overflow-y: auto; 
+                    margin-bottom: 8px; 
+                    word-break: break-word;
+                    background: #fff;
+                    border: 1px solid #e1e1e1;
+                    border-radius: 4px;
+                    padding: 5px;
+                    overscroll-behavior: contain; /* ÖNEMLİ: Fare tekerleği sadece burayı etkiler */
+                ">
+                    ${renderComments(result.comments || [])}
+                </div>
+                
                 <div style="display:flex; gap:5px;">
-                    <input id="commentInput" placeholder="Yorum..." style="flex:1; border:1px solid #ccc; padding:5px; font-size:11px;">
-                    <button id="sendCommentBtn" style="background:#293542; color:white; border:none; padding:0 10px;">➤</button>
+                    <input id="commentInput" placeholder="Yorum ekle..." style="
+                        flex:1; 
+                        border:1px solid #ccc; 
+                        padding:8px; 
+                        font-size:12px; 
+                        border-radius:4px;
+                        outline:none;
+                    ">
+                    <button id="sendCommentBtn" style="background:#293542; color:white; border:none; padding:0 12px; border-radius:4px; cursor:pointer;">➤</button>
                 </div>
             </div>
         </div>
     `;
 
-    // CSS STİLLERİ (Important ile zorla)
+    // CSS STİLLERİ
     overlay.style.cssText = `
         position: fixed !important;
         top: 150px !important;
         right: 20px !important;
-        left: auto;
-        width: 300px !important;
+        width: 310px !important;
         background-color: transparent !important;
         border-radius: 8px !important;
-        box-shadow: 0 10px 40px rgba(0,0,0,0.4) !important;
-        z-index: 2147483647 !important; /* En üst katman */
-        font-family: sans-serif !important;
+        box-shadow: 0 15px 50px rgba(0,0,0,0.3) !important;
+        z-index: 2147483647 !important;
+        font-family: 'Open Sans', Helvetica, Arial, sans-serif !important;
+        border: 1px solid #dcdcdc !important;
     `;
     
     document.body.appendChild(overlay);
 
-    // SÜRÜKLEMEYİ BAŞLAT
     makeDraggable(overlay);
 
     // EVENTS
@@ -188,8 +241,9 @@ function showOverlay(data, result) {
     document.getElementById('askAiBtn').onclick = async () => {
         const btn = document.getElementById('askAiBtn');
         const resultBox = document.getElementById('aiResult');
-        btn.innerHTML = "⏳ Düşünüyor...";
+        btn.innerHTML = "⏳ Piyasa Araştırılıyor...";
         btn.disabled = true;
+        btn.style.opacity = "0.7";
 
         try {
             const response = await fetch(`${API_URL}/analyze-ai`, {
@@ -199,9 +253,9 @@ function showOverlay(data, result) {
             resultBox.style.display = "block";
             
             if(json.status === "success") {
-                const modelInfo = json.used_model ? `<div style='font-size:9px; color:#aaa; margin-top:5px; text-align:right;'>🤖 ${json.used_model}</div>` : "";
+                const modelInfo = json.used_model ? `<div style='font-size:10px; color:#aaa; margin-top:8px; border-top:1px solid #eee; padding-top:4px; text-align:right;'>🤖 ${json.used_model}</div>` : "";
                 resultBox.innerHTML = json.ai_response + modelInfo;
-                btn.innerHTML = "✅ Tamamlandı";
+                btn.innerHTML = "✅ Analiz Bitti";
             } else {
                 resultBox.innerHTML = "Hata: " + json.message;
                 btn.innerHTML = "❌ Hata";
@@ -210,7 +264,10 @@ function showOverlay(data, result) {
             btn.innerHTML = "❌ Bağlantı Yok";
             resultBox.style.display = "block";
             resultBox.innerHTML = "Sunucuya bağlanılamadı.";
-        } finally { btn.disabled = false; }
+        } finally { 
+            btn.disabled = false;
+            btn.style.opacity = "1";
+        }
     };
 
     document.getElementById('toggleCommentsBtn').onclick = () => {
@@ -218,20 +275,26 @@ function showOverlay(data, result) {
         section.style.display = section.style.display === 'none' ? 'block' : 'none';
     };
     
-    // Yorum Gönderme ve Beğenme kodları (Öncekilerle aynı mantık)
-    setupCommentEvents(data, result.comments);
+    setupCommentEvents(data);
 }
 
 function renderComments(comments) {
-    if (!comments || comments.length === 0) return '<div style="font-size:11px; text-align:center; padding:5px; color:#999;">Henüz yorum yok.</div>';
+    if (!comments || comments.length === 0) return '<div style="font-size:11px; text-align:center; padding:10px; color:#999;">Henüz yorum yok.</div>';
     return comments.map(c => `
-        <div style="background:#fff; padding:6px; margin-bottom:6px; border:1px solid #eee; font-size:11px; word-break: break-word;">
-            <b>${c.user}</b>: ${c.text}
-            <div style="text-align:right; font-size:10px;">❤️ ${c.liked_by?.length||0}</div>
+        <div style="
+            border-bottom: 1px solid #eee; 
+            padding: 6px; 
+            margin-bottom: 4px;
+            font-size: 11px;
+        ">
+            <b style="color:#293542;">${c.user}</b>: <span style="color:#555;">${c.text}</span>
+            <div style="text-align:right; font-size:10px; margin-top:2px;">
+                <button class="like-btn" data-id="${c.id}" style="border:none; background:none; cursor:pointer; color:#e74c3c;">❤️ ${c.liked_by?.length||0}</button>
+            </div>
         </div>`).join('');
 }
 
-function setupCommentEvents(data, comments) {
+function setupCommentEvents(data) {
     document.getElementById('sendCommentBtn').onclick = async () => {
         const text = document.getElementById('commentInput').value;
         if (!text) return;
@@ -247,6 +310,26 @@ function setupCommentEvents(data, comments) {
                 document.getElementById('toggleCommentsBtn').innerText = `💬 Yorumlar (${json.comments.length})`;
             }
         } catch (err) {} 
+    };
+
+    document.getElementById('commentList').addEventListener('click', async (e) => {
+        const btn = e.target.closest('.like-btn');
+        if (btn) {
+            const commentId = btn.getAttribute('data-id');
+            try {
+                const response = await fetch(`${API_URL}/like_comment`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ listing_id: data.id, comment_id: commentId, user_id: userId })
+                });
+                const json = await response.json();
+                if(json.status === "success") document.getElementById('commentList').innerHTML = renderComments(json.comments);
+            } catch (err) {}
+        }
+    });
+
+    document.getElementById('usernameInput').onchange = (e) => {
+        currentUser = e.target.value;
+        localStorage.setItem("sahibinden_user", currentUser);
     };
 }
 
