@@ -1,26 +1,34 @@
 {
-    "manifest_version": 3,
-    "name": "Smart Buyer Assistant",
-    "version": "1.0",
-    "description": "Analyzes real estate/car listings and tracks price history.",
-    "permissions": [
-        "activeTab",
-        "scripting"
-    ],
-    "host_permissions": [
-        "http://localhost:8000/*"
-    ],
-    "content_scripts": [
-        {
-            "matches": [
-                "<all_urls>"
-            ],
-            "js": [
-                "content.js"
-            ],
-            "css": [
-                "style.css"
-            ]
-        }
+  "manifest_version": 3,
+  "name": "Sahibinden AI Asistan (BAI Bilmiş)",
+  "version": "1.0",
+  "description": "Sahibinden.com ilanlarını yapay zeka ile analiz eder.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "identity" 
+  ],
+  "oauth2": {
+    "client_id": "BURAYA_GOOGLE_CLOUD_CONSOLE_DAN_ALDIGIN_CLIENT_ID_YAPISTIR.apps.googleusercontent.com",
+    "scopes": [
+      "openid", "email", "profile"
     ]
+  },
+  "host_permissions": [
+    "https://*.sahibinden.com/*",
+    "https://sahiden.onrender.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://*.sahibinden.com/ilan/*"],
+      "js": ["content.js"]
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  }
 }
