@@ -1,4 +1,4 @@
-# backend/main.py - AKILLI DANIŞMAN (ARABA + EMLAK + HER ŞEY) 🧠
+# backend/main.py - BAI BİLMİŞ SÜRÜMÜ (OKUNABİLİR & YAPICI) 🧠
 import os
 import uuid
 from datetime import datetime
@@ -61,11 +61,12 @@ class LikeData(BaseModel):
 # --- YARDIMCI FONKSİYONLAR ---
 
 async def find_similars(title, current_id):
-    """Benzer ilanların fiyat geçmişini getirir."""
-    if not title or collection is None: return None
+    """Veritabanındaki benzer ilanların fiyatlarını getirir."""
+    if not title or collection is None: return "Veritabanı bağlantısı yok."
     try:
         keywords = set(title.lower().split())
         keywords = {k for k in keywords if len(k) > 2}
+        # Son 100 ilanı çekip analiz et
         cursor = collection.find().sort("first_seen_at", -1).limit(100)
         all_listings = await cursor.to_list(length=100)
         
@@ -74,31 +75,27 @@ async def find_similars(title, current_id):
             if str(item.get("_id")) == str(current_id): continue
             item_title = item.get("title", "").lower()
             item_price = item.get("current_price", 0)
-            common = keywords.intersection(set(item_title.split()))
             
-            # Emlak veya Araba fark etmeksizin başlık benzerliğine bakar
+            # Başlık benzerliği kontrolü
+            common = keywords.intersection(set(item_title.split()))
             if len(common) >= 2 and item_price > 0:
                 prices.append(item_price)
                 
-        if not prices: return "Veritabanında henüz yeterli kıyaslama verisi yok."
+        if not prices: return "Veritabanımızda henüz yeterli kıyaslama verisi yok."
         
-        return f"""
-        VERİTABANI GEÇMİŞİ:
-        Daha önce incelediğin {len(prices)} benzer ilanın ortalaması: {sum(prices)/len(prices):,.0f} TL.
-        (Bu veriyi, şu anki fiyatın ({sum(prices)/len(prices):,.0f} TL) piyasaya göre ucuz mu pahalı mı olduğunu anlamak için kullan.)
-        """
-    except: return None
+        avg = sum(prices) / len(prices)
+        return f"Daha önce kaydettiğin {len(prices)} benzer ilanın ortalaması: {avg:,.0f} TL."
+    except: return "Veritabanı analizi yapılamadı."
 
 async def get_user_notes(listing_id):
-    """Kullanıcının bu ilana yazdığı özel yorumları getirir."""
-    if collection is None: return "Kullanıcı notu yok."
+    """Kullanıcı yorumlarını getirir."""
+    if collection is None: return ""
     try:
         doc = await collection.find_one({"_id": listing_id})
-        if not doc or "comments" not in doc: return "Kullanıcı bu ilana henüz not düşmemiş."
-        
+        if not doc or "comments" not in doc: return ""
         notes = [f"- {c.get('user')}: {c.get('text')}" for c in doc["comments"]]
-        return "\n".join(notes) if notes else "Kullanıcı notu yok."
-    except: return "Notlar alınamadı."
+        return "\n".join(notes) if notes else ""
+    except: return ""
 
 # --- ENDPOINTLER ---
 
@@ -106,60 +103,80 @@ async def get_user_notes(listing_id):
 async def ask_ai(data: ListingData):
     if not GEMINI_KEY: return {"status": "error", "message": "API Key Eksik"}
 
-    # 1. Bilgi Toplama
+    # 1. Bağlam Toplama
     db_context = await find_similars(data.title, data.id)
     user_notes = await get_user_notes(data.id)
     
-    # 2. Modeller (Yedekli)
-    models = ["gemini-flash-latest", "gemini-2.0-flash", "gemini-pro"]
+    # 2. Modeller (Google Search destekli 2.0 öncelikli)
+    models_to_try = ["gemini-2.0-flash", "gemini-flash-latest", "gemini-pro"]
     
-    # 3. AKILLI DANIŞMAN PROMPT'U
+    # 3. BAI BİLMİŞ PROMPT'U (Okunabilirlik Odaklı)
     prompt = f"""
-    ROLÜN: "Tecrübeli Yatırım ve Alışveriş Danışmanı"sın.
-    
-    GÖREVİN: Aşağıdaki ilanı bir uzman gözüyle analiz etmek.
-    Bu bir ARABA ise: Motor, kaporta, kronik sorun ve sanayi masrafı odaklı ol.
-    Bu bir EV/ARSA ise: Konum, metrekare, tapu, kira çarpanı ve yatırım değeri odaklı ol.
-    Bu bir EŞYA ise: Fiyat/Performans ve kullanım ömrü odaklı ol.
+    KİMLİĞİN:
+    Adın "BAI Bilmiş". Sen; otomotiv, emlak ve teknoloji piyasasına hakim, veri odaklı ama samimi bir yapay zeka asistanısın.
+    Üslubun: "Cemil Usta" gibi tecrübeli ama çok daha kibar ve yapıcı. Sorunları söylerken çözüm de önerirsin.
 
-    İLAN VERİLERİ:
+    GÖREVİN:
+    Bu ilanı incele, internetteki güncel piyasa verilerini ve aşağıdaki özel verileri kullanarak analiz yap.
+    Çıktılarını MUTLAKA HTML listeleri (<ul>, <li>) kullanarak madde madde yaz. Uzun paragraflar istemiyorum.
+
+    İLAN DETAYLARI:
     - Başlık: {data.title}
     - Fiyat: {data.price} TL
-    - Yıl/Yaş: {data.year}
+    - Yıl: {data.year}
     - KM/Özellik: {data.km}
-    - Satıcı Açıklaması: "{data.description}"
+    - Satıcı Notu: "{data.description}"
     
-    EKSTRA BAĞLAM:
-    1. BİZİM VERİTABANI: {db_context}
-    2. KULLANICI NOTLARI (Bunu dikkate al!): {user_notes}
+    ÖZEL BAĞLAM (BUNLARI KULLAN):
+    - Bizim Veritabanı Durumu: {db_context}
+    - Kullanıcı Notları (Varsa çok önemli): {user_notes}
 
-    ÜSLUP:
-    - "Cemil Usta" kadar kaba olma, ama "Robot" kadar da soğuk olma.
-    - Gerçekçi, yapıcı ve samimi ol.
-    - Eleştirirken çözüm veya alternatif de sun.
-    - Güncel piyasa koşullarını (enflasyon, durgunluk vb.) yorumuna kat.
+    ANALİZ FORMATI (HTML KULLAN):
+    
+    <b>🧐 BAI Bilmiş Analizi:</b>
+    <ul>
+        <li>(Buraya ilanın teknik durumu, gizli kusurlar veya avantajlar hakkında 2-3 madde yaz.)</li>
+    </ul>
 
-    ÇIKTI FORMATI (HTML kullan: <b>, <br>):
-    1. GENEL DURUM & TESPİTLER: İlanın artıları, eksileri ve satıcının dilinden çıkan gizli anlamlar.
-    2. FİYAT VE PİYASA YORUMU: Fiyat makul mü? Pazarlık payı var mı? Yatırım yapılır mı?
-    3. RİSKLER VE ÖNERİLER: Alırsam başım ağrır mı? Satarken zorlanır mıyım? Ne tavsiye edersin?
+    <b>💰 Fiyat ve Piyasa Raporu:</b>
+    <ul>
+        <li>(Fiyatı bizim veritabanı ve genel piyasa ile kıyasla. Pahalı mı, fırsat mı?)</li>
+        <li>(Yatırım değeri veya satılabilirlik hızı hakkında 1 madde yaz.)</li>
+    </ul>
+
+    <b>⚠️ Riskler ve Tavsiyeler:</b>
+    <ul>
+        <li>(Alırken nelere dikkat etmeliyim? Kronik sorun var mı?)</li>
+        <li>(Yapıcı tavsiyen nedir? "Şu fiyata düşerse al" gibi.)</li>
+    </ul>
     """
 
-    last_err = ""
-    for m in models:
+    last_error = ""
+    for model_name in models_to_try:
         try:
-            model = genai.GenerativeModel(m)
+            # Google Search Tool Tanımlama (Sadece destekleyen modellerde çalışır)
+            tools = 'google_search_retrieval' if '2.0' in model_name else None
+            
+            if tools:
+                model = genai.GenerativeModel(model_name, tools=tools)
+            else:
+                model = genai.GenerativeModel(model_name)
+
             response = model.generate_content(prompt)
-            return {"status": "success", "ai_response": response.text, "used_model": m}
+            
+            if not response.text: raise Exception("Boş cevap")
+            
+            return {"status": "success", "ai_response": response.text, "used_model": model_name}
         except Exception as e:
-            last_err = str(e)
+            last_error = str(e)
+            print(f"Hata ({model_name}): {e}")
             continue
             
-    return {"status": "error", "message": f"Danışman şu an cevap veremiyor. ({last_err})"}
+    return {"status": "error", "message": f"BAI Bilmiş şu an çok yoğun. ({last_error})"}
 
 @app.post("/analyze")
 async def analyze_listing(data: ListingData):
-    if collection is None: return {"status": "error", "message": "DB Hatası"}
+    if collection is None: return {"status": "error", "message": "DB Yok"}
     if not data.id or not data.price: return {"status": "error"}
     
     try:
