@@ -6,3 +6,4 @@ dnspython
 google-generativeai>=0.8.3
 google-auth
 requests
+python-dotenv
