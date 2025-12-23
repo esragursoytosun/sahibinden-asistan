@@ -10,8 +10,20 @@ console.log("BAI BILMIS: Sistem Başlatıldı (Final Sürüm)");
 // --- KİMLİK & LOGİN KONTROLÜ ---
 let userId = localStorage.getItem("sahibinden_userid");
 // Profil bilgisini LocalStorage'dan al
-let userProfile = JSON.parse(localStorage.getItem("sahibinden_user_profile")) || null;
+// --- KİMLİK & LOGİN KONTROLÜ ---
+let userId = localStorage.getItem("sahibinden_userid");
+let userProfile = null;
 
+try {
+    const storedProfile = localStorage.getItem("sahibinden_user_profile");
+    // Eğer "undefined" stringi veya boşluk kaydedildiyse null kabul et
+    if (storedProfile && storedProfile !== "undefined") {
+        userProfile = JSON.parse(storedProfile);
+    }
+} catch (e) {
+    console.warn("Profil verisi bozuktu, temizlendi.");
+    localStorage.removeItem("sahibinden_user_profile");
+}
 // Eğer kullanıcı ID yoksa, rastgele bir misafir ID oluştur
 if (!userId) { 
     userId = "uid_" + Math.random().toString(36).substr(2, 9); 
@@ -404,4 +416,5 @@ async function analyzeListing() {
 
 // Sayfa yüklendikten 1 saniye sonra çalış
 setTimeout(analyzeListing, 1000);
+
 
