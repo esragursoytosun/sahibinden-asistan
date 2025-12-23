@@ -123,7 +123,7 @@ async def google_login(data: GoogleLoginData):
         picture = idinfo.get('picture')
         
         # Kullanıcıyı veritabanına kaydet (Varsa güncelle)
-        if users_collection is not None:
+        if users_collection is not None and comment.user_id::
             await users_collection.update_one(
                 {"_id": google_id}, 
                 {"$set": {
@@ -303,3 +303,4 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run("backend.main:app", host="0.0.0.0", port=port)
+
