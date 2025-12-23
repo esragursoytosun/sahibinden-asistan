@@ -1,14 +1,18 @@
-// content.js - BAI BİLMİŞ: TABS, AUTH & PRO UI (FULL PAKET) 🚀
+// content.js - BAI BİLMİŞ: ARAYÜZ VE ETKİLEŞİM MOTORU 🚀
 
+// DİKKAT: Burası Backend adresinle AYNI olmalı.
+// Test için: "http://localhost:8000"
+// Canlı için: "https://sahiden.onrender.com"
 const API_URL = "https://sahiden.onrender.com"; 
 
-console.log("BAI BILMIS: Sistem Hazır (V-Final)"); 
+console.log("BAI BILMIS: Sistem Başlatıldı (Final Sürüm)"); 
 
 // --- KİMLİK & LOGİN KONTROLÜ ---
 let userId = localStorage.getItem("sahibinden_userid");
 // Profil bilgisini LocalStorage'dan al
 let userProfile = JSON.parse(localStorage.getItem("sahibinden_user_profile")) || null;
 
+// Eğer kullanıcı ID yoksa, rastgele bir misafir ID oluştur
 if (!userId) { 
     userId = "uid_" + Math.random().toString(36).substr(2, 9); 
     localStorage.setItem("sahibinden_userid", userId); 
@@ -19,18 +23,19 @@ function loginWithGoogle() {
     const btn = document.getElementById('googleLoginBtn');
     if(btn) btn.innerHTML = "⌛";
     
-    // Background.js'e mesaj gönder
+    // Background.js'e mesaj gönder (Orası token alıp backend'e soracak)
     chrome.runtime.sendMessage({ action: "login" }, (response) => {
         if (response && response.status === "success") {
             // Başarılıysa profili kaydet
             userProfile = response.user;
             localStorage.setItem("sahibinden_user_profile", JSON.stringify(userProfile));
-            localStorage.setItem("sahibinden_userid", userProfile.id); // Backend ID'si güncelle
+            localStorage.setItem("sahibinden_userid", userProfile.id); // Backend ID'si ile güncelle
             alert(`Hoş geldin, ${userProfile.name}!`);
-            location.reload(); // Sayfayı yenile ki panel güncellensin
+            location.reload(); // Paneli güncellemek için sayfayı yenile
         } else {
-            alert("Giriş başarısız: " + (response ? response.message : "Bilinmiyor"));
-            if(btn) btn.innerHTML = "G ile Giriş";
+            console.error("Login Hatası:", response);
+            alert("Giriş başarısız: " + (response ? response.message : "Sunucu hatası"));
+            if(btn) btn.innerHTML = '<span style="color:#4285F4; font-weight:900;">G</span> Giriş';
         }
     });
 }
@@ -45,19 +50,26 @@ function logout() {
     }
 }
 
-// --- VERİ OKUMA ---
+// --- VERİ OKUMA (SCRAPING) ---
 function getListingData() {
     try {
+        // Fiyatı al (Sadece rakamları)
         let priceText = document.querySelector('.classifiedInfo h3')?.innerText || document.querySelector('div.price-info')?.innerText;
         let price = priceText ? parseInt(priceText.replace(/\D/g, '')) : 0;
+        
+        // Diğer detayları al
         const idElement = document.getElementById('classifiedId');
         const listingId = idElement ? idElement.innerText.trim() : "Bilinmiyor";
+        
         const titleElement = document.querySelector('.classifiedDetailTitle h1');
         const title = titleElement ? titleElement.innerText.trim() : document.title;
+        
         const description = document.querySelector('#classifiedDescription')?.innerText || "Açıklama yok";
         
         let km = "Bilinmiyor";
         let year = "Bilinmiyor";
+        
+        // Liste özelliklerini tara
         const details = document.querySelectorAll('.classifiedInfoList li');
         details.forEach(li => {
             const label = li.querySelector('strong')?.innerText;
@@ -66,17 +78,30 @@ function getListingData() {
             if(label?.includes("Yıl")) year = value;
         });
 
-        if (price === 0) return null;
-        return { id: listingId, price: price, title: title, description: description, km: km, year: year, url: window.location.href };
-    } catch (e) { return null; }
+        if (price === 0) return null; // Fiyat yoksa çalışma
+        
+        return { 
+            id: listingId, 
+            price: price, 
+            title: title, 
+            description: description, 
+            km: km, 
+            year: year, 
+            url: window.location.href 
+        };
+    } catch (e) { 
+        console.error("Veri okuma hatası:", e);
+        return null; 
+    }
 }
 
-// --- GRAFİK ---
+// --- GRAFİK ÇİZİMİ (SVG) ---
 function createPriceChart(history) {
     if (!history || history.length < 2) return ''; 
     const width = 240; const height = 50; const padding = 5;
     const prices = history.map(h => h.price);
     const minPrice = Math.min(...prices); const maxPrice = Math.max(...prices);
+    
     if (minPrice === maxPrice) return `<div style="text-align:center; font-size:10px; color:#666; padding:10px;">Fiyat Stabil ⎯⎯⎯</div>`;
     
     const points = prices.map((p, i) => {
@@ -88,7 +113,7 @@ function createPriceChart(history) {
     return `<svg width="100%" height="${height}"><polyline fill="none" stroke="#293542" stroke-width="2" points="${points}" /></svg>`;
 }
 
-// --- SÜRÜKLEME ---
+// --- SÜRÜKLEME FONKSİYONU ---
 function makeDraggable(el) {
     const header = document.getElementById("sahibinden-asistan-header");
     let isDragging = false;
@@ -97,7 +122,7 @@ function makeDraggable(el) {
     if (!header) return;
 
     header.onmousedown = function(e) {
-        // Butonlara veya inputlara basınca sürüklemeyi engelle
+        // Butonlara basınca sürüklemeyi engelle
         if(e.target.id === "closeOverlayBtn" || e.target.id === "googleLoginBtn" || e.target.id === "logoutText" || e.target.tagName === "BUTTON") return; 
         
         e.preventDefault();
@@ -107,8 +132,7 @@ function makeDraggable(el) {
         initialLeft = el.offsetLeft;
         initialTop = el.offsetTop;
         
-        // Sağa yaslamayı iptal et
-        el.style.right = "auto";
+        el.style.right = "auto"; // Sağa yaslamayı iptal et ki sürüklenebilsin
         header.style.cursor = "grabbing";
         
         document.onmousemove = elementDrag;
@@ -132,8 +156,9 @@ function makeDraggable(el) {
     }
 }
 
-// --- ANA EKRAN ---
+// --- ANA EKRAN (OVERLAY) OLUŞTURMA ---
 function showOverlay(data, result) {
+    // Varsa eskisini sil
     const oldOverlay = document.getElementById('sahibinden-asistan-box');
     if (oldOverlay) oldOverlay.remove();
 
@@ -170,6 +195,7 @@ function showOverlay(data, result) {
         `;
     }
 
+    // HTML İÇERİĞİ
     overlay.innerHTML = `
         <div id="sahibinden-asistan-header" style="
             background: #FFD000; 
@@ -226,7 +252,7 @@ function showOverlay(data, result) {
         </div>
     `;
 
-    // CSS STİLLERİ
+    // CSS STİLLERİ (Sayfaya Inject)
     overlay.style.cssText = `
         position: fixed !important; top: 130px !important; right: 20px !important; width: 320px !important;
         background-color: transparent !important; border-radius: 8px !important;
@@ -273,7 +299,7 @@ function showOverlay(data, result) {
     // Kapatma
     document.getElementById('closeOverlayBtn').onclick = () => overlay.remove();
 
-    // AI Analiz
+    // AI Analiz Butonu
     document.getElementById('askAiBtn').onclick = async () => {
         const btn = document.getElementById('askAiBtn');
         const resultBox = document.getElementById('aiResult');
@@ -322,18 +348,17 @@ function renderComments(comments) {
 }
 
 function setupCommentEvents(data) {
+    // Yorum Gönderme
     document.getElementById('sendCommentBtn').onclick = async () => {
         const text = document.getElementById('commentInput').value;
         if (!text) return;
         
-        // Gönderirken mevcut userProfile id'sini kullan (varsa)
         const currentUserId = userProfile ? userProfile.id : userId;
         const currentUserName = userProfile ? userProfile.name : "Misafir";
 
         try {
             const response = await fetch(`${API_URL}/add_comment`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                // user_id ve username gönderiyoruz
                 body: JSON.stringify({ listing_id: data.id, user_id: currentUserId, username: currentUserName, text: text })
             });
             const json = await response.json();
@@ -345,6 +370,7 @@ function setupCommentEvents(data) {
         } catch (err) {} 
     };
 
+    // Yorum Beğenme
     document.getElementById('commentList').addEventListener('click', async (e) => {
         const btn = e.target.closest('.like-btn');
         if (btn) {
@@ -364,12 +390,17 @@ function setupCommentEvents(data) {
 
 async function analyzeListing() {
     const data = getListingData();
-    if (!data) return;
+    if (!data) return; // İlan sayfası değilse dur
     try {
+        // İlanı backend'e kaydet ve geçmiş verisini al
         const response = await fetch(`${API_URL}/analyze`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
         const result = await response.json();
         showOverlay(data, result);
-    } catch (error) { showOverlay(data, { status: "error" }); }
+    } catch (error) { 
+        console.error("Bağlantı Hatası:", error);
+        showOverlay(data, { status: "error" }); 
+    }
 }
 
+// Sayfa yüklendikten 1 saniye sonra çalış
 setTimeout(analyzeListing, 1000);
