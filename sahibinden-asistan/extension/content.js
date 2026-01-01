@@ -1,15 +1,10 @@
 // content.js - BAI BİLMİŞ: ARAYÜZ VE ETKİLEŞİM MOTORU 🚀
 
 // DİKKAT: Burası Backend adresinle AYNI olmalı.
-// Test için: "http://localhost:8000"
-// Canlı için: "https://sahiden.onrender.com"
 const API_URL = "https://sahiden.onrender.com"; 
 
-console.log("BAI BILMIS: Sistem Başlatıldı (Final Sürüm)"); 
+console.log("BAI BILMIS: Sistem Başlatıldı (Final Telegram Sürümü)"); 
 
-// --- KİMLİK & LOGİN KONTROLÜ ---
-let userId = localStorage.getItem("sahibinden_userid");
-// Profil bilgisini LocalStorage'dan al
 // --- KİMLİK & LOGİN KONTROLÜ ---
 let userId = localStorage.getItem("sahibinden_userid");
 let userProfile = null;
@@ -24,6 +19,7 @@ try {
     console.warn("Profil verisi bozuktu, temizlendi.");
     localStorage.removeItem("sahibinden_user_profile");
 }
+
 // Eğer kullanıcı ID yoksa, rastgele bir misafir ID oluştur
 if (!userId) { 
     userId = "uid_" + Math.random().toString(36).substr(2, 9); 
@@ -60,6 +56,18 @@ function logout() {
         localStorage.setItem("sahibinden_userid", userId);
         location.reload();
     }
+}
+
+// --- TELEGRAM BAĞLAMA FONKSİYONU (YENİ) ---
+function openTelegram() {
+    // Sadece giriş yapmış (ID'si Google ID olan) kullanıcılar için
+    let currentId = userProfile ? userProfile.id : userId;
+    
+    // Bot ismini buraya yaz
+    let botName = "BAIBilmisBot"; 
+    let url = `https://t.me/${botName}?start=${currentId}`;
+    
+    window.open(url, '_blank');
 }
 
 // --- VERİ OKUMA (SCRAPING) ---
@@ -183,7 +191,11 @@ function showOverlay(data, result) {
 
     // HEADER SAĞ KISIM (Login Durumuna Göre)
     let headerRightHtml = "";
+    // Telegram butonu görünürlüğü (Sadece login olmuşsa göster)
+    let telegramBtnStyle = "display:none;";
+    
     if (userProfile) {
+        telegramBtnStyle = "display:block;"; // Login ise göster
         // Giriş yapılmışsa: Profil Resmi ve İsim
         headerRightHtml = `
             <div style="display:flex; align-items:center; gap:6px;">
@@ -247,6 +259,10 @@ function showOverlay(data, result) {
                     ✨ DETAYLI ANALİZ ET
                 </button>
                 
+                <button id="telegramBtn" style="${telegramBtnStyle} width:100%; background: #0088cc; color: white; border: none; padding: 10px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: bold; margin-top: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+                    🔔 Fiyat Alarmı Kur (Telegram)
+                </button>
+                
                 <div id="aiResult" style="display:none; font-size:12px; margin-top:15px; background: #fff; padding: 12px; border: 1px solid #ddd; border-radius: 6px; max-height: 250px; overflow-y: auto; line-height: 1.5;"></div>
             </div>
 
@@ -283,6 +299,10 @@ function showOverlay(data, result) {
     }
     if(document.getElementById('logoutText')) {
         document.getElementById('logoutText').onclick = logout;
+    }
+    // Telegram Butonu Olayı (YENİ)
+    if(document.getElementById('telegramBtn')) {
+        document.getElementById('telegramBtn').onclick = openTelegram;
     }
 
     // Tabs
@@ -416,5 +436,3 @@ async function analyzeListing() {
 
 // Sayfa yüklendikten 1 saniye sonra çalış
 setTimeout(analyzeListing, 1000);
-
-
