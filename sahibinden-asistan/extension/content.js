@@ -1,4 +1,4 @@
-// content.js - BAI BİLMİŞ: AKILLI ARAYÜZ (Giriş Zorunlu Modu) 🚀
+// content.js - BAI BİLMİŞ: AKILLI ARAYÜZ (Buton Tepede) 🚀
 
 const API_URL = "https://sahiden.onrender.com"; 
 
@@ -58,7 +58,7 @@ function handleTelegramClick() {
     // KONTROL: Kullanıcı giriş yapmış mı?
     if (!userProfile) {
         // SENARYO 1: Giriş Yapmamış
-        let onay = confirm("⚠️ Bu özellik için Google ile giriş yapmalısınız.\n\nŞimdi giriş yapmak ister misiniz?");
+        let onay = confirm("⚠️ Fiyat alarmı kurmak için Google ile giriş yapmalısınız.\n\nŞimdi giriş yapmak ister misiniz?");
         if (onay) {
             loginWithGoogle(); // Otomatik giriş fonksiyonunu çağır
         }
@@ -222,16 +222,17 @@ function showOverlay(data, result) {
             <div id="viewAnaliz">
                 <div style="text-align:center; margin-bottom:10px;">
                     <div style="font-size: 22px; font-weight: 800; color:#293542; letter-spacing:-0.5px;">${data.price.toLocaleString('tr-TR')} TL</div>
+                    
+                    <button id="telegramBtn" style="width:100%; background: #0088cc; color: white; border: none; padding: 8px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: bold; margin: 10px 0; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display:flex; align-items:center; justify-content:center; gap:5px;">
+                        🔔 Fiyat Alarmını Aç (Telegram)
+                    </button>
+                    
                     <div style="font-size:10px; color:#777;">Güncel İlan Fiyatı</div>
                 </div>
                 ${chartHtml}
                 
                 <button id="askAiBtn" style="width:100%; background: #293542; color: #FFD000; border: none; padding: 12px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: bold; margin-top: 15px; box-shadow: 0 3px 6px rgba(0,0,0,0.15);">
                     ✨ DETAYLI ANALİZ ET
-                </button>
-                
-                <button id="telegramBtn" style="display:block; width:100%; background: #0088cc; color: white; border: none; padding: 10px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: bold; margin-top: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
-                    🔔 Fiyat Alarmını Aç (Telegram)
                 </button>
                 
                 <div id="aiResult" style="display:none; font-size:12px; margin-top:15px; background: #fff; padding: 12px; border: 1px solid #ddd; border-radius: 6px; max-height: 250px; overflow-y: auto; line-height: 1.5;"></div>
@@ -258,7 +259,7 @@ function showOverlay(data, result) {
     if(document.getElementById('googleLoginBtn')) document.getElementById('googleLoginBtn').onclick = loginWithGoogle;
     if(document.getElementById('logoutText')) document.getElementById('logoutText').onclick = logout;
     
-    // BURASI ÖNEMLİ: Telegram butonuna tıklayınca akıllı fonksiyon çalışsın
+    // TELEGRAM TIKLAMA OLAYI
     if(document.getElementById('telegramBtn')) document.getElementById('telegramBtn').onclick = handleTelegramClick;
 
     const tabAnaliz = document.getElementById('tabAnaliz');
@@ -331,7 +332,6 @@ function setupCommentEvents(data) {
     document.getElementById('sendCommentBtn').onclick = async () => {
         const text = document.getElementById('commentInput').value;
         if (!text) return;
-        // Kullanıcı kontrolü: Eğer giriş yapmamışsa yorum atamaz, uyarı ver
         if (!userProfile) {
             if(confirm("Yorum yapmak için giriş yapmalısınız. Giriş yapmak ister misiniz?")) {
                 loginWithGoogle();
