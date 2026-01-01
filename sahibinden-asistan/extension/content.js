@@ -1,26 +1,24 @@
-// content.js - BAI BİLMİŞ: ARAYÜZ VE ETKİLEŞİM MOTORU 🚀
+// content.js - BAI BİLMİŞ: AKILLI ARAYÜZ (Giriş Zorunlu Modu) 🚀
 
-// DİKKAT: Burası Backend adresinle AYNI olmalı.
 const API_URL = "https://sahiden.onrender.com"; 
 
-console.log("BAI BILMIS: Sistem Başlatıldı (Final Telegram Sürümü)"); 
+console.log("BAI BILMIS: Sistem Başlatıldı"); 
 
 // --- KİMLİK & LOGİN KONTROLÜ ---
 let userId = localStorage.getItem("sahibinden_userid");
 let userProfile = null;
 
+// Sayfa açılışında profili kontrol et
 try {
     const storedProfile = localStorage.getItem("sahibinden_user_profile");
-    // Eğer "undefined" stringi veya boşluk kaydedildiyse null kabul et
     if (storedProfile && storedProfile !== "undefined") {
         userProfile = JSON.parse(storedProfile);
     }
 } catch (e) {
-    console.warn("Profil verisi bozuktu, temizlendi.");
     localStorage.removeItem("sahibinden_user_profile");
 }
 
-// Eğer kullanıcı ID yoksa, rastgele bir misafir ID oluştur
+// Profil yoksa geçici ID oluştur
 if (!userId) { 
     userId = "uid_" + Math.random().toString(36).substr(2, 9); 
     localStorage.setItem("sahibinden_userid", userId); 
@@ -29,21 +27,19 @@ if (!userId) {
 // --- LOGİN FONKSİYONU ---
 function loginWithGoogle() {
     const btn = document.getElementById('googleLoginBtn');
-    if(btn) btn.innerHTML = "⌛";
+    if(btn) btn.innerHTML = "⌛ Bekleyin...";
     
-    // Background.js'e mesaj gönder (Orası token alıp backend'e soracak)
     chrome.runtime.sendMessage({ action: "login" }, (response) => {
         if (response && response.status === "success") {
-            // Başarılıysa profili kaydet
             userProfile = response.user;
             localStorage.setItem("sahibinden_user_profile", JSON.stringify(userProfile));
-            localStorage.setItem("sahibinden_userid", userProfile.id); // Backend ID'si ile güncelle
-            alert(`Hoş geldin, ${userProfile.name}!`);
-            location.reload(); // Paneli güncellemek için sayfayı yenile
+            localStorage.setItem("sahibinden_userid", userProfile.id);
+            alert(`✅ Giriş Başarılı! Hoş geldin, ${userProfile.name}`);
+            location.reload(); // Paneli güncellemek için yenile
         } else {
             console.error("Login Hatası:", response);
-            alert("Giriş başarısız: " + (response ? response.message : "Sunucu hatası"));
-            if(btn) btn.innerHTML = '<span style="color:#4285F4; font-weight:900;">G</span> Giriş';
+            alert("❌ Giriş yapılamadı. Lütfen tekrar deneyin.");
+            if(btn) btn.innerHTML = '<span style="color:#4285F4; font-weight:900;">G</span> Giriş Yap';
         }
     });
 }
@@ -51,33 +47,38 @@ function loginWithGoogle() {
 function logout() {
     if(confirm("Çıkış yapmak istiyor musun?")) {
         localStorage.removeItem("sahibinden_user_profile");
-        // Rastgele ID'ye geri dön
         userId = "uid_" + Math.random().toString(36).substr(2, 9);
         localStorage.setItem("sahibinden_userid", userId);
         location.reload();
     }
 }
 
-// --- TELEGRAM BAĞLAMA FONKSİYONU (YENİ) ---
-function openTelegram() {
-    // Sadece giriş yapmış (ID'si Google ID olan) kullanıcılar için
-    let currentId = userProfile ? userProfile.id : userId;
-    
-    // Bot ismini buraya yaz
+// --- TELEGRAM / FAVORİ İŞLEMİ (AKILLI KONTROL) ---
+function handleTelegramClick() {
+    // KONTROL: Kullanıcı giriş yapmış mı?
+    if (!userProfile) {
+        // SENARYO 1: Giriş Yapmamış
+        let onay = confirm("⚠️ Bu özellik için Google ile giriş yapmalısınız.\n\nŞimdi giriş yapmak ister misiniz?");
+        if (onay) {
+            loginWithGoogle(); // Otomatik giriş fonksiyonunu çağır
+        }
+        return; // İşlemi durdur
+    }
+
+    // SENARYO 2: Giriş Yapmış -> Telegram'ı Aç
     let botName = "BAIBilmisBot"; 
-    let url = `https://t.me/${botName}?start=${currentId}`;
+    // Kullanıcının Google ID'sini gönderiyoruz ki eşleşsin
+    let url = `https://t.me/${botName}?start=${userProfile.id}`;
     
     window.open(url, '_blank');
 }
 
-// --- VERİ OKUMA (SCRAPING) ---
+// --- VERİ OKUMA ---
 function getListingData() {
     try {
-        // Fiyatı al (Sadece rakamları)
         let priceText = document.querySelector('.classifiedInfo h3')?.innerText || document.querySelector('div.price-info')?.innerText;
         let price = priceText ? parseInt(priceText.replace(/\D/g, '')) : 0;
         
-        // Diğer detayları al
         const idElement = document.getElementById('classifiedId');
         const listingId = idElement ? idElement.innerText.trim() : "Bilinmiyor";
         
@@ -86,10 +87,9 @@ function getListingData() {
         
         const description = document.querySelector('#classifiedDescription')?.innerText || "Açıklama yok";
         
+        // Araç/Emlak detaylarını çek
         let km = "Bilinmiyor";
         let year = "Bilinmiyor";
-        
-        // Liste özelliklerini tara
         const details = document.querySelectorAll('.classifiedInfoList li');
         details.forEach(li => {
             const label = li.querySelector('strong')?.innerText;
@@ -98,7 +98,7 @@ function getListingData() {
             if(label?.includes("Yıl")) year = value;
         });
 
-        if (price === 0) return null; // Fiyat yoksa çalışma
+        if (price === 0) return null;
         
         return { 
             id: listingId, 
@@ -110,12 +110,11 @@ function getListingData() {
             url: window.location.href 
         };
     } catch (e) { 
-        console.error("Veri okuma hatası:", e);
         return null; 
     }
 }
 
-// --- GRAFİK ÇİZİMİ (SVG) ---
+// --- GRAFİK ---
 function createPriceChart(history) {
     if (!history || history.length < 2) return ''; 
     const width = 240; const height = 50; const padding = 5;
@@ -133,32 +132,26 @@ function createPriceChart(history) {
     return `<svg width="100%" height="${height}"><polyline fill="none" stroke="#293542" stroke-width="2" points="${points}" /></svg>`;
 }
 
-// --- SÜRÜKLEME FONKSİYONU ---
+// --- SÜRÜKLEME ÖZELLİĞİ ---
 function makeDraggable(el) {
     const header = document.getElementById("sahibinden-asistan-header");
     let isDragging = false;
     let startX, startY, initialLeft, initialTop;
-
     if (!header) return;
-
+    
     header.onmousedown = function(e) {
-        // Butonlara basınca sürüklemeyi engelle
         if(e.target.id === "closeOverlayBtn" || e.target.id === "googleLoginBtn" || e.target.id === "logoutText" || e.target.tagName === "BUTTON") return; 
-        
         e.preventDefault();
         isDragging = true;
         startX = e.clientX;
         startY = e.clientY;
         initialLeft = el.offsetLeft;
         initialTop = el.offsetTop;
-        
-        el.style.right = "auto"; // Sağa yaslamayı iptal et ki sürüklenebilsin
+        el.style.right = "auto"; 
         header.style.cursor = "grabbing";
-        
         document.onmousemove = elementDrag;
         document.onmouseup = closeDragElement;
     };
-
     function elementDrag(e) {
         if (!isDragging) return;
         e.preventDefault();
@@ -167,7 +160,6 @@ function makeDraggable(el) {
         el.style.left = (initialLeft + dx) + "px";
         el.style.top = (initialTop + dy) + "px";
     }
-
     function closeDragElement() {
         isDragging = false;
         header.style.cursor = "grab";
@@ -176,9 +168,8 @@ function makeDraggable(el) {
     }
 }
 
-// --- ANA EKRAN (OVERLAY) OLUŞTURMA ---
+// --- ARAYÜZ OLUŞTURMA ---
 function showOverlay(data, result) {
-    // Varsa eskisini sil
     const oldOverlay = document.getElementById('sahibinden-asistan-box');
     if (oldOverlay) oldOverlay.remove();
 
@@ -189,14 +180,9 @@ function showOverlay(data, result) {
     let chartHtml = isError ? "" : createPriceChart(result.history);
     const commentCount = result.comments ? result.comments.length : 0;
 
-    // HEADER SAĞ KISIM (Login Durumuna Göre)
+    // Header Sağ Kısım (Login Durumu)
     let headerRightHtml = "";
-    // Telegram butonu görünürlüğü (Sadece login olmuşsa göster)
-    let telegramBtnStyle = "display:none;";
-    
     if (userProfile) {
-        telegramBtnStyle = "display:block;"; // Login ise göster
-        // Giriş yapılmışsa: Profil Resmi ve İsim
         headerRightHtml = `
             <div style="display:flex; align-items:center; gap:6px;">
                 <img src="${userProfile.picture}" style="width:22px; height:22px; border-radius:50%; border:1px solid #fff;">
@@ -208,11 +194,10 @@ function showOverlay(data, result) {
             </div>
         `;
     } else {
-        // Giriş yapılmamışsa: Google Butonu
         headerRightHtml = `
             <div style="display:flex; align-items:center; gap:5px;">
                 <button id="googleLoginBtn" style="background:white; color:#333; border:none; padding:4px 8px; border-radius:4px; font-size:10px; cursor:pointer; font-weight:bold; display:flex; align-items:center; gap:3px;">
-                    <span style="color:#4285F4; font-weight:900;">G</span> Giriş
+                    <span style="color:#4285F4; font-weight:900;">G</span> Giriş Yap
                 </button>
                 <span id="closeOverlayBtn" style="cursor:pointer; font-size:18px; font-weight:bold; color:#333; padding:0 4px;">&times;</span>
             </div>
@@ -221,20 +206,7 @@ function showOverlay(data, result) {
 
     // HTML İÇERİĞİ
     overlay.innerHTML = `
-        <div id="sahibinden-asistan-header" style="
-            background: #FFD000; 
-            color: #222; 
-            padding: 10px 15px; 
-            border-top-left-radius: 8px; 
-            border-top-right-radius: 8px; 
-            display: flex; 
-            justify-content: space-between; 
-            align-items: center; 
-            cursor: grab; 
-            user-select: none; 
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1); 
-            z-index: 10;
-        ">
+        <div id="sahibinden-asistan-header" style="background: #FFD000; color: #222; padding: 10px 15px; border-top-left-radius: 8px; border-top-right-radius: 8px; display: flex; justify-content: space-between; align-items: center; cursor: grab; user-select: none; box-shadow: 0 2px 5px rgba(0,0,0,0.1); z-index: 10;">
             <div style="font-weight: 900; font-size:14px; display:flex; align-items:center; gap:5px;">
                 <span>🤖</span> BAI BİLMİŞ
             </div>
@@ -247,7 +219,6 @@ function showOverlay(data, result) {
         </div>
         
         <div style="padding: 15px; background: #F2F4F6; border-bottom-left-radius: 8px; border-bottom-right-radius: 8px; color: #333; min-height: 300px;">
-            
             <div id="viewAnaliz">
                 <div style="text-align:center; margin-bottom:10px;">
                     <div style="font-size: 22px; font-weight: 800; color:#293542; letter-spacing:-0.5px;">${data.price.toLocaleString('tr-TR')} TL</div>
@@ -259,8 +230,8 @@ function showOverlay(data, result) {
                     ✨ DETAYLI ANALİZ ET
                 </button>
                 
-                <button id="telegramBtn" style="${telegramBtnStyle} width:100%; background: #0088cc; color: white; border: none; padding: 10px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: bold; margin-top: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
-                    🔔 Fiyat Alarmı Kur (Telegram)
+                <button id="telegramBtn" style="display:block; width:100%; background: #0088cc; color: white; border: none; padding: 10px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: bold; margin-top: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+                    🔔 Fiyat Alarmını Aç (Telegram)
                 </button>
                 
                 <div id="aiResult" style="display:none; font-size:12px; margin-top:15px; background: #fff; padding: 12px; border: 1px solid #ddd; border-radius: 6px; max-height: 250px; overflow-y: auto; line-height: 1.5;"></div>
@@ -270,42 +241,26 @@ function showOverlay(data, result) {
                 <div id="commentList" style="height: 220px; overflow-y: auto; margin-bottom: 10px; word-break: break-word; background: #fff; border: 1px solid #e1e1e1; border-radius: 4px; padding: 5px; overscroll-behavior: contain;">
                     ${renderComments(result.comments || [])}
                 </div>
-                
                 <div style="display:flex; gap:5px;">
                     <input id="commentInput" placeholder="Yorum ekle..." style="flex:1; border:1px solid #ccc; padding:8px; font-size:12px; border-radius:4px; outline:none;">
                     <button id="sendCommentBtn" style="background:#293542; color:white; border:none; padding:0 12px; border-radius:4px; cursor:pointer;">➤</button>
                 </div>
             </div>
-
         </div>
     `;
 
-    // CSS STİLLERİ (Sayfaya Inject)
-    overlay.style.cssText = `
-        position: fixed !important; top: 130px !important; right: 20px !important; width: 320px !important;
-        background-color: transparent !important; border-radius: 8px !important;
-        box-shadow: 0 15px 50px rgba(0,0,0,0.3) !important; z-index: 2147483647 !important;
-        font-family: 'Open Sans', Helvetica, Arial, sans-serif !important; border: 1px solid #dcdcdc !important;
-    `;
+    overlay.style.cssText = `position: fixed !important; top: 130px !important; right: 20px !important; width: 320px !important; background-color: transparent !important; border-radius: 8px !important; box-shadow: 0 15px 50px rgba(0,0,0,0.3) !important; z-index: 2147483647 !important; font-family: 'Open Sans', Helvetica, Arial, sans-serif !important; border: 1px solid #dcdcdc !important;`;
     
     document.body.appendChild(overlay);
     makeDraggable(overlay);
 
-    // --- BUTON İŞLEVLERİ ---
+    // --- EVENT LISTENERLAR ---
+    if(document.getElementById('googleLoginBtn')) document.getElementById('googleLoginBtn').onclick = loginWithGoogle;
+    if(document.getElementById('logoutText')) document.getElementById('logoutText').onclick = logout;
     
-    // Auth Butonları
-    if(document.getElementById('googleLoginBtn')) {
-        document.getElementById('googleLoginBtn').onclick = loginWithGoogle;
-    }
-    if(document.getElementById('logoutText')) {
-        document.getElementById('logoutText').onclick = logout;
-    }
-    // Telegram Butonu Olayı (YENİ)
-    if(document.getElementById('telegramBtn')) {
-        document.getElementById('telegramBtn').onclick = openTelegram;
-    }
+    // BURASI ÖNEMLİ: Telegram butonuna tıklayınca akıllı fonksiyon çalışsın
+    if(document.getElementById('telegramBtn')) document.getElementById('telegramBtn').onclick = handleTelegramClick;
 
-    // Tabs
     const tabAnaliz = document.getElementById('tabAnaliz');
     const tabYorumlar = document.getElementById('tabYorumlar');
     const viewAnaliz = document.getElementById('viewAnaliz');
@@ -313,32 +268,25 @@ function showOverlay(data, result) {
 
     function switchTab(tabName) {
         if (tabName === 'analiz') {
-            viewAnaliz.style.display = 'block';
-            viewYorumlar.style.display = 'none';
+            viewAnaliz.style.display = 'block'; viewYorumlar.style.display = 'none';
             tabAnaliz.style.background = '#fff'; tabAnaliz.style.color = '#293542'; tabAnaliz.style.borderBottom = '2px solid #293542';
             tabYorumlar.style.background = '#e9ecef'; tabYorumlar.style.color = '#666'; tabYorumlar.style.borderBottom = '2px solid transparent';
         } else {
-            viewAnaliz.style.display = 'none';
-            viewYorumlar.style.display = 'block';
+            viewAnaliz.style.display = 'none'; viewYorumlar.style.display = 'block';
             tabYorumlar.style.background = '#fff'; tabYorumlar.style.color = '#293542'; tabYorumlar.style.borderBottom = '2px solid #293542';
             tabAnaliz.style.background = '#e9ecef'; tabAnaliz.style.color = '#666'; tabAnaliz.style.borderBottom = '2px solid transparent';
         }
     }
-
     tabAnaliz.onclick = () => switchTab('analiz');
     tabYorumlar.onclick = () => switchTab('yorumlar');
-
-    // Kapatma
     document.getElementById('closeOverlayBtn').onclick = () => overlay.remove();
 
-    // AI Analiz Butonu
     document.getElementById('askAiBtn').onclick = async () => {
         const btn = document.getElementById('askAiBtn');
         const resultBox = document.getElementById('aiResult');
         btn.innerHTML = "⏳ Piyasa Araştırılıyor...";
         btn.disabled = true;
         btn.style.opacity = "0.7";
-
         try {
             const response = await fetch(`${API_URL}/analyze-ai`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
             const json = await response.json();
@@ -380,14 +328,19 @@ function renderComments(comments) {
 }
 
 function setupCommentEvents(data) {
-    // Yorum Gönderme
     document.getElementById('sendCommentBtn').onclick = async () => {
         const text = document.getElementById('commentInput').value;
         if (!text) return;
-        
-        const currentUserId = userProfile ? userProfile.id : userId;
-        const currentUserName = userProfile ? userProfile.name : "Misafir";
+        // Kullanıcı kontrolü: Eğer giriş yapmamışsa yorum atamaz, uyarı ver
+        if (!userProfile) {
+            if(confirm("Yorum yapmak için giriş yapmalısınız. Giriş yapmak ister misiniz?")) {
+                loginWithGoogle();
+            }
+            return;
+        }
 
+        const currentUserId = userProfile.id;
+        const currentUserName = userProfile.name;
         try {
             const response = await fetch(`${API_URL}/add_comment`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -402,12 +355,12 @@ function setupCommentEvents(data) {
         } catch (err) {} 
     };
 
-    // Yorum Beğenme
     document.getElementById('commentList').addEventListener('click', async (e) => {
         const btn = e.target.closest('.like-btn');
         if (btn) {
+            if (!userProfile) { alert("Beğenmek için giriş yapmalısınız."); return; }
             const commentId = btn.getAttribute('data-id');
-            const currentUserId = userProfile ? userProfile.id : userId;
+            const currentUserId = userProfile.id;
             try {
                 const response = await fetch(`${API_URL}/like_comment`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -422,17 +375,14 @@ function setupCommentEvents(data) {
 
 async function analyzeListing() {
     const data = getListingData();
-    if (!data) return; // İlan sayfası değilse dur
+    if (!data) return; 
     try {
-        // İlanı backend'e kaydet ve geçmiş verisini al
         const response = await fetch(`${API_URL}/analyze`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
         const result = await response.json();
         showOverlay(data, result);
     } catch (error) { 
-        console.error("Bağlantı Hatası:", error);
         showOverlay(data, { status: "error" }); 
     }
 }
 
-// Sayfa yüklendikten 1 saniye sonra çalış
 setTimeout(analyzeListing, 1000);
