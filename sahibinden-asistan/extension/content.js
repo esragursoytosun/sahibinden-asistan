@@ -1,3 +1,4 @@
+console.log("BAI BILMIS: TELEGRAM VERSİYONU AKTİF! 🚀");
 // content.js - BAI BİLMİŞ: AKILLI ARAYÜZ (Buton Tepede) 🚀
 
 const API_URL = "https://sahiden.onrender.com"; 
@@ -386,3 +387,4 @@ async function analyzeListing() {
 }
 
 setTimeout(analyzeListing, 1000);
+
