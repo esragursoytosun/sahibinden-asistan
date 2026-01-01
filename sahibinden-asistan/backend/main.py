@@ -1,4 +1,4 @@
-from backend.scheduler import start_scheduler
+from fastapi import Request
 import os
 import uuid
 import requests 
@@ -305,16 +305,48 @@ async def like_comment(data: LikeData):
     await listings_collection.update_one({"_id": data.listing_id}, {"$set": {"comments": updated_comments}})
     return {"status": "success", "comments": updated_comments}
 
-# --- SUNUCU BAŞLARKEN ZAMANLAYICIYI ÇALIŞTIR ---
-@app.on_event("startup")
-async def startup_event():
-    print("⏳ Fiyat Takip Zamanlayıcısı Başlatılıyor...")
-    start_scheduler()
-# -----------------------------------------------
+# --- TELEGRAM ENTGRASYONU ---
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
+
+@app.post("/webhook")
+async def telegram_webhook(request: Request):
+    """Telegram'dan gelen mesajları dinler ve kullanıcıyı eşleştirir."""
+    try:
+        data = await request.json()
+        
+        # Mesaj var mı kontrol et
+        if "message" in data:
+            chat_id = data["message"]["chat"]["id"]
+            text = data["message"].get("text", "")
+            
+            # Kullanıcı '/start GOOGLE_ID' formatında linke tıkladıysa:
+            if text.startswith("/start") and len(text.split()) > 1:
+                google_user_id = text.split()[1]
+                
+                # Veritabanında bu kullanıcıyı bul ve Telegram ID'sini kaydet
+                await users_collection.update_one(
+                    {"_id": google_user_id},
+                    {"$set": {"telegram_chat_id": chat_id}}
+                )
+                
+                # Kullanıcıya "Hoşgeldin" mesajı at
+                send_telegram_message(chat_id, "🎉 Harika! Fiyat alarmları aktif edildi. Favori ilanlarında indirim olunca sana haber vereceğim.")
+                
+        return {"status": "ok"}
+    except Exception as e:
+        print(f"Webhook Hatası: {e}")
+        return {"status": "error"}
+
+def send_telegram_message(chat_id, text):
+    """Telegram mesajı gönderen yardımcı fonksiyon"""
+    if not TELEGRAM_TOKEN: return
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    requests.post(url, json={"chat_id": chat_id, "text": text})
 
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run("backend.main:app", host="0.0.0.0", port=port)
+
 
 
