@@ -305,8 +305,16 @@ async def like_comment(data: LikeData):
     await listings_collection.update_one({"_id": data.listing_id}, {"$set": {"comments": updated_comments}})
     return {"status": "success", "comments": updated_comments}
 
+# --- SUNUCU BAŞLARKEN ZAMANLAYICIYI ÇALIŞTIR ---
+@app.on_event("startup")
+async def startup_event():
+    print("⏳ Fiyat Takip Zamanlayıcısı Başlatılıyor...")
+    start_scheduler()
+# -----------------------------------------------
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run("backend.main:app", host="0.0.0.0", port=port)
+
 
