@@ -115,6 +115,16 @@ async def check_models():
     except Exception as e:
         return {"error": str(e)}
 
+# --- VERSİYON KONTROLÜ ---
+@app.get("/version")
+async def check_version():
+    """Eklentinin güncel olup olmadığını kontrol eder."""
+    return {
+        "latest_version": "1.1",  # BURAYI HER GÜNCELLEMEDE DEĞİŞTİRECEĞİZ
+        "message": "🚨 Yeni Özellik: Telegram Fiyat Alarmı Eklendi! Lütfen eklentiyi yenileyin.",
+        "force_update": True # Zorunlu güncelleme mi?
+    }
+    
 @app.post("/auth/google")
 async def google_login(data: GoogleLoginData):
     """Google Giriş İşlemi"""
@@ -347,6 +357,7 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run("backend.main:app", host="0.0.0.0", port=port)
+
 
 
 
