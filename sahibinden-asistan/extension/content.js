@@ -1,9 +1,12 @@
-console.log("BAI BILMIS: TELEGRAM VERSİYONU AKTİF! 🚀");
-// content.js - BAI BİLMİŞ: AKILLI ARAYÜZ (Buton Tepede) 🚀
+// content.js - BAI BİLMİŞ: VERSİYON KONTROLLÜ FİNAL SÜRÜM 🚀
 
 const API_URL = "https://sahiden.onrender.com"; 
 
-console.log("BAI BILMIS: Sistem Başlatıldı"); 
+// --- GÜNCELLEME AYARI (Burası Backend ile eşleşmeli) ---
+const CURRENT_VERSION = "1.1"; 
+// -------------------------------------------------------
+
+console.log(`BAI BILMIS: v${CURRENT_VERSION} Başlatıldı`); 
 
 // --- KİMLİK & LOGİN KONTROLÜ ---
 let userId = localStorage.getItem("sahibinden_userid");
@@ -23,6 +26,39 @@ try {
 if (!userId) { 
     userId = "uid_" + Math.random().toString(36).substr(2, 9); 
     localStorage.setItem("sahibinden_userid", userId); 
+}
+
+// --- VERSİYON KONTROL FONKSİYONU (YENİ) ---
+async function checkUpdate() {
+    try {
+        // Backend'e "En son sürüm kaç?" diye soruyoruz
+        const response = await fetch(`${API_URL}/version`);
+        if (!response.ok) return; // Endpoint yoksa veya hata varsa sessizce geç
+
+        const data = await response.json();
+        
+        // Eğer sunucudaki versiyon (data.latest_version), bizimkinden (CURRENT_VERSION) farklıysa:
+        if (data.latest_version !== CURRENT_VERSION) {
+            showUpdateBanner(data.message);
+        }
+    } catch (e) {
+        console.log("Versiyon kontrolü yapılamadı (Backend henüz hazır olmayabilir).");
+    }
+}
+
+function showUpdateBanner(msg) {
+    // Kırmızı uyarı bandını oluştur
+    const banner = document.createElement("div");
+    banner.innerHTML = `
+        <div style="background:#e74c3c; color:white; padding:10px; text-align:center; font-weight:bold; font-size:13px; position:fixed; top:0; left:0; width:100%; z-index:999999; box-shadow:0 2px 10px rgba(0,0,0,0.2); font-family: sans-serif;">
+            🚀 GÜNCELLEME GEREKLİ: ${msg} <br>
+            <span style="font-weight:normal; font-size:11px; opacity:0.9;">(Chrome Eklentiler sayfasına gidip 'Yenile' butonuna basın)</span>
+            <button id="closeUpdate" style="background:none; border:1px solid white; color:white; cursor:pointer; margin-left:15px; padding:2px 8px; border-radius:4px; font-size:11px;">Tamam</button>
+        </div>
+    `;
+    document.body.prepend(banner);
+    
+    document.getElementById("closeUpdate").onclick = () => banner.remove();
 }
 
 // --- LOGİN FONKSİYONU ---
@@ -58,19 +94,13 @@ function logout() {
 function handleTelegramClick() {
     // KONTROL: Kullanıcı giriş yapmış mı?
     if (!userProfile) {
-        // SENARYO 1: Giriş Yapmamış
         let onay = confirm("⚠️ Fiyat alarmı kurmak için Google ile giriş yapmalısınız.\n\nŞimdi giriş yapmak ister misiniz?");
-        if (onay) {
-            loginWithGoogle(); // Otomatik giriş fonksiyonunu çağır
-        }
-        return; // İşlemi durdur
+        if (onay) loginWithGoogle();
+        return;
     }
 
-    // SENARYO 2: Giriş Yapmış -> Telegram'ı Aç
     let botName = "BAIBilmisBot"; 
-    // Kullanıcının Google ID'sini gönderiyoruz ki eşleşsin
     let url = `https://t.me/${botName}?start=${userProfile.id}`;
-    
     window.open(url, '_blank');
 }
 
@@ -88,7 +118,6 @@ function getListingData() {
         
         const description = document.querySelector('#classifiedDescription')?.innerText || "Açıklama yok";
         
-        // Araç/Emlak detaylarını çek
         let km = "Bilinmiyor";
         let year = "Bilinmiyor";
         const details = document.querySelectorAll('.classifiedInfoList li');
@@ -141,7 +170,7 @@ function makeDraggable(el) {
     if (!header) return;
     
     header.onmousedown = function(e) {
-        if(e.target.id === "closeOverlayBtn" || e.target.id === "googleLoginBtn" || e.target.id === "logoutText" || e.target.tagName === "BUTTON") return; 
+        if(["closeOverlayBtn", "googleLoginBtn", "logoutText", "BUTTON"].includes(e.target.tagName) || e.target.id === "telegramBtn") return; 
         e.preventDefault();
         isDragging = true;
         startX = e.clientX;
@@ -156,10 +185,8 @@ function makeDraggable(el) {
     function elementDrag(e) {
         if (!isDragging) return;
         e.preventDefault();
-        const dx = e.clientX - startX;
-        const dy = e.clientY - startY;
-        el.style.left = (initialLeft + dx) + "px";
-        el.style.top = (initialTop + dy) + "px";
+        el.style.left = (initialLeft + e.clientX - startX) + "px";
+        el.style.top = (initialTop + e.clientY - startY) + "px";
     }
     function closeDragElement() {
         isDragging = false;
@@ -181,35 +208,26 @@ function showOverlay(data, result) {
     let chartHtml = isError ? "" : createPriceChart(result.history);
     const commentCount = result.comments ? result.comments.length : 0;
 
-    // Header Sağ Kısım (Login Durumu)
-    let headerRightHtml = "";
-    if (userProfile) {
-        headerRightHtml = `
-            <div style="display:flex; align-items:center; gap:6px;">
-                <img src="${userProfile.picture}" style="width:22px; height:22px; border-radius:50%; border:1px solid #fff;">
-                <div style="display:flex; flex-direction:column; line-height:1;">
-                    <span style="font-size:10px; font-weight:bold;">${userProfile.name.split(' ')[0]}</span>
-                    <span id="logoutText" style="font-size:9px; text-decoration:underline; cursor:pointer; color:#444;">Çıkış</span>
-                </div>
-                <span id="closeOverlayBtn" style="cursor:pointer; font-size:18px; font-weight:bold; color:#333; margin-left:5px;">&times;</span>
+    let headerRightHtml = userProfile ? `
+        <div style="display:flex; align-items:center; gap:6px;">
+            <img src="${userProfile.picture}" style="width:22px; height:22px; border-radius:50%; border:1px solid #fff;">
+            <div style="display:flex; flex-direction:column; line-height:1;">
+                <span style="font-size:10px; font-weight:bold;">${userProfile.name.split(' ')[0]}</span>
+                <span id="logoutText" style="font-size:9px; text-decoration:underline; cursor:pointer; color:#444;">Çıkış</span>
             </div>
-        `;
-    } else {
-        headerRightHtml = `
-            <div style="display:flex; align-items:center; gap:5px;">
-                <button id="googleLoginBtn" style="background:white; color:#333; border:none; padding:4px 8px; border-radius:4px; font-size:10px; cursor:pointer; font-weight:bold; display:flex; align-items:center; gap:3px;">
-                    <span style="color:#4285F4; font-weight:900;">G</span> Giriş Yap
-                </button>
-                <span id="closeOverlayBtn" style="cursor:pointer; font-size:18px; font-weight:bold; color:#333; padding:0 4px;">&times;</span>
-            </div>
-        `;
-    }
+            <span id="closeOverlayBtn" style="cursor:pointer; font-size:18px; font-weight:bold; color:#333; margin-left:5px;">&times;</span>
+        </div>` : `
+        <div style="display:flex; align-items:center; gap:5px;">
+            <button id="googleLoginBtn" style="background:white; color:#333; border:none; padding:4px 8px; border-radius:4px; font-size:10px; cursor:pointer; font-weight:bold; display:flex; align-items:center; gap:3px;">
+                <span style="color:#4285F4; font-weight:900;">G</span> Giriş Yap
+            </button>
+            <span id="closeOverlayBtn" style="cursor:pointer; font-size:18px; font-weight:bold; color:#333; padding:0 4px;">&times;</span>
+        </div>`;
 
-    // HTML İÇERİĞİ
     overlay.innerHTML = `
         <div id="sahibinden-asistan-header" style="background: #FFD000; color: #222; padding: 10px 15px; border-top-left-radius: 8px; border-top-right-radius: 8px; display: flex; justify-content: space-between; align-items: center; cursor: grab; user-select: none; box-shadow: 0 2px 5px rgba(0,0,0,0.1); z-index: 10;">
             <div style="font-weight: 900; font-size:14px; display:flex; align-items:center; gap:5px;">
-                <span>🤖</span> BAI BİLMİŞ
+                <span>🤖</span> BAI BİLMİŞ <span style="font-size:9px; opacity:0.7; margin-left:3px;">v${CURRENT_VERSION}</span>
             </div>
             ${headerRightHtml}
         </div>
@@ -256,11 +274,9 @@ function showOverlay(data, result) {
     document.body.appendChild(overlay);
     makeDraggable(overlay);
 
-    // --- EVENT LISTENERLAR ---
+    // --- EVENT LISTENERS ---
     if(document.getElementById('googleLoginBtn')) document.getElementById('googleLoginBtn').onclick = loginWithGoogle;
     if(document.getElementById('logoutText')) document.getElementById('logoutText').onclick = logout;
-    
-    // TELEGRAM TIKLAMA OLAYI
     if(document.getElementById('telegramBtn')) document.getElementById('telegramBtn').onclick = handleTelegramClick;
 
     const tabAnaliz = document.getElementById('tabAnaliz');
@@ -374,17 +390,14 @@ function setupCommentEvents(data) {
     });
 }
 
-async function analyzeListing() {
-    const data = getListingData();
-    if (!data) return; 
-    try {
-        const response = await fetch(`${API_URL}/analyze`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
-        const result = await response.json();
-        showOverlay(data, result);
-    } catch (error) { 
-        showOverlay(data, { status: "error" }); 
-    }
+// --- BAŞLATMA MANTIĞI (GÜNCELLEME KONTROLÜ İLE) ---
+async function init() {
+    // 1. Önce versiyon kontrolü yap
+    await checkUpdate();
+    
+    // 2. Sonra analizi başlat
+    await analyzeListing();
 }
 
-setTimeout(analyzeListing, 1000);
-
+// Sayfa yüklendikten 1 saniye sonra sistemi başlat
+setTimeout(init, 1000);
