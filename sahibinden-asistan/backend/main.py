@@ -1,9 +1,8 @@
-from fastapi import Request
 import os
 import uuid
 import requests 
-from datetime import datetime
-from fastapi import FastAPI, HTTPException
+from datetime import datetime, timedelta # timedelta EKLENDİ (Tarih hesabı için)
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 import google.generativeai as genai
@@ -13,8 +12,9 @@ from dotenv import load_dotenv
 
 # --- AYARLAR ---
 load_dotenv()
-# Database.py'den tabloları çekiyoruz
+# Database ve Scheduler importları
 from backend.database import listings_collection, users_collection
+from backend.scheduler import start_scheduler
 
 app = FastAPI()
 
@@ -30,6 +30,7 @@ app.add_middleware(
 # --- API ANAHTARLARI ---
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY")
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 
 # --- AI AYARLARI ---
 if GEMINI_KEY:
@@ -61,31 +62,93 @@ class GoogleLoginData(BaseModel):
 
 # --- YARDIMCI FONKSİYONLAR ---
 
-async def find_similars(title, current_id):
-    """Veritabanındaki benzer ilanların fiyatlarını getirir."""
-    if not title: return "Veritabanı bağlantısı yok."
+async def calculate_valuation(title, current_price, current_id):
+    """
+    ENFLASYON KALKANLI DEĞERLEME MOTORU
+    1. Sadece son 30 gündeki ilanları baz alır.
+    2. En ucuz %10 ve en pahalı %10'u atar (Hasarlı ve Şişirme fiyatları eler).
+    """
+    if not title or not current_price: return None
+
     try:
-        keywords = set(title.lower().split())
-        keywords = {k for k in keywords if len(k) > 2}
+        # Başlıktaki anahtar kelimeler (İlk 3 kelime: Marka Model Yıl vb.)
+        keywords = [k.lower() for k in title.split() if len(k) > 2][:3]
         
-        cursor = listings_collection.find().sort("first_seen_at", -1).limit(50)
-        all_listings = await cursor.to_list(length=50)
+        # Son 150 ilanı çek (Veri havuzunu genişletiyoruz ama sonra eleyeceğiz)
+        cursor = listings_collection.find().sort("first_seen_at", -1).limit(150)
+        all_listings = await cursor.to_list(length=150)
         
-        prices = []
+        valid_prices = []
+        # Enflasyon Kalkanı: Bugünden 30 gün öncesi
+        cutoff_date = datetime.now() - timedelta(days=30) 
+        
         for item in all_listings:
+            # Kendisini hesaba katma
             if str(item.get("_id")) == str(current_id): continue
+            
+            # --- TARİH KONTROLÜ ---
+            date_str = item.get("first_seen_at", "2000-01-01 00:00:00")
+            try:
+                # Veritabanında tarih "YYYY-MM-DD HH:MM:SS" formatında olabilir
+                # String'in sadece ilk kısmını (YYYY-MM-DD) alıp parse edelim
+                item_date = datetime.strptime(date_str.split(" ")[0], "%Y-%m-%d")
+                
+                if item_date < cutoff_date:
+                    continue # 30 günden eskiyse pas geç (Enflasyon riski)
+            except:
+                continue # Tarih formatı bozuksa riske atma
+            # ----------------------
+
             item_title = item.get("title", "").lower()
             item_price = item.get("current_price", 0)
             
-            common = keywords.intersection(set(item_title.split()))
-            if len(common) >= 2 and item_price > 0:
-                prices.append(item_price)
-                
-        if not prices: return "Henüz yeterli kıyaslama verisi birikmedi."
+            # Kelime eşleşmesi
+            match_count = sum(1 for k in keywords if k in item_title)
+            if match_count >= 2 and item_price > 0:
+                valid_prices.append(item_price)
         
-        avg = sum(prices) / len(prices)
-        return f"Veritabanımdaki {len(prices)} benzer ilanın ortalaması: {avg:,.0f} TL."
-    except: return "Veritabanı analizi yapılamadı."
+        # Yeterli güncel veri yoksa analiz yapma
+        if len(valid_prices) < 3: return None 
+
+        # --- UÇ DEĞER TEMİZLİĞİ (OUTLIER REMOVAL) ---
+        valid_prices.sort()
+        
+        # En düşük %10 ve en yüksek %10'u at
+        trim_amount = int(len(valid_prices) * 0.1) 
+        if trim_amount > 0:
+            filtered_prices = valid_prices[trim_amount:-trim_amount]
+        else:
+            filtered_prices = valid_prices
+            
+        if not filtered_prices: filtered_prices = valid_prices # Hata önlemi
+        # --------------------------------------------
+
+        avg_price = sum(filtered_prices) / len(filtered_prices)
+        ratio = current_price / avg_price
+        
+        status = "Piyasa Normali"
+        color = "#f1c40f" # Sarı
+        
+        if ratio <= 0.92: 
+            status = "🔥 Fırsat (Kelepir)"
+            color = "#2ecc71" # Yeşil
+        elif ratio >= 1.08:
+            status = "💸 Piyasa Üstü"
+            color = "#e74c3c" # Kırmızı
+            
+        return {
+            "average_price": int(avg_price),
+            "listing_count": len(filtered_prices),
+            "status": status,
+            "color": color,
+            "ratio": ratio,
+            "difference_tl": int(avg_price - current_price),
+            "info_msg": f"Son 30 gündeki {len(filtered_prices)} benzer ilan baz alındı."
+        }
+
+    except Exception as e:
+        print(f"Valuation Error: {e}")
+        return None
 
 async def get_user_notes(listing_id):
     """Bu ilana yapılan yorumları getirir."""
@@ -104,7 +167,6 @@ async def root():
 
 @app.get("/debug-ai")
 async def check_models():
-    """Hangi modellerin çalıştığını listeler (Debug için)"""
     if not GEMINI_KEY: return {"error": "API Key yok"}
     try:
         available_models = []
@@ -120,9 +182,9 @@ async def check_models():
 async def check_version():
     """Eklentinin güncel olup olmadığını kontrol eder."""
     return {
-        "latest_version": "1.1",  # BURAYI HER GÜNCELLEMEDE DEĞİŞTİRECEĞİZ
-        "message": "🚨 Yeni Özellik: Telegram Fiyat Alarmı Eklendi! Lütfen eklentiyi yenileyin.",
-        "force_update": True # Zorunlu güncelleme mi?
+        "latest_version": "1.2",  # Versiyonu 1.2 yaptık
+        "message": "🔥 YENİ: Adil Fiyat Hesaplayıcı eklendi! Enflasyon korumalı analiz.",
+        "force_update": False 
     }
     
 @app.post("/auth/google")
@@ -172,11 +234,18 @@ async def ask_ai(data: ListingData):
     if not GEMINI_KEY: 
         return {"status": "error", "message": "API Key Eksik!"}
 
-    # 1. Veri Toplama
-    db_context = await find_similars(data.title, data.id)
+    # 1. Veri Toplama (YENİ: Değerleme Motorunu Kullan)
+    valuation = await calculate_valuation(data.title, data.price, data.id)
     user_notes = await get_user_notes(data.id)
     
-    # 2. AKILLI PROMPT (Zeka Burada!)
+    # Değerleme sonucunu metne dök
+    market_context = "Yeterli piyasa verisi yok."
+    if valuation:
+        market_context = (f"Piyasa Ortalaması: {valuation['average_price']} TL. "
+                          f"Durum: {valuation['status']}. "
+                          f"{valuation['info_msg']}")
+
+    # 2. AKILLI PROMPT
     prompt = f"""
     KİMLİK:
     Senin adın "BAI Bilmiş". Sen Türkiye'nin en tecrübeli galericisi, emlak uzmanı ve veri analistisin. 
@@ -193,13 +262,13 @@ async def ask_ai(data: ListingData):
     - Satıcı Açıklaması: "{data.description}"
     
     EKSTRA BİLGİLER (Bunları mutlaka kullan):
-    - Veritabanı Ortalaması: {db_context}
+    - Piyasa Analizi: {market_context}
     - Kullanıcı Yorumları: {user_notes}
 
     ANALİZ KURALLARI:
-    1. KM ve Yıl analizi yap. (Örn: "Bu yaşta bu KM çok temiz" veya "Bu KM'de taksi çıkması riski var" gibi.)
-    2. Fiyatı veritabanı ortalamasıyla kıyasla. Pahalı mı, kelepir mi?
-    3. Satıcı açıklamasındaki gizli anlamları çöz. ("Keyfe keder boyalı", "Çıtır hasarlı", "Gırtlak dolu" gibi tabirleri yorumla.)
+    1. KM ve Yıl analizi yap.
+    2. Fiyatı piyasa analizi verisine göre yorumla.
+    3. Satıcı açıklamasındaki gizli anlamları çöz.
     4. HTML formatında (<ul>, <li>, <b>) çıktı ver.
 
     ÇIKTI FORMATI:
@@ -221,18 +290,13 @@ async def ask_ai(data: ListingData):
     """
 
     try:
-        # Senin hesabında çalışan model ismi:
         model_name = "gemini-flash-latest"
-        
         model = genai.GenerativeModel(model_name)
         response = model.generate_content(prompt)
-        
         return {"status": "success", "ai_response": response.text, "used_model": model_name}
         
     except Exception as e:
-        # Yedek plan (Pro Latest)
         try:
-            print(f"Flash hatası: {e}, Pro deneniyor...")
             model = genai.GenerativeModel("gemini-pro-latest")
             response = model.generate_content(prompt)
             return {"status": "success", "ai_response": response.text, "used_model": "gemini-pro-latest (Yedek)"}
@@ -241,7 +305,7 @@ async def ask_ai(data: ListingData):
 
 @app.post("/analyze")
 async def analyze_listing(data: ListingData):
-    """İlanı kaydeder ve geçmişi tutar"""
+    """İlanı kaydeder, geçmişi tutar ve DEĞERLEMEYİ döner"""
     if not data.id or not data.price: return {"status": "error"}
     
     try:
@@ -262,6 +326,12 @@ async def analyze_listing(data: ListingData):
             new_record = {"_id": data.id, "title": data.title, "url": data.url, "first_seen_at": now, "current_price": data.price, "history": [], "comments": []}
             await listings_collection.insert_one(new_record)
             response["history"] = [{"date": "Şimdi", "price": data.price}]
+        
+        # --- DEĞERLEME EKLE ---
+        valuation = await calculate_valuation(data.title, data.price, data.id)
+        response["valuation"] = valuation
+        # ----------------------
+
         return response
     except: return {"status": "error"}
 
@@ -316,7 +386,11 @@ async def like_comment(data: LikeData):
     return {"status": "success", "comments": updated_comments}
 
 # --- TELEGRAM ENTGRASYONU ---
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
+def send_telegram_message(chat_id, text):
+    """Telegram mesajı gönderen yardımcı fonksiyon"""
+    if not TELEGRAM_TOKEN: return
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    requests.post(url, json={"chat_id": chat_id, "text": text, "parse_mode": "HTML"})
 
 @app.post("/webhook")
 async def telegram_webhook(request: Request):
@@ -347,17 +421,14 @@ async def telegram_webhook(request: Request):
         print(f"Webhook Hatası: {e}")
         return {"status": "error"}
 
-def send_telegram_message(chat_id, text):
-    """Telegram mesajı gönderen yardımcı fonksiyon"""
-    if not TELEGRAM_TOKEN: return
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    requests.post(url, json={"chat_id": chat_id, "text": text})
+# --- SUNUCU BAŞLARKEN ZAMANLAYICIYI ÇALIŞTIR ---
+@app.on_event("startup")
+async def startup_event():
+    print("⏳ Fiyat Takip Zamanlayıcısı Başlatılıyor...")
+    start_scheduler()
+# -----------------------------------------------
 
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run("backend.main:app", host="0.0.0.0", port=port)
-
-
-
-
