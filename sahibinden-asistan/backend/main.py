@@ -1,7 +1,7 @@
 import os
 import uuid
 import requests 
-from datetime import datetime, timedelta # timedelta Zaten Ekli
+from datetime import datetime, timedelta 
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
@@ -71,69 +71,53 @@ async def calculate_valuation(title, current_price, current_id):
     if not title or not current_price: return None
 
     try:
-        # Başlıktaki anahtar kelimeler (İlk 3 kelime: Marka Model Yıl vb.)
         keywords = [k.lower() for k in title.split() if len(k) > 2][:3]
         
-        # Son 150 ilanı çek (Veri havuzunu genişletiyoruz ama sonra eleyeceğiz)
         cursor = listings_collection.find().sort("first_seen_at", -1).limit(150)
         all_listings = await cursor.to_list(length=150)
         
         valid_prices = []
-        # Enflasyon Kalkanı: Bugünden 30 gün öncesi
         cutoff_date = datetime.now() - timedelta(days=30) 
         
         for item in all_listings:
-            # Kendisini hesaba katma
             if str(item.get("_id")) == str(current_id): continue
             
-            # --- TARİH KONTROLÜ ---
             date_str = item.get("first_seen_at", "2000-01-01 00:00:00")
             try:
-                # Veritabanında tarih "YYYY-MM-DD HH:MM:SS" formatında olabilir
                 item_date = datetime.strptime(date_str.split(" ")[0], "%Y-%m-%d")
-                
-                if item_date < cutoff_date:
-                    continue # 30 günden eskiyse pas geç (Enflasyon riski)
-            except:
-                continue # Tarih formatı bozuksa riske atma
-            # ----------------------
+                if item_date < cutoff_date: continue 
+            except: continue 
 
             item_title = item.get("title", "").lower()
             item_price = item.get("current_price", 0)
             
-            # Kelime eşleşmesi
             match_count = sum(1 for k in keywords if k in item_title)
             if match_count >= 2 and item_price > 0:
                 valid_prices.append(item_price)
         
-        # Yeterli güncel veri yoksa analiz yapma
         if len(valid_prices) < 3: return None 
 
-        # --- UÇ DEĞER TEMİZLİĞİ (OUTLIER REMOVAL) ---
         valid_prices.sort()
-        
-        # En düşük %10 ve en yüksek %10'u at
         trim_amount = int(len(valid_prices) * 0.1) 
         if trim_amount > 0:
             filtered_prices = valid_prices[trim_amount:-trim_amount]
         else:
             filtered_prices = valid_prices
             
-        if not filtered_prices: filtered_prices = valid_prices # Hata önlemi
-        # --------------------------------------------
+        if not filtered_prices: filtered_prices = valid_prices 
 
         avg_price = sum(filtered_prices) / len(filtered_prices)
         ratio = current_price / avg_price
         
         status = "Piyasa Normali"
-        color = "#f1c40f" # Sarı
+        color = "#f1c40f" 
         
         if ratio <= 0.92: 
             status = "🔥 Fırsat (Kelepir)"
-            color = "#2ecc71" # Yeşil
+            color = "#2ecc71" 
         elif ratio >= 1.08:
             status = "💸 Piyasa Üstü"
-            color = "#e74c3c" # Kırmızı
+            color = "#e74c3c" 
             
         return {
             "average_price": int(avg_price),
@@ -150,7 +134,6 @@ async def calculate_valuation(title, current_price, current_id):
         return None
 
 async def get_user_notes(listing_id):
-    """Bu ilana yapılan yorumları getirir."""
     try:
         doc = await listings_collection.find_one({"_id": listing_id})
         if not doc or "comments" not in doc: return ""
@@ -179,14 +162,13 @@ async def check_models():
 # --- VERSİYON KONTROLÜ ---
 @app.get("/version")
 async def check_version():
-    """Eklentinin güncel olup olmadığını kontrol eder."""
     return {
         "latest_version": "1.2", 
         "message": "🔥 YENİ: Adil Fiyat Hesaplayıcı eklendi! Enflasyon korumalı analiz.",
         "force_update": False 
     }
 
-# --- ZOMBİ GÜNCELLEME SİSTEMİ (YENİ EKLENDİ) ---
+# --- ZOMBİ GÜNCELLEME SİSTEMİ (BURASI EKLENDİ) ---
 @app.get("/get-update-task")
 async def get_update_task():
     """
@@ -194,11 +176,9 @@ async def get_update_task():
     Eklenti bunu arka planda güncelleyecek.
     """
     try:
-        # 24 saat öncesini hesapla
         yesterday = datetime.now() - timedelta(hours=24)
         yesterday_str = yesterday.strftime("%Y-%m-%d %H:%M:%S")
         
-        # Tarihi eski olan veya hiç tarihi olmayan bir ilanı bul
         pipeline = [
             {"$match": {
                 "$or": [
@@ -206,7 +186,7 @@ async def get_update_task():
                     {"last_update": {"$exists": False}}
                 ]
             }},
-            {"$sample": {"size": 1}} # Rastgele 1 tane seç
+            {"$sample": {"size": 1}} 
         ]
         
         cursor = listings_collection.aggregate(pipeline)
@@ -232,24 +212,21 @@ async def update_price_background(data: ListingData):
     
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
-    # Mevcut veriyi al
     existing = await listings_collection.find_one({"_id": data.id})
     if existing:
         last_price = existing.get("current_price", 0)
         
-        # Fiyat değişmişse geçmişe ekle
         if last_price != data.price:
             await listings_collection.update_one(
                 {"_id": data.id}, 
                 {"$push": {"history": {"date": now, "price": last_price}}}
             )
             
-        # Her halükarda 'son güncelleme' tarihini ve fiyatı yenile
         await listings_collection.update_one(
             {"_id": data.id}, 
             {"$set": {
                 "current_price": data.price,
-                "last_update": now  # <-- Son kontrol zamanını kaydet
+                "last_update": now 
             }}
         )
         return {"status": "success", "message": "Fiyat güncellendi"}
@@ -259,7 +236,6 @@ async def update_price_background(data: ListingData):
 
 @app.post("/auth/google")
 async def google_login(data: GoogleLoginData):
-    """Google Giriş İşlemi"""
     try:
         idinfo = None
         try:
@@ -300,63 +276,34 @@ async def google_login(data: GoogleLoginData):
 
 @app.post("/analyze-ai")
 async def ask_ai(data: ListingData):
-    """BAI Bilmiş - AKILLI Analiz Modu"""
     if not GEMINI_KEY: 
         return {"status": "error", "message": "API Key Eksik!"}
 
-    # 1. Veri Toplama (Değerleme Motorunu Kullan)
     valuation = await calculate_valuation(data.title, data.price, data.id)
     user_notes = await get_user_notes(data.id)
     
-    # Değerleme sonucunu metne dök
     market_context = "Yeterli piyasa verisi yok."
     if valuation:
         market_context = (f"Piyasa Ortalaması: {valuation['average_price']} TL. "
                           f"Durum: {valuation['status']}. "
                           f"{valuation['info_msg']}")
 
-    # 2. AKILLI PROMPT
     prompt = f"""
-    KİMLİK:
-    Senin adın "BAI Bilmiş". Sen Türkiye'nin en tecrübeli galericisi, emlak uzmanı ve veri analistisin. 
-    Lafı dolandırmayı sevmezsin. Net, çarpıcı, esprili ve nokta atışı tespitler yaparsın.
+    KİMLİK: "BAI Bilmiş", uzman galericisin. Dobra ve esprili konuş.
     
-    GÖREV:
-    Aşağıdaki ilanı benim için detaylıca analiz et.
-    
-    İLAN VERİLERİ:
+    İLAN:
     - Başlık: {data.title}
     - Fiyat: {data.price} TL
-    - Yıl: {data.year}
-    - KM/Özellik: {data.km}
-    - Satıcı Açıklaması: "{data.description}"
+    - KM/Yıl: {data.km}, {data.year}
+    - Açıklama: "{data.description[:500]}..."
     
-    EKSTRA BİLGİLER (Bunları mutlaka kullan):
-    - Piyasa Analizi: {market_context}
+    VERİ ANALİZİ:
+    - {market_context}
     - Kullanıcı Yorumları: {user_notes}
 
-    ANALİZ KURALLARI:
-    1. KM ve Yıl analizi yap.
-    2. Fiyatı piyasa analizi verisine göre yorumla.
-    3. Satıcı açıklamasındaki gizli anlamları çöz.
-    4. HTML formatında (<ul>, <li>, <b>) çıktı ver.
-
-    ÇIKTI FORMATI:
-    <b>🏎️ Genel Durum ve Yorumum:</b>
-    <ul>
-       <li>(KM, Yıl ve Araç Yorgunluğu hakkında yorumun)</li>
-       <li>(Açıklamadan yakaladığın detaylar veya riskler)</li>
-    </ul>
-
-    <b>💰 Fiyat ve Piyasa Raporu:</b>
-    <ul>
-       <li>(Piyasa ortalamasına göre durumu. Yatırımlık mı? Biniciye mi?)</li>
-    </ul>
-
-    <b>🕵️ BAI Bilmiş'in Son Kararı:</b>
-    <ul>
-       <li>(Kısa ve net tavsiyen: "Kaçırma", "Uzak dur", "Ekspertizsiz alma" vb.)</li>
-    </ul>
+    GÖREV:
+    Bu aracı almalı mıyım? Fiyat/Performans analizi yap. Kronik sorun riski var mı?
+    HTML formatında (<b>, <ul>, <li>) kısa ve net cevap ver.
     """
 
     try:
@@ -364,18 +311,11 @@ async def ask_ai(data: ListingData):
         model = genai.GenerativeModel(model_name)
         response = model.generate_content(prompt)
         return {"status": "success", "ai_response": response.text, "used_model": model_name}
-        
     except Exception as e:
-        try:
-            model = genai.GenerativeModel("gemini-pro-latest")
-            response = model.generate_content(prompt)
-            return {"status": "success", "ai_response": response.text, "used_model": "gemini-pro-latest (Yedek)"}
-        except Exception as e2:
-            return {"status": "error", "message": f"AI Hatası: {str(e)}"}
+        return {"status": "error", "message": str(e)}
 
 @app.post("/analyze")
 async def analyze_listing(data: ListingData):
-    """İlanı kaydeder, geçmişi tutar ve DEĞERLEMEYİ döner"""
     if not data.id or not data.price: return {"status": "error"}
     
     try:
@@ -397,12 +337,10 @@ async def analyze_listing(data: ListingData):
             await listings_collection.insert_one(new_record)
             response["history"] = [{"date": "Şimdi", "price": data.price}]
         
-        # --- DEĞERLEME EKLE ---
         valuation = await calculate_valuation(data.title, data.price, data.id)
         response["valuation"] = valuation
-        # ----------------------
         
-        # Görüntülenme (View) anında güncelleme tarihini de yenileyelim
+        # Son görüntülenme tarihini güncelle
         await listings_collection.update_one({"_id": data.id}, {"$set": {"last_update": now}})
 
         return response
@@ -410,96 +348,58 @@ async def analyze_listing(data: ListingData):
 
 @app.post("/add_comment")
 async def add_comment(comment: CommentData):
-    """Yorum ekler"""
     user_name = comment.username or "Misafir"
     user_pic = ""
-    
     if comment.user_id:
         user = await users_collection.find_one({"_id": comment.user_id})
         if user:
             user_name = user.get("name", user_name)
             user_pic = user.get("picture", "")
 
-    new_comment = {
-        "id": str(uuid.uuid4()), 
-        "user_id": comment.user_id,
-        "user": user_name,
-        "user_pic": user_pic,
-        "text": comment.text, 
-        "date": datetime.now().strftime("%Y-%m-%d %H:%M"), 
-        "liked_by": []
-    }
-    
+    new_comment = {"id": str(uuid.uuid4()), "user_id": comment.user_id, "user": user_name, "user_pic": user_pic, "text": comment.text, "date": datetime.now().strftime("%Y-%m-%d %H:%M"), "liked_by": []}
     await listings_collection.update_one({"_id": comment.listing_id}, {"$push": {"comments": new_comment}})
     updated = await listings_collection.find_one({"_id": comment.listing_id})
     return {"status": "success", "comments": updated.get("comments", [])}
 
 @app.post("/like_comment")
 async def like_comment(data: LikeData):
-    """Yorumu beğenir"""
     doc = await listings_collection.find_one({"_id": data.listing_id})
     if not doc: return {"status": "error"}
-    
     comments = doc.get("comments", [])
     updated_comments = []
-    
     for c in comments:
         if c.get("id") == data.comment_id:
             likes = c.get("liked_by", [])
             if not isinstance(likes, list): likes = []
-            
-            if data.user_id in likes:
-                likes.remove(data.user_id)
-            else:
-                likes.append(data.user_id)
+            if data.user_id in likes: likes.remove(data.user_id)
+            else: likes.append(data.user_id)
             c["liked_by"] = likes
         updated_comments.append(c)
-    
     await listings_collection.update_one({"_id": data.listing_id}, {"$set": {"comments": updated_comments}})
     return {"status": "success", "comments": updated_comments}
 
-# --- TELEGRAM ENTGRASYONU ---
+# --- TELEGRAM ---
 def send_telegram_message(chat_id, text):
-    """Telegram mesajı gönderen yardımcı fonksiyon"""
     if not TELEGRAM_TOKEN: return
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    requests.post(url, json={"chat_id": chat_id, "text": text, "parse_mode": "HTML"})
+    requests.post(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage", json={"chat_id": chat_id, "text": text, "parse_mode": "HTML"})
 
 @app.post("/webhook")
 async def telegram_webhook(request: Request):
-    """Telegram'dan gelen mesajları dinler ve kullanıcıyı eşleştirir."""
     try:
         data = await request.json()
-        
-        # Mesaj var mı kontrol et
         if "message" in data:
             chat_id = data["message"]["chat"]["id"]
             text = data["message"].get("text", "")
-            
-            # Kullanıcı '/start GOOGLE_ID' formatında linke tıkladıysa:
             if text.startswith("/start") and len(text.split()) > 1:
                 google_user_id = text.split()[1]
-                
-                # Veritabanında bu kullanıcıyı bul ve Telegram ID'sini kaydet
-                await users_collection.update_one(
-                    {"_id": google_user_id},
-                    {"$set": {"telegram_chat_id": chat_id}}
-                )
-                
-                # Kullanıcıya "Hoşgeldin" mesajı at
-                send_telegram_message(chat_id, "🎉 Harika! Fiyat alarmları aktif edildi. Favori ilanlarında indirim olunca sana haber vereceğim.")
-                
+                await users_collection.update_one({"_id": google_user_id}, {"$set": {"telegram_chat_id": chat_id}})
+                send_telegram_message(chat_id, "🎉 Harika! Fiyat alarmları aktif edildi.")
         return {"status": "ok"}
-    except Exception as e:
-        print(f"Webhook Hatası: {e}")
-        return {"status": "error"}
+    except Exception as e: return {"status": "error"}
 
-# --- SUNUCU BAŞLARKEN ZAMANLAYICIYI ÇALIŞTIR ---
 @app.on_event("startup")
 async def startup_event():
-    print("⏳ Fiyat Takip Zamanlayıcısı Başlatılıyor...")
     start_scheduler()
-# -----------------------------------------------
 
 if __name__ == "__main__":
     import uvicorn
