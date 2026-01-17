@@ -1,9 +1,9 @@
-// content.js - BAI BİLMİŞ v1.4: FREEMIUM & LİMİT SİSTEMİ 🧹🚀💰
+// content.js - BAI BİLMİŞ v2.0: OYUNLAŞTIRMA & ÖDÜL SİSTEMİ 🧹🚀💰🎁
 
 const API_URL = "https://sahiden.onrender.com"; 
 
 // --- GÜNCELLEME AYARI ---
-const CURRENT_VERSION = "1.4"; // <-- VERSİYON 1.4 OLDU
+const CURRENT_VERSION = "2.0"; // <-- YENİ SÜRÜM
 // ------------------------
 
 console.log(`BAI BILMIS: v${CURRENT_VERSION} Başlatıldı`); 
@@ -164,6 +164,16 @@ function showOverlay(data, result) {
         `<div style="display:flex;align-items:center;gap:6px;"><img src="${userProfile.picture}" style="width:22px;height:22px;border-radius:50%;"><span style="font-size:10px;font-weight:bold;">${userProfile.name.split(' ')[0]}</span><span id="logoutText" style="font-size:9px;text-decoration:underline;cursor:pointer;">Çıkış</span><span id="closeOverlayBtn" style="cursor:pointer;font-size:18px;margin-left:5px;">&times;</span></div>` : 
         `<button id="googleLoginBtn" style="background:white;border:none;padding:4px 8px;border-radius:4px;font-size:10px;font-weight:bold;">G Giriş</button><span id="closeOverlayBtn" style="cursor:pointer;font-size:18px;margin-left:5px;">&times;</span>`;
 
+    // --- YENİ MANTIK: MİSAFİRLER YORUM KUTUSUNU GÖREMEZ ---
+    let commentInputHtml = "";
+    if (userProfile) {
+        // ÜYE: Yorum kutusu
+        commentInputHtml = `<div style="display:flex;gap:5px;"><input id="commentInput" placeholder="Yorum..." style="flex:1;padding:8px;border:1px solid #ddd;border-radius:4px;"><button id="sendCommentBtn" style="background:#293542;color:white;border:none;padding:0 12px;border-radius:4px;cursor:pointer;">➤</button></div>`;
+    } else {
+        // MİSAFİR: Giriş butonu
+        commentInputHtml = `<button id="loginForCommentBtn" style="width:100%;background:#e74c3c;color:white;border:none;padding:10px;border-radius:4px;font-weight:bold;cursor:pointer;margin-top:5px;">🔒 Yorum Yapmak İçin Giriş Yap</button>`;
+    }
+
     overlay.innerHTML = `
         <div id="sahibinden-asistan-header" style="background:#FFD000;color:#222;padding:10px 15px;border-top-left-radius:8px;border-top-right-radius:8px;display:flex;justify-content:space-between;align-items:center;cursor:grab;box-shadow:0 2px 5px rgba(0,0,0,0.1);">
             <div style="font-weight:900;font-size:14px;">🤖 BAI BİLMİŞ <span style="font-size:9px;opacity:0.7;">v${CURRENT_VERSION}</span></div>${headerRight}
@@ -185,7 +195,7 @@ function showOverlay(data, result) {
             </div>
             <div id="viewYorumlar" style="display:none;">
                 <div id="commentList" style="height:220px;overflow-y:auto;margin-bottom:10px;background:#fff;padding:5px;">${renderComments(result?.comments)}</div>
-                <div style="display:flex;gap:5px;"><input id="commentInput" placeholder="Yorum..." style="flex:1;padding:8px;"><button id="sendCommentBtn" style="background:#293542;color:white;border:none;padding:0 12px;">➤</button></div>
+                ${commentInputHtml}
             </div>
         </div>
     `;
@@ -195,30 +205,24 @@ function showOverlay(data, result) {
     if(document.getElementById('googleLoginBtn')) document.getElementById('googleLoginBtn').onclick=loginWithGoogle;
     if(document.getElementById('logoutText')) document.getElementById('logoutText').onclick=logout;
     if(document.getElementById('telegramBtn')) document.getElementById('telegramBtn').onclick=handleTelegramClick;
+    if(document.getElementById('loginForCommentBtn')) document.getElementById('loginForCommentBtn').onclick=loginWithGoogle; // Misafir butonu
+    
     document.getElementById('closeOverlayBtn').onclick=()=>overlay.remove();
     const tA=document.getElementById('tabAnaliz'), tY=document.getElementById('tabYorumlar'), vA=document.getElementById('viewAnaliz'), vY=document.getElementById('viewYorumlar');
     tA.onclick=()=>{vA.style.display='block';vY.style.display='none';tA.style.background='#fff';tA.style.borderBottom='2px solid #293542';tY.style.background='#e9ecef';tY.style.borderBottom='none';};
     tY.onclick=()=>{vA.style.display='none';vY.style.display='block';tY.style.background='#fff';tY.style.borderBottom='2px solid #293542';tA.style.background='#e9ecef';tA.style.borderBottom='none';};
 
-    // --- YENİ AI BUTONU LOGIC (LİMİT KONTROLLÜ) ---
+    // --- AI BUTONU (LİMİT KONTROLLÜ) ---
     document.getElementById('askAiBtn').onclick = async () => {
         const btn=document.getElementById('askAiBtn'), resBox=document.getElementById('aiResult');
         btn.innerHTML="⏳..."; btn.disabled=true;
         
         try {
-            // Backend'e User ID gönderiyoruz
             const payload = { ...data, user_id: userProfile ? userProfile.id : null };
-
-            const r=await fetch(`${API_URL}/analyze-ai`,{
-                method:'POST',
-                headers:{'Content-Type':'application/json'},
-                body:JSON.stringify(payload)
-            });
+            const r=await fetch(`${API_URL}/analyze-ai`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
             const j=await r.json(); 
             
             resBox.style.display="block"; 
-
-            // LİMİT DOLDUYSA
             if (j.status === "limit_reached") {
                 btn.innerHTML = "🔒 Limit Doldu";
                 resBox.innerHTML = `
@@ -227,21 +231,19 @@ function showOverlay(data, result) {
                         <div style="font-weight:bold; color:#c0392b; margin-bottom:5px;">Günlük Limit Doldu</div>
                         <p style="font-size:11px; color:#555; margin-bottom:10px;">${j.message}</p>
                         <a href="https://shopier.com/SENIN_LINKIN" target="_blank" style="display:block; background:#27ae60; color:white; padding:10px; border-radius:5px; text-decoration:none; font-weight:bold; font-size:12px;">👑 Premium'a Geç (Sınırsız)</a>
-                    </div>
-                `;
-            } 
-            // BAŞARILI İSE
-            else if (j.status === "success") {
+                    </div>`;
+            } else if (j.status === "error") { // MİSAFİR UYARISI BURAYA DÜŞER
+                 btn.innerHTML = "🔒 Giriş Yapın";
+                 resBox.innerHTML = `<div style="text-align:center;padding:10px;">${j.message}<br><button onclick="loginWithGoogle()" style="margin-top:10px;background:#293542;color:white;border:none;padding:5px 10px;border-radius:4px;cursor:pointer;">Giriş Yap</button></div>`;
+                 // Not: İçerideki onclick çalışmaz, genel event listener gerekir ama basit uyarı yeterli.
+            } else if (j.status === "success") {
                 resBox.innerHTML=j.ai_response; 
                 btn.innerHTML="✅ Bitti";
-            } 
-            // HATA VARSA
-            else {
+            } else {
                 resBox.innerHTML = j.message || "Hata oluştu";
                 btn.innerHTML = "❌ Hata";
                 btn.disabled = false;
             }
-
         } catch(e){
             resBox.innerHTML="Sunucu hatası veya internet yok."; 
             btn.innerHTML = "❌ Hata";
@@ -249,12 +251,21 @@ function showOverlay(data, result) {
         }
     };
     
-    document.getElementById('sendCommentBtn').onclick=async()=>{
-        const txt=document.getElementById('commentInput').value; if(!txt)return;
-        if(!userProfile) return loginWithGoogle();
-        await fetch(`${API_URL}/add_comment`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({listing_id:data.id,user_id:userProfile.id,username:userProfile.name,text:txt})});
-        alert("Yorum gitti!");
-    };
+    // --- YORUM GÖNDERME (ÖDÜL MESAJI EKLENDİ) ---
+    if(document.getElementById('sendCommentBtn')) {
+        document.getElementById('sendCommentBtn').onclick=async()=>{
+            const txt=document.getElementById('commentInput').value; if(!txt)return;
+            // Buraya profil kontrolü koymaya gerek yok çünkü butonu zaten üyeler görüyor
+            const r = await fetch(`${API_URL}/add_comment`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({listing_id:data.id,user_id:userProfile.id,username:userProfile.name,text:txt})});
+            const result = await r.json();
+            
+            // Backend'den gelen mesajı göster (Ödül kazandın vs.)
+            alert(result.message || "Yorum gönderildi.");
+            
+            // Yorum kutusunu temizle
+            document.getElementById('commentInput').value = "";
+        };
+    }
 }
 
 function renderComments(c) {
@@ -287,9 +298,8 @@ async function runBackgroundWorker() {
 
 async function init() {
     await checkUpdate();
-    await runSweepMode(); // Süpürgeyi çalıştır (Liste sayfasıysa)
+    await runSweepMode(); 
     
-    // Detay sayfasıysa analizi başlat
     const data = getListingData();
     if(data) {
         try {
