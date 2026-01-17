@@ -45,7 +45,7 @@ class ListingData(BaseModel):
     description: str | None = None
     km: str | None = None
     year: str | None = None
-    user_id: str | None = None # <-- YENİ: Kullanıcıyı tanımak için ekledik
+    user_id: str | None = None # <-- Kullanıcıyı tanımak için
 
 class CommentData(BaseModel):
     listing_id: str
@@ -125,7 +125,7 @@ async def root(): return {"status": "active", "message": "Sahibinden Asistan Sun
 @app.get("/version")
 async def check_version():
     return {
-        "latest_version": "1.3", 
+        "latest_version": "1.4", 
         "message": "🧹 SÜPÜRGE MODU AKTİF! Liste sayfalarındaki ilanlar artık otomatik kaydediliyor.",
         "force_update": False 
     }
@@ -209,7 +209,7 @@ async def update_price_background(data: ListingData):
         return {"status": "success", "message": "Fiyat güncellendi"}
     return {"status": "error"}
 
-# --- AUTH & USER MANAGEMENT (GÜNCELLENDİ) ---
+# --- AUTH & USER MANAGEMENT ---
 @app.post("/auth/google")
 async def google_login(data: GoogleLoginData):
     try:
@@ -225,7 +225,6 @@ async def google_login(data: GoogleLoginData):
         
         google_id = idinfo['sub']
         
-        # Kullanıcıyı Güncelle veya Oluştur (Plan ve Usage alanları ile)
         await users_collection.update_one(
             {"_id": google_id}, 
             {
@@ -235,7 +234,6 @@ async def google_login(data: GoogleLoginData):
                     "picture": idinfo.get('picture'), 
                     "last_login": datetime.now()
                 },
-                # $setOnInsert sadece yeni kayıtta çalışır, eski üyelerin planını bozmaz
                 "$setOnInsert": {
                     "plan": "free",
                     "daily_usage": 0,
@@ -247,7 +245,121 @@ async def google_login(data: GoogleLoginData):
         return {"status": "success", "user": {"id": google_id, "name": idinfo.get('name'), "picture": idinfo.get('picture')}}
     except Exception as e: raise HTTPException(status_code=401, detail=str(e))
 
-# --- AI ANALİZ (GÜNCELLENDİ: LİMİT KONTROLÜ + MODEL FIX) ---
+# --- AI ANALİZ ---
 @app.post("/analyze-ai")
 async def ask_ai(data: ListingData):
     # 1. API Key Kontrolü
+    if not GEMINI_KEY: return {"status": "error", "message": "API Key Eksik!"}
+    
+    # 2. Limit Kontrolü
+    if data.user_id:
+        user = await users_collection.find_one({"_id": data.user_id})
+        if user:
+            plan = user.get("plan", "free")
+            usage = user.get("daily_usage", 0)
+            
+            if plan == "free" and usage >= FREE_DAILY_LIMIT:
+                return {
+                    "status": "limit_reached",
+                    "message": f"🔒 Günlük {FREE_DAILY_LIMIT} adet ücretsiz analiz hakkınız doldu. Premium'a geçerek sınırsız kullanabilirsiniz!"
+                }
+            
+            await users_collection.update_one({"_id": data.user_id}, {"$inc": {"daily_usage": 1}})
+
+    # 3. Analiz Hazırlığı
+    valuation = await calculate_valuation(data.title, data.price, data.id)
+    user_notes = await get_user_notes(data.id)
+    market_context = "Yeterli piyasa verisi yok."
+    if valuation: market_context = (f"Piyasa Ortalaması: {valuation['average_price']} TL. Durum: {valuation['status']}. {valuation['info_msg']}")
+    
+    prompt = f"""
+    KİMLİK: "BAI Bilmiş", uzman galericisin.
+    İLAN: Başlık: {data.title}, Fiyat: {data.price} TL, KM/Yıl: {data.km}, {data.year}
+    Açıklama: "{data.description[:500]}..."
+    VERİ ANALİZİ: {market_context}, Yorumlar: {user_notes}
+    GÖREV: Bu aracı almalı mıyım? Fiyat/Performans analizi yap. HTML formatında (<b>, <ul>, <li>) cevap ver.
+    """
+    
+    try:
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        response = model.generate_content(prompt)
+        return {"status": "success", "ai_response": response.text}
+    except Exception as e: 
+        if "429" in str(e):
+            return {"status": "error", "message": "⚠️ Sunucu çok yoğun, lütfen biraz bekleyip tekrar deneyin."}
+        return {"status": "error", "message": str(e)}
+
+@app.post("/analyze")
+async def analyze_listing(data: ListingData):
+    if not data.id or not data.price: return {"status": "error"}
+    try:
+        existing = await listings_collection.find_one({"_id": data.id})
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        response = {"status": "success", "comments": [], "is_price_drop": False, "history": []}
+        if existing:
+            last_price = existing.get("current_price", data.price)
+            if last_price != data.price:
+                await listings_collection.update_one({"_id": data.id}, {"$set": {"current_price": data.price}, "$push": {"history": {"date": now, "price": last_price}}})
+                if data.price < last_price: response["is_price_drop"] = True 
+            full_history = existing.get("history", [])
+            full_history.append({"date": "Şimdi", "price": data.price})
+            response["history"] = full_history
+            response["comments"] = existing.get("comments", [])
+        else:
+            new_record = {"_id": data.id, "title": data.title, "url": data.url, "first_seen_at": now, "current_price": data.price, "history": [], "comments": []}
+            await listings_collection.insert_one(new_record)
+            response["history"] = [{"date": "Şimdi", "price": data.price}]
+        valuation = await calculate_valuation(data.title, data.price, data.id)
+        response["valuation"] = valuation
+        await listings_collection.update_one({"_id": data.id}, {"$set": {"last_update": now}})
+        return response
+    except: return {"status": "error"}
+
+@app.post("/add_comment")
+async def add_comment(comment: CommentData):
+    user_name = comment.username or "Misafir"
+    if comment.user_id:
+        user = await users_collection.find_one({"_id": comment.user_id})
+        if user: user_name = user.get("name", user_name)
+    new_comment = {"id": str(uuid.uuid4()), "user_id": comment.user_id, "user": user_name, "text": comment.text, "date": datetime.now().strftime("%Y-%m-%d %H:%M"), "liked_by": []}
+    await listings_collection.update_one({"_id": comment.listing_id}, {"$push": {"comments": new_comment}})
+    return {"status": "success"}
+
+@app.post("/like_comment")
+async def like_comment(data: LikeData):
+    doc = await listings_collection.find_one({"_id": data.listing_id})
+    if not doc: return {"status": "error"}
+    comments = doc.get("comments", [])
+    updated_comments = []
+    for c in comments:
+        if c.get("id") == data.comment_id:
+            likes = c.get("liked_by", [])
+            if not isinstance(likes, list): likes = []
+            if data.user_id in likes: likes.remove(data.user_id)
+            else: likes.append(data.user_id)
+            c["liked_by"] = likes
+        updated_comments.append(c)
+    await listings_collection.update_one({"_id": data.listing_id}, {"$set": {"comments": updated_comments}})
+    return {"status": "success", "comments": updated_comments}
+
+@app.post("/webhook")
+async def telegram_webhook(request: Request):
+    try:
+        data = await request.json()
+        if "message" in data:
+            chat_id = data["message"]["chat"]["id"]
+            text = data["message"].get("text", "")
+            if text.startswith("/start") and len(text.split()) > 1:
+                google_user_id = text.split()[1]
+                await users_collection.update_one({"_id": google_user_id}, {"$set": {"telegram_chat_id": chat_id}})
+    except: pass
+    return {"status": "ok"}
+
+@app.on_event("startup")
+async def startup_event():
+    start_scheduler()  # <--- BURASI DÜZELDİ
+
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("backend.main:app", host="0.0.0.0", port=port)
