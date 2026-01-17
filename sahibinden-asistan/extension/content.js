@@ -1,9 +1,9 @@
-// content.js - BAI BİLMİŞ: DEĞERLEME MOTORLU VE AJANLI SÜRÜM (v1.2) 🚀
+// content.js - BAI BİLMİŞ v1.3: SÜPÜRGE MODU AKTİF! 🧹🚀
 
 const API_URL = "https://sahiden.onrender.com"; 
 
 // --- GÜNCELLEME AYARI ---
-const CURRENT_VERSION = "1.2"; 
+const CURRENT_VERSION = "1.3"; 
 // ------------------------
 
 console.log(`BAI BILMIS: v${CURRENT_VERSION} Başlatıldı`); 
@@ -21,7 +21,62 @@ if (!userId) {
     localStorage.setItem("sahibinden_userid", userId); 
 }
 
-// --- FONKSİYONLAR ---
+// --- SÜPÜRGE MODU (YENİ ÖZELLİK) ---
+async function runSweepMode() {
+    // Sadece arama sonuçları veya kategori listesi sayfalarında çalış
+    if (document.querySelector('table#searchResultsTable')) {
+        console.log("🧹 Süpürge Modu: Liste sayfası algılandı. Vakumlama başlıyor...");
+        
+        let rows = document.querySelectorAll('tr.searchResultsItem');
+        let batchData = [];
+        
+        rows.forEach(row => {
+            try {
+                let id = row.getAttribute('data-id');
+                let priceText = row.querySelector('.searchResultsPriceValue span')?.innerText;
+                let title = row.querySelector('.searchResultsTitleValue a')?.innerText;
+                let url = row.querySelector('.searchResultsTitleValue a')?.href;
+                
+                // Km ve Yıl genelde dinamik kolonlarda olur, basitleştirilmiş çekim:
+                let attributes = row.querySelectorAll('.searchResultsAttributeValue');
+                let year = attributes.length > 0 ? attributes[0].innerText.trim() : null;
+                let km = attributes.length > 1 ? attributes[1].innerText.trim() : null;
+
+                if (id && priceText) {
+                    let price = parseInt(priceText.replace(/\D/g, ''));
+                    batchData.push({
+                        id: id,
+                        price: price,
+                        title: title || "Liste İlanı",
+                        url: url || "",
+                        year: year,
+                        km: km
+                    });
+                }
+            } catch (e) {
+                // Tek satır hatası süpürgeyi durdurmasın
+            }
+        });
+
+        if (batchData.length > 0) {
+            console.log(`🧹 Süpürge: ${batchData.length} ilan bulundu. Sunucuya gönderiliyor... 🚀`);
+            try {
+                await fetch(`${API_URL}/bulk-upload`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(batchData)
+                });
+                console.log("🧹 Süpürge: İşlem Tamam! Veritabanı beslendi. ✅");
+            } catch (e) {
+                console.log("🧹 Süpürge Hatası:", e);
+            }
+        } else {
+            console.log("🧹 Süpürge: Bu sayfada uygun ilan bulunamadı.");
+        }
+    }
+}
+
+// --- DİĞER FONKSİYONLAR (MEVCUT SİSTEM) ---
 async function checkUpdate() {
     try {
         const res = await fetch(`${API_URL}/version`);
@@ -61,7 +116,6 @@ function getListingData() {
         const id = document.getElementById('classifiedId')?.innerText.trim() || "Bilinmiyor";
         const title = document.querySelector('.classifiedDetailTitle h1')?.innerText.trim() || document.title;
         const desc = document.querySelector('#classifiedDescription')?.innerText || "";
-        
         let km="Bilinmiyor", year="Bilinmiyor";
         document.querySelectorAll('.classifiedInfoList li').forEach(li => {
             const lbl=li.querySelector('strong')?.innerText, val=li.querySelector('span')?.innerText;
@@ -72,13 +126,10 @@ function getListingData() {
     } catch (e) { return null; }
 }
 
-// --- DEĞERLEME BARI (Piyasa Analizi) ---
 function createValuationBar(val) {
     if (!val) return `<div style="font-size:11px; color:#999; text-align:center; margin-top:10px; background:#fff; padding:10px; border-radius:8px;">📉 <b>Yetersiz Güncel Veri</b><br>Son 30 günde yeterli benzer araç ilanı bulunamadı.</div>`;
-    
     let percent = ((val.ratio - 0.7) / (1.3 - 0.7)) * 100;
     if(percent < 0) percent = 5; if(percent > 100) percent = 95;
-    
     return `
         <div style="margin-top:15px; padding:12px; background:white; border-radius:8px; border:1px solid #e0e0e0; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
@@ -88,17 +139,14 @@ function createValuationBar(val) {
                     <div style="font-size:12px; font-weight:bold; color:#333;">${val.average_price.toLocaleString('tr-TR')} TL</div>
                 </div>
             </div>
-            
             <div style="width:100%; height:8px; background:#e0e0e0; border-radius:4px; position:relative; overflow:hidden;">
                 <div style="position:absolute; left:0; width:33%; height:100%; background:#d4edda;"></div>
                 <div style="position:absolute; left:33%; width:34%; height:100%; background:#fff3cd;"></div>
                 <div style="position:absolute; left:67%; width:33%; height:100%; background:#f8d7da;"></div>
                 <div style="position:absolute; left:${percent}%; top:0; width:4px; height:100%; background:#333; transform:scale(1.5); border:1px solid white; box-shadow:0 0 2px rgba(0,0,0,0.5);"></div>
             </div>
-            
             <div style="display:flex; align-items:center; gap:5px; margin-top:8px; font-size:9px; color:#777;">
-                <span>📅</span>
-                <span>${val.info_msg || "Son 30 gün analizi"}</span>
+                <span>📅</span><span>${val.info_msg || "Son 30 gün analizi"}</span>
             </div>
         </div>
     `;
@@ -126,14 +174,11 @@ function makeDraggable(el) {
     };
 }
 
-// --- PANEL ---
 function showOverlay(data, result) {
     const old = document.getElementById('sahibinden-asistan-box'); if(old) old.remove();
     const overlay = document.createElement('div'); overlay.id = 'sahibinden-asistan-box';
-    
     let chartHtml = result?.status==="success" ? createPriceChart(result.history) : "";
-    let valuationHtml = result?.status==="success" ? createValuationBar(result.valuation) : ""; // DEĞERLEME EKLENDİ
-    
+    let valuationHtml = result?.status==="success" ? createValuationBar(result.valuation) : ""; 
     let headerRight = userProfile ? 
         `<div style="display:flex;align-items:center;gap:6px;"><img src="${userProfile.picture}" style="width:22px;height:22px;border-radius:50%;"><span style="font-size:10px;font-weight:bold;">${userProfile.name.split(' ')[0]}</span><span id="logoutText" style="font-size:9px;text-decoration:underline;cursor:pointer;">Çıkış</span><span id="closeOverlayBtn" style="cursor:pointer;font-size:18px;margin-left:5px;">&times;</span></div>` : 
         `<button id="googleLoginBtn" style="background:white;border:none;padding:4px 8px;border-radius:4px;font-size:10px;font-weight:bold;">G Giriş</button><span id="closeOverlayBtn" style="cursor:pointer;font-size:18px;margin-left:5px;">&times;</span>`;
@@ -152,7 +197,8 @@ function showOverlay(data, result) {
                     <div style="font-size:22px;font-weight:800;color:#293542;">${data.price.toLocaleString('tr-TR')} TL</div>
                     <button id="telegramBtn" style="width:100%;background:#0088cc;color:white;border:none;padding:8px;border-radius:6px;font-weight:bold;margin:10px 0;">🔔 Fiyat Alarmı (Telegram)</button>
                 </div>
-                ${valuationHtml} ${chartHtml}
+                ${valuationHtml} 
+                ${chartHtml}
                 <button id="askAiBtn" style="width:100%;background:#293542;color:#FFD000;border:none;padding:12px;border-radius:6px;font-weight:bold;margin-top:15px;">✨ DETAYLI AI ANALİZ</button>
                 <div id="aiResult" style="display:none;font-size:12px;margin-top:15px;background:#fff;padding:12px;border:1px solid #ddd;border-radius:6px;max-height:250px;overflow-y:auto;"></div>
             </div>
@@ -162,17 +208,13 @@ function showOverlay(data, result) {
             </div>
         </div>
     `;
-
     overlay.style.cssText = `position:fixed;top:130px;right:20px;width:320px;background:transparent;border-radius:8px;box-shadow:0 15px 50px rgba(0,0,0,0.3);z-index:2147483647;font-family:'Open Sans',sans-serif;border:1px solid #dcdcdc;`;
-    document.body.appendChild(overlay);
-    makeDraggable(overlay);
+    document.body.appendChild(overlay); makeDraggable(overlay);
 
-    // Eventler
     if(document.getElementById('googleLoginBtn')) document.getElementById('googleLoginBtn').onclick=loginWithGoogle;
     if(document.getElementById('logoutText')) document.getElementById('logoutText').onclick=logout;
     if(document.getElementById('telegramBtn')) document.getElementById('telegramBtn').onclick=handleTelegramClick;
     document.getElementById('closeOverlayBtn').onclick=()=>overlay.remove();
-    
     const tA=document.getElementById('tabAnaliz'), tY=document.getElementById('tabYorumlar'), vA=document.getElementById('viewAnaliz'), vY=document.getElementById('viewYorumlar');
     tA.onclick=()=>{vA.style.display='block';vY.style.display='none';tA.style.background='#fff';tA.style.borderBottom='2px solid #293542';tY.style.background='#e9ecef';tY.style.borderBottom='none';};
     tY.onclick=()=>{vA.style.display='none';vY.style.display='block';tY.style.background='#fff';tY.style.borderBottom='2px solid #293542';tA.style.background='#e9ecef';tA.style.borderBottom='none';};
@@ -199,30 +241,23 @@ function renderComments(c) {
     return c.map(x=>`<div style="border-bottom:1px solid #eee;padding:5px;font-size:11px;"><b>${x.user}</b>: ${x.text}</div>`).join('');
 }
 
-// --- GİZLİ AJAN (BACKGROUND WORKER) ---
+// --- GİZLİ AJAN & BAŞLATICI ---
 async function runBackgroundWorker() {
     console.log("🕵️ Ajan: Görev kontrol ediliyor...");
     try {
         const response = await fetch(`${API_URL}/get-update-task`);
         const task = await response.json();
-        
         if (task.status === "task_found" && task.url) {
             console.log(`🕵️ Ajan: Görev alındı! İlan no: ${task.id} kontrol ediliyor...`);
             const htmlResponse = await fetch(task.url);
             const htmlText = await htmlResponse.text();
-            
             const parser = new DOMParser();
             const doc = parser.parseFromString(htmlText, "text/html");
             let priceText = doc.querySelector('.classifiedInfo h3')?.innerText || doc.querySelector('div.price-info')?.innerText;
-            
             if (priceText) {
                 let price = parseInt(priceText.replace(/\D/g, ''));
                 console.log(`🕵️ Ajan: Fiyat bulundu -> ${price} TL`);
-                await fetch(`${API_URL}/update-price-background`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id: task.id, price: price })
-                });
+                await fetch(`${API_URL}/update-price-background`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: task.id, price: price }) });
                 console.log("🕵️ Ajan: Veritabanı güncellendi! ✅");
             } else { console.log("🕵️ Ajan: Fiyat okunamadı."); }
         } else { console.log("🕵️ Ajan: Güncellenecek eski ilan yok. ☕"); }
@@ -231,6 +266,9 @@ async function runBackgroundWorker() {
 
 async function init() {
     await checkUpdate();
+    await runSweepMode(); // Süpürgeyi çalıştır (Liste sayfasıysa)
+    
+    // Detay sayfasıysa analizi başlat
     const data = getListingData();
     if(data) {
         try {
@@ -240,6 +278,5 @@ async function init() {
     }
 }
 
-// Başlatıcılar
 setTimeout(init, 1000);
-setTimeout(runBackgroundWorker, 5000); // Ajan 5 sn sonra başlar
+setTimeout(runBackgroundWorker, 5000);
