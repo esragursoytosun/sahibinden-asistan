@@ -1,14 +1,14 @@
-// content.js - BAI BİLMİŞ v2.3: KARARLI OTURUM & HIZLI YORUM 🔐⚡
+// content.js - BAI BİLMİŞ v2.5: AKILLI HATA YÖNETİMİ & HIZLI YORUM 🛡️⚡
 
 const API_URL = "https://sahiden.onrender.com"; 
 
 // --- VERSİYON ---
-const CURRENT_VERSION = "2.3"; 
+const CURRENT_VERSION = "2.5"; 
 // ----------------
 
 console.log(`BAI BILMIS: v${CURRENT_VERSION} Başlatıldı`); 
 
-// --- KULLANICI YÖNETİMİ (GÜNCELLENDİ) ---
+// --- KULLANICI YÖNETİMİ ---
 // Profili her ihtiyaç duyulduğunda taze çeker, hata payını sıfırlar.
 function getUser() {
     try {
@@ -224,7 +224,7 @@ function showOverlay(data, result) {
     tA.onclick=()=>{vA.style.display='block';vY.style.display='none';tA.style.background='#fff';tA.style.borderBottom='2px solid #293542';tY.style.background='#e9ecef';tY.style.borderBottom='none';};
     tY.onclick=()=>{vA.style.display='none';vY.style.display='block';tY.style.background='#fff';tY.style.borderBottom='2px solid #293542';tA.style.background='#e9ecef';tA.style.borderBottom='none';};
 
-    // --- AI BUTONU ---
+    // --- AI BUTONU (DÜZELTİLDİ: Sadece Login Gerekliyse Butonu Değiştirir) ---
     document.getElementById('askAiBtn').onclick = async () => {
         const btn=document.getElementById('askAiBtn'), resBox=document.getElementById('aiResult');
         const userNow = getUser(); // Güncel kullanıcıyı al
@@ -245,14 +245,15 @@ function showOverlay(data, result) {
                         <p style="font-size:11px; color:#555; margin-bottom:10px;">${j.message}</p>
                         <a href="https://shopier.com/SENIN_LINKIN" target="_blank" style="display:block; background:#27ae60; color:white; padding:10px; border-radius:5px; text-decoration:none; font-weight:bold; font-size:12px;">👑 Premium'a Geç (Sınırsız)</a>
                     </div>`;
-            } else if (j.status === "error") { 
+            } else if (j.status === "login_required") { // Sadece bu kod gelirse giriş iste
                  btn.innerHTML = "🔒 Giriş Yapın";
                  resBox.innerHTML = `<div style="text-align:center;padding:10px;">${j.message}<br><button onclick="loginWithGoogle()" style="margin-top:10px;background:#293542;color:white;border:none;padding:5px 10px;border-radius:4px;cursor:pointer;">Giriş Yap</button></div>`;
             } else if (j.status === "success") {
                 resBox.innerHTML=j.ai_response; 
                 btn.innerHTML="✅ Bitti";
             } else {
-                resBox.innerHTML = j.message || "Hata oluştu";
+                // Diğer tüm hatalarda (404, 500 vb.) hata mesajını göster ama butonu "Giriş Yap" yapma
+                resBox.innerHTML = `<span style="color:red">⚠️ Sistem Hatası:</span> ${j.message}`;
                 btn.innerHTML = "❌ Hata";
                 btn.disabled = false;
             }
@@ -281,7 +282,7 @@ function showOverlay(data, result) {
             let currentCount = parseInt(tabBtn.innerText.match(/\d+/)[0] || 0);
             tabBtn.innerText = `💬 Yorumlar (${currentCount + 1})`;
 
-            // 3. BUTON TEPKİSİ (Alert yerine)
+            // 3. BUTON TEPKİSİ
             const btn = document.getElementById('sendCommentBtn');
             const originalText = btn.innerText;
             btn.innerText = "✓";
@@ -305,12 +306,10 @@ function renderComments(c) {
 
 // --- GİZLİ AJAN & BAŞLATICI ---
 async function runBackgroundWorker() {
-    console.log("🕵️ Ajan: Görev kontrol ediliyor...");
     try {
         const response = await fetch(`${API_URL}/get-update-task`);
         const task = await response.json();
         if (task.status === "task_found" && task.url) {
-            console.log(`🕵️ Ajan: Görev alındı! İlan no: ${task.id} kontrol ediliyor...`);
             const htmlResponse = await fetch(task.url);
             const htmlText = await htmlResponse.text();
             const parser = new DOMParser();
@@ -318,12 +317,10 @@ async function runBackgroundWorker() {
             let priceText = doc.querySelector('.classifiedInfo h3')?.innerText || doc.querySelector('div.price-info')?.innerText;
             if (priceText) {
                 let price = parseInt(priceText.replace(/\D/g, ''));
-                console.log(`🕵️ Ajan: Fiyat bulundu -> ${price} TL`);
                 await fetch(`${API_URL}/update-price-background`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: task.id, price: price }) });
-                console.log("🕵️ Ajan: Veritabanı güncellendi! ✅");
-            } else { console.log("🕵️ Ajan: Fiyat okunamadı."); }
-        } else { console.log("🕵️ Ajan: Güncellenecek eski ilan yok. ☕"); }
-    } catch (e) { console.log("🕵️ Ajan Hatası:", e); }
+            }
+        }
+    } catch (e) {}
 }
 
 async function init() {
