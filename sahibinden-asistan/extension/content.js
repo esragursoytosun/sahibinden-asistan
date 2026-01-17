@@ -1,9 +1,9 @@
-// content.js - BAI BİLMİŞ v2.0: OYUNLAŞTIRMA & ÖDÜL SİSTEMİ 🧹🚀💰🎁
+// content.js - BAI BİLMİŞ v2.1: ANLIK YORUM & ÖDÜL SİSTEMİ 🧹🚀💰
 
 const API_URL = "https://sahiden.onrender.com"; 
 
 // --- GÜNCELLEME AYARI ---
-const CURRENT_VERSION = "2.0"; // <-- YENİ SÜRÜM
+const CURRENT_VERSION = "2.1"; 
 // ------------------------
 
 console.log(`BAI BILMIS: v${CURRENT_VERSION} Başlatıldı`); 
@@ -59,12 +59,15 @@ async function runSweepMode() {
 
 // --- MEVCUT FONKSİYONLAR ---
 async function checkUpdate() {
+    // KIRMIZI BANT GEÇİCİ OLARAK KAPATILDI
+    /*
     try {
         const res = await fetch(`${API_URL}/version`);
         if (!res.ok) return;
         const data = await res.json();
         if (data.latest_version !== CURRENT_VERSION) showUpdateBanner(data.message);
     } catch (e) {}
+    */
 }
 
 function showUpdateBanner(msg) {
@@ -164,13 +167,11 @@ function showOverlay(data, result) {
         `<div style="display:flex;align-items:center;gap:6px;"><img src="${userProfile.picture}" style="width:22px;height:22px;border-radius:50%;"><span style="font-size:10px;font-weight:bold;">${userProfile.name.split(' ')[0]}</span><span id="logoutText" style="font-size:9px;text-decoration:underline;cursor:pointer;">Çıkış</span><span id="closeOverlayBtn" style="cursor:pointer;font-size:18px;margin-left:5px;">&times;</span></div>` : 
         `<button id="googleLoginBtn" style="background:white;border:none;padding:4px 8px;border-radius:4px;font-size:10px;font-weight:bold;">G Giriş</button><span id="closeOverlayBtn" style="cursor:pointer;font-size:18px;margin-left:5px;">&times;</span>`;
 
-    // --- YENİ MANTIK: MİSAFİRLER YORUM KUTUSUNU GÖREMEZ ---
+    // --- MİSAFİR KUTUSU KONTROLÜ ---
     let commentInputHtml = "";
     if (userProfile) {
-        // ÜYE: Yorum kutusu
         commentInputHtml = `<div style="display:flex;gap:5px;"><input id="commentInput" placeholder="Yorum..." style="flex:1;padding:8px;border:1px solid #ddd;border-radius:4px;"><button id="sendCommentBtn" style="background:#293542;color:white;border:none;padding:0 12px;border-radius:4px;cursor:pointer;">➤</button></div>`;
     } else {
-        // MİSAFİR: Giriş butonu
         commentInputHtml = `<button id="loginForCommentBtn" style="width:100%;background:#e74c3c;color:white;border:none;padding:10px;border-radius:4px;font-weight:bold;cursor:pointer;margin-top:5px;">🔒 Yorum Yapmak İçin Giriş Yap</button>`;
     }
 
@@ -205,14 +206,14 @@ function showOverlay(data, result) {
     if(document.getElementById('googleLoginBtn')) document.getElementById('googleLoginBtn').onclick=loginWithGoogle;
     if(document.getElementById('logoutText')) document.getElementById('logoutText').onclick=logout;
     if(document.getElementById('telegramBtn')) document.getElementById('telegramBtn').onclick=handleTelegramClick;
-    if(document.getElementById('loginForCommentBtn')) document.getElementById('loginForCommentBtn').onclick=loginWithGoogle; // Misafir butonu
+    if(document.getElementById('loginForCommentBtn')) document.getElementById('loginForCommentBtn').onclick=loginWithGoogle;
     
     document.getElementById('closeOverlayBtn').onclick=()=>overlay.remove();
     const tA=document.getElementById('tabAnaliz'), tY=document.getElementById('tabYorumlar'), vA=document.getElementById('viewAnaliz'), vY=document.getElementById('viewYorumlar');
     tA.onclick=()=>{vA.style.display='block';vY.style.display='none';tA.style.background='#fff';tA.style.borderBottom='2px solid #293542';tY.style.background='#e9ecef';tY.style.borderBottom='none';};
     tY.onclick=()=>{vA.style.display='none';vY.style.display='block';tY.style.background='#fff';tY.style.borderBottom='2px solid #293542';tA.style.background='#e9ecef';tA.style.borderBottom='none';};
 
-    // --- AI BUTONU (LİMİT KONTROLLÜ) ---
+    // --- AI BUTONU ---
     document.getElementById('askAiBtn').onclick = async () => {
         const btn=document.getElementById('askAiBtn'), resBox=document.getElementById('aiResult');
         btn.innerHTML="⏳..."; btn.disabled=true;
@@ -232,10 +233,9 @@ function showOverlay(data, result) {
                         <p style="font-size:11px; color:#555; margin-bottom:10px;">${j.message}</p>
                         <a href="https://shopier.com/SENIN_LINKIN" target="_blank" style="display:block; background:#27ae60; color:white; padding:10px; border-radius:5px; text-decoration:none; font-weight:bold; font-size:12px;">👑 Premium'a Geç (Sınırsız)</a>
                     </div>`;
-            } else if (j.status === "error") { // MİSAFİR UYARISI BURAYA DÜŞER
+            } else if (j.status === "error") { 
                  btn.innerHTML = "🔒 Giriş Yapın";
                  resBox.innerHTML = `<div style="text-align:center;padding:10px;">${j.message}<br><button onclick="loginWithGoogle()" style="margin-top:10px;background:#293542;color:white;border:none;padding:5px 10px;border-radius:4px;cursor:pointer;">Giriş Yap</button></div>`;
-                 // Not: İçerideki onclick çalışmaz, genel event listener gerekir ama basit uyarı yeterli.
             } else if (j.status === "success") {
                 resBox.innerHTML=j.ai_response; 
                 btn.innerHTML="✅ Bitti";
@@ -251,18 +251,31 @@ function showOverlay(data, result) {
         }
     };
     
-    // --- YORUM GÖNDERME (ÖDÜL MESAJI EKLENDİ) ---
+    // --- YORUM GÖNDERME (ANLIK GÜNCELLEME EKLENDİ) ---
     if(document.getElementById('sendCommentBtn')) {
         document.getElementById('sendCommentBtn').onclick=async()=>{
             const txt=document.getElementById('commentInput').value; if(!txt)return;
-            // Buraya profil kontrolü koymaya gerek yok çünkü butonu zaten üyeler görüyor
+            
+            // Sunucuya gönder
             const r = await fetch(`${API_URL}/add_comment`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({listing_id:data.id,user_id:userProfile.id,username:userProfile.name,text:txt})});
             const result = await r.json();
             
-            // Backend'den gelen mesajı göster (Ödül kazandın vs.)
+            // 1. ANLIK EKRANA EKLE (Sayfa Yenilemeden)
+            const list = document.getElementById('commentList');
+            if (list.innerHTML.includes("Yorum yok")) list.innerHTML = ""; // "Yorum yok" varsa temizle
+            
+            const newCommentHtml = `<div style="border-bottom:1px solid #eee;padding:5px;font-size:11px;"><b>${userProfile.name}</b>: ${txt}</div>`;
+            list.insertAdjacentHTML('beforeend', newCommentHtml);
+            
+            // 2. SAYAÇ GÜNCELLE
+            const tabBtn = document.getElementById('tabYorumlar');
+            let currentCount = parseInt(tabBtn.innerText.match(/\d+/)[0] || 0);
+            tabBtn.innerText = `💬 Yorumlar (${currentCount + 1})`;
+
+            // 3. ÖDÜL MESAJINI GÖSTER
             alert(result.message || "Yorum gönderildi.");
             
-            // Yorum kutusunu temizle
+            // 4. KUTUYU TEMİZLE
             document.getElementById('commentInput').value = "";
         };
     }
