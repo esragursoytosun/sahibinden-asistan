@@ -31,7 +31,8 @@ GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 
 # --- SABİTLER ---
-FREE_DAILY_LIMIT = 5  # Ücretsiz kullanıcılar için günlük analiz limiti
+FREE_DAILY_LIMIT = 5  # Ücretsiz kullanıcılar için limit
+ADMIN_EMAILS = ["cemerentosun@gmail.com", "esragursoytosun@gmail.com"] # <-- PATRONLAR
 
 if GEMINI_KEY:
     try:
@@ -188,7 +189,7 @@ async def update_price_background(data: ListingData):
         return {"status": "success", "message": "Fiyat güncellendi"}
     return {"status": "error"}
 
-# --- AUTH ---
+# --- AUTH & USER MANAGEMENT (ADMIN EKLENDİ) ---
 @app.post("/auth/google")
 async def google_login(data: GoogleLoginData):
     try:
@@ -201,30 +202,64 @@ async def google_login(data: GoogleLoginData):
                 idinfo = res.json()
                 if 'sub' not in idinfo and 'id' in idinfo: idinfo['sub'] = idinfo['id']
             else: raise ValueError("Token reddedildi.")
+        
         google_id = idinfo['sub']
-        await users_collection.update_one({"_id": google_id}, {"$set": {"email": idinfo.get('email'), "name": idinfo.get('name'), "picture": idinfo.get('picture'), "last_login": datetime.now()}, "$setOnInsert": {"plan": "free", "daily_usage": 0, "telegram_chat_id": None}}, upsert=True)
+        email = idinfo.get('email')
+
+        # GÜNCELLEME VERİSİ HAZIRLA
+        update_data = {
+            "$set": {
+                "email": email, 
+                "name": idinfo.get('name'), 
+                "picture": idinfo.get('picture'), 
+                "last_login": datetime.now()
+            },
+            "$setOnInsert": {
+                "daily_usage": 0,
+                "telegram_chat_id": None
+            }
+        }
+
+        # EĞER MAİL ADRESİ ADMIN LİSTESİNDEYSE -> ZORLA PREMIUM YAP
+        if email in ADMIN_EMAILS:
+            update_data["$set"]["plan"] = "premium"
+        else:
+            # Admin değilse, sadece ilk kayıtta 'free' olsun
+            update_data["$setOnInsert"]["plan"] = "free"
+
+        await users_collection.update_one({"_id": google_id}, update_data, upsert=True)
         return {"status": "success", "user": {"id": google_id, "name": idinfo.get('name'), "picture": idinfo.get('picture')}}
     except Exception as e: raise HTTPException(status_code=401, detail=str(e))
 
-# --- AI ANALİZ (Misafire Kapalı, Üyeye Limitli) ---
+# --- GİZLİ ADMIN PANELİ ---
+@app.get("/admin/upgrade")
+async def upgrade_user(email: str, key: str):
+    if key != "cem_baba": return {"status": "error", "message": "Hatalı Şifre!"}
+    user = await users_collection.find_one({"email": email})
+    if not user: return {"status": "error", "message": "Kullanıcı bulunamadı."}
+    await users_collection.update_one({"email": email},{"$set": {"plan": "premium", "daily_usage": 0}})
+    return {"status": "success", "message": f"{email} artık PREMIUM!"}
+
+# --- AI ANALİZ ---
 @app.post("/analyze-ai")
 async def ask_ai(data: ListingData):
     if not GEMINI_KEY: return {"status": "error", "message": "API Key Eksik!"}
     
-    # 1. MİSAFİR KONTROLÜ (Giriş yapmamışsa engelle)
+    # 1. MİSAFİR KONTROLÜ
     if not data.user_id:
         return {
             "status": "error",
             "message": "🔒 Analiz yapmak için **Giriş Yapmalısınız!**\n\n✅ Üye olunca:\n- Günde 5 Ücretsiz Analiz\n- Yorum Yapma Özelliği\nkazanırsınız.\n\n👑 Sınırsız analiz için Premium'a geçebilirsiniz."
         }
 
-    # 2. LİMİT KONTROLÜ (Giriş yapmışsa hakkına bak)
+    # 2. LİMİT KONTROLÜ
     user = await users_collection.find_one({"_id": data.user_id})
     if user:
         plan = user.get("plan", "free")
         usage = user.get("daily_usage", 0)
         
-        if plan == "free" and usage >= FREE_DAILY_LIMIT:
+        # Premium değilse ve limit dolduysa
+        if plan != "premium" and usage >= FREE_DAILY_LIMIT:
             return {
                 "status": "limit_reached",
                 "message": f"🔒 Günlük {FREE_DAILY_LIMIT} adet ücretsiz analiz hakkınız doldu.\n\n👑 Sınırsız kullanım için **Premium'a geçebilirsiniz!**"
@@ -248,7 +283,6 @@ async def ask_ai(data: ListingData):
     """
     
     try:
-        # MODEL İSMİ GÜNCELLENDİ (Sade sürüm her zaman daha güvenlidir)
         model = genai.GenerativeModel("gemini-1.5-flash")
         response = model.generate_content(prompt)
         return {"status": "success", "ai_response": response.text}
