@@ -206,7 +206,7 @@ async def google_login(data: GoogleLoginData):
         return {"status": "success", "user": {"id": google_id, "name": idinfo.get('name'), "picture": idinfo.get('picture')}}
     except Exception as e: raise HTTPException(status_code=401, detail=str(e))
 
-# --- AI ANALİZ (Misafir Engelli) ---
+# --- AI ANALİZ (Misafire Kapalı, Üyeye Limitli) ---
 @app.post("/analyze-ai")
 async def ask_ai(data: ListingData):
     if not GEMINI_KEY: return {"status": "error", "message": "API Key Eksik!"}
@@ -215,7 +215,7 @@ async def ask_ai(data: ListingData):
     if not data.user_id:
         return {
             "status": "error",
-            "message": "🔒 Bu özellik sadece üyeler içindir. Lütfen giriş yapın."
+            "message": "🔒 Analiz yapmak için **Giriş Yapmalısınız!**\n\n✅ Üye olunca:\n- Günde 5 Ücretsiz Analiz\n- Yorum Yapma Özelliği\nkazanırsınız.\n\n👑 Sınırsız analiz için Premium'a geçebilirsiniz."
         }
 
     # 2. LİMİT KONTROLÜ (Giriş yapmışsa hakkına bak)
@@ -227,7 +227,7 @@ async def ask_ai(data: ListingData):
         if plan == "free" and usage >= FREE_DAILY_LIMIT:
             return {
                 "status": "limit_reached",
-                "message": f"🔒 Günlük {FREE_DAILY_LIMIT} adet ücretsiz analiz hakkınız doldu. Yarın tekrar bekleriz!"
+                "message": f"🔒 Günlük {FREE_DAILY_LIMIT} adet ücretsiz analiz hakkınız doldu.\n\n👑 Sınırsız kullanım için **Premium'a geçebilirsiniz!**"
             }
         
         # Limiti aşmadıysa, kullanımı 1 artır
@@ -248,7 +248,8 @@ async def ask_ai(data: ListingData):
     """
     
     try:
-        model = genai.GenerativeModel("gemini-1.5-flash-001")
+        # MODEL İSMİ GÜNCELLENDİ (Sade sürüm her zaman daha güvenlidir)
+        model = genai.GenerativeModel("gemini-1.5-flash")
         response = model.generate_content(prompt)
         return {"status": "success", "ai_response": response.text}
     except Exception as e:
