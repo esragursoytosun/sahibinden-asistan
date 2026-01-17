@@ -1,9 +1,9 @@
-// content.js - BAI BİLMİŞ v1.3: SÜPÜRGE MODU AKTİF! 🧹🚀
+// content.js - BAI BİLMİŞ v1.4: FREEMIUM & LİMİT SİSTEMİ 🧹🚀💰
 
 const API_URL = "https://sahiden.onrender.com"; 
 
 // --- GÜNCELLEME AYARI ---
-const CURRENT_VERSION = "1.3"; 
+const CURRENT_VERSION = "1.4"; // <-- VERSİYON 1.4 OLDU
 // ------------------------
 
 console.log(`BAI BILMIS: v${CURRENT_VERSION} Başlatıldı`); 
@@ -21,12 +21,10 @@ if (!userId) {
     localStorage.setItem("sahibinden_userid", userId); 
 }
 
-// --- SÜPÜRGE MODU (YENİ ÖZELLİK) ---
+// --- SÜPÜRGE MODU ---
 async function runSweepMode() {
-    // Sadece arama sonuçları veya kategori listesi sayfalarında çalış
     if (document.querySelector('table#searchResultsTable')) {
         console.log("🧹 Süpürge Modu: Liste sayfası algılandı. Vakumlama başlıyor...");
-        
         let rows = document.querySelectorAll('tr.searchResultsItem');
         let batchData = [];
         
@@ -36,47 +34,30 @@ async function runSweepMode() {
                 let priceText = row.querySelector('.searchResultsPriceValue span')?.innerText;
                 let title = row.querySelector('.searchResultsTitleValue a')?.innerText;
                 let url = row.querySelector('.searchResultsTitleValue a')?.href;
-                
-                // Km ve Yıl genelde dinamik kolonlarda olur, basitleştirilmiş çekim:
                 let attributes = row.querySelectorAll('.searchResultsAttributeValue');
                 let year = attributes.length > 0 ? attributes[0].innerText.trim() : null;
                 let km = attributes.length > 1 ? attributes[1].innerText.trim() : null;
 
                 if (id && priceText) {
                     let price = parseInt(priceText.replace(/\D/g, ''));
-                    batchData.push({
-                        id: id,
-                        price: price,
-                        title: title || "Liste İlanı",
-                        url: url || "",
-                        year: year,
-                        km: km
-                    });
+                    batchData.push({ id, price, title: title || "Liste İlanı", url: url || "", year, km });
                 }
-            } catch (e) {
-                // Tek satır hatası süpürgeyi durdurmasın
-            }
+            } catch (e) {}
         });
 
         if (batchData.length > 0) {
             console.log(`🧹 Süpürge: ${batchData.length} ilan bulundu. Sunucuya gönderiliyor... 🚀`);
             try {
                 await fetch(`${API_URL}/bulk-upload`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(batchData)
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(batchData)
                 });
                 console.log("🧹 Süpürge: İşlem Tamam! Veritabanı beslendi. ✅");
-            } catch (e) {
-                console.log("🧹 Süpürge Hatası:", e);
-            }
-        } else {
-            console.log("🧹 Süpürge: Bu sayfada uygun ilan bulunamadı.");
+            } catch (e) { console.log("🧹 Süpürge Hatası:", e); }
         }
     }
 }
 
-// --- DİĞER FONKSİYONLAR (MEVCUT SİSTEM) ---
+// --- MEVCUT FONKSİYONLAR ---
 async function checkUpdate() {
     try {
         const res = await fetch(`${API_URL}/version`);
@@ -219,13 +200,53 @@ function showOverlay(data, result) {
     tA.onclick=()=>{vA.style.display='block';vY.style.display='none';tA.style.background='#fff';tA.style.borderBottom='2px solid #293542';tY.style.background='#e9ecef';tY.style.borderBottom='none';};
     tY.onclick=()=>{vA.style.display='none';vY.style.display='block';tY.style.background='#fff';tY.style.borderBottom='2px solid #293542';tA.style.background='#e9ecef';tA.style.borderBottom='none';};
 
+    // --- YENİ AI BUTONU LOGIC (LİMİT KONTROLLÜ) ---
     document.getElementById('askAiBtn').onclick = async () => {
         const btn=document.getElementById('askAiBtn'), resBox=document.getElementById('aiResult');
         btn.innerHTML="⏳..."; btn.disabled=true;
+        
         try {
-            const r=await fetch(`${API_URL}/analyze-ai`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
-            const j=await r.json(); resBox.style.display="block"; resBox.innerHTML=j.ai_response||j.message; btn.innerHTML="✅ Bitti";
-        } catch(e){resBox.innerHTML="Hata"; btn.disabled=false;}
+            // Backend'e User ID gönderiyoruz
+            const payload = { ...data, user_id: userProfile ? userProfile.id : null };
+
+            const r=await fetch(`${API_URL}/analyze-ai`,{
+                method:'POST',
+                headers:{'Content-Type':'application/json'},
+                body:JSON.stringify(payload)
+            });
+            const j=await r.json(); 
+            
+            resBox.style.display="block"; 
+
+            // LİMİT DOLDUYSA
+            if (j.status === "limit_reached") {
+                btn.innerHTML = "🔒 Limit Doldu";
+                resBox.innerHTML = `
+                    <div style="text-align:center; padding:15px; background:#fff5f5; border:1px solid #ffcccc; border-radius:8px;">
+                        <div style="font-size:32px; margin-bottom:10px;">🛑</div>
+                        <div style="font-weight:bold; color:#c0392b; margin-bottom:5px;">Günlük Limit Doldu</div>
+                        <p style="font-size:11px; color:#555; margin-bottom:10px;">${j.message}</p>
+                        <a href="https://shopier.com/SENIN_LINKIN" target="_blank" style="display:block; background:#27ae60; color:white; padding:10px; border-radius:5px; text-decoration:none; font-weight:bold; font-size:12px;">👑 Premium'a Geç (Sınırsız)</a>
+                    </div>
+                `;
+            } 
+            // BAŞARILI İSE
+            else if (j.status === "success") {
+                resBox.innerHTML=j.ai_response; 
+                btn.innerHTML="✅ Bitti";
+            } 
+            // HATA VARSA
+            else {
+                resBox.innerHTML = j.message || "Hata oluştu";
+                btn.innerHTML = "❌ Hata";
+                btn.disabled = false;
+            }
+
+        } catch(e){
+            resBox.innerHTML="Sunucu hatası veya internet yok."; 
+            btn.innerHTML = "❌ Hata";
+            btn.disabled=false;
+        }
     };
     
     document.getElementById('sendCommentBtn').onclick=async()=>{
