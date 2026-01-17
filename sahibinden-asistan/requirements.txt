@@ -7,4 +7,3 @@ motor
 google-generativeai>=0.8.3
 google-auth
 apscheduler
-
