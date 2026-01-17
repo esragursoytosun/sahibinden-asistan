@@ -1,8 +1,8 @@
 import os
 import uuid
-import requests 
-from datetime import datetime, timedelta 
-from typing import List 
+import requests
+from datetime import datetime, timedelta
+from typing import List
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
@@ -45,7 +45,7 @@ class ListingData(BaseModel):
     description: str | None = None
     km: str | None = None
     year: str | None = None
-    user_id: str | None = None # <-- Kullanıcıyı tanımak için
+    user_id: str | None = None
 
 class CommentData(BaseModel):
     listing_id: str
@@ -69,34 +69,34 @@ async def calculate_valuation(title, current_price, current_id):
         cursor = listings_collection.find().sort("first_seen_at", -1).limit(150)
         all_listings = await cursor.to_list(length=150)
         valid_prices = []
-        cutoff_date = datetime.now() - timedelta(days=30) 
+        cutoff_date = datetime.now() - timedelta(days=30)
         
         for item in all_listings:
             if str(item.get("_id")) == str(current_id): continue
             date_str = item.get("first_seen_at", "2000-01-01 00:00:00")
             try:
                 item_date = datetime.strptime(date_str.split(" ")[0], "%Y-%m-%d")
-                if item_date < cutoff_date: continue 
-            except: continue 
+                if item_date < cutoff_date: continue
+            except: continue
             item_title = item.get("title", "").lower()
             item_price = item.get("current_price", 0)
             match_count = sum(1 for k in keywords if k in item_title)
             if match_count >= 2 and item_price > 0:
                 valid_prices.append(item_price)
         
-        if len(valid_prices) < 3: return None 
+        if len(valid_prices) < 3: return None
         valid_prices.sort()
-        trim_amount = int(len(valid_prices) * 0.1) 
+        trim_amount = int(len(valid_prices) * 0.1)
         if trim_amount > 0: filtered_prices = valid_prices[trim_amount:-trim_amount]
         else: filtered_prices = valid_prices
-        if not filtered_prices: filtered_prices = valid_prices 
+        if not filtered_prices: filtered_prices = valid_prices
 
         avg_price = sum(filtered_prices) / len(filtered_prices)
         ratio = current_price / avg_price
         status = "Piyasa Normali"
-        color = "#f1c40f" 
-        if ratio <= 0.92: status = "🔥 Fırsat (Kelepir)"; color = "#2ecc71" 
-        elif ratio >= 1.08: status = "💸 Piyasa Üstü"; color = "#e74c3c" 
+        color = "#f1c40f"
+        if ratio <= 0.92: status = "🔥 Fırsat (Kelepir)"; color = "#2ecc71"
+        elif ratio >= 1.08: status = "💸 Piyasa Üstü"; color = "#e74c3c"
             
         return {
             "average_price": int(avg_price),
@@ -125,9 +125,9 @@ async def root(): return {"status": "active", "message": "Sahibinden Asistan Sun
 @app.get("/version")
 async def check_version():
     return {
-        "latest_version": "1.4", 
+        "latest_version": "1.4",
         "message": "🧹 SÜPÜRGE MODU AKTİF! Liste sayfalarındaki ilanlar artık otomatik kaydediliyor.",
-        "force_update": False 
+        "force_update": False
     }
 
 # --- SÜPÜRGE MODU (BULK UPLOAD) ---
@@ -147,15 +147,15 @@ async def bulk_upload(listings: List[ListingData]):
             last_price = existing.get("current_price", item.price)
             if last_price != item.price:
                 await listings_collection.update_one(
-                    {"_id": item.id}, 
+                    {"_id": item.id},
                     {"$push": {"history": {"date": now, "price": last_price}}}
                 )
             await listings_collection.update_one(
-                {"_id": item.id}, 
+                {"_id": item.id},
                 {"$set": {
                     "current_price": item.price,
                     "last_update": now,
-                    "url": item.url 
+                    "url": item.url
                 }}
             )
         else:
@@ -186,7 +186,7 @@ async def get_update_task():
             {"$match": {
                 "$or": [{"last_update": {"$lt": yesterday_str}}, {"last_update": {"$exists": False}}]
             }},
-            {"$sample": {"size": 1}} 
+            {"$sample": {"size": 1}}
         ]
         cursor = listings_collection.aggregate(pipeline)
         tasks = await cursor.to_list(length=1)
@@ -226,12 +226,12 @@ async def google_login(data: GoogleLoginData):
         google_id = idinfo['sub']
         
         await users_collection.update_one(
-            {"_id": google_id}, 
+            {"_id": google_id},
             {
                 "$set": {
-                    "email": idinfo.get('email'), 
-                    "name": idinfo.get('name'), 
-                    "picture": idinfo.get('picture'), 
+                    "email": idinfo.get('email'),
+                    "name": idinfo.get('name'),
+                    "picture": idinfo.get('picture'),
                     "last_login": datetime.now()
                 },
                 "$setOnInsert": {
@@ -239,7 +239,7 @@ async def google_login(data: GoogleLoginData):
                     "daily_usage": 0,
                     "telegram_chat_id": None
                 }
-            }, 
+            },
             upsert=True
         )
         return {"status": "success", "user": {"id": google_id, "name": idinfo.get('name'), "picture": idinfo.get('picture')}}
@@ -281,10 +281,11 @@ async def ask_ai(data: ListingData):
     """
     
     try:
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        # GÜNCELLEME: Model ismi tam olarak belirtildi
+        model = genai.GenerativeModel("gemini-1.5-flash-001")
         response = model.generate_content(prompt)
         return {"status": "success", "ai_response": response.text}
-    except Exception as e: 
+    except Exception as e:
         if "429" in str(e):
             return {"status": "error", "message": "⚠️ Sunucu çok yoğun, lütfen biraz bekleyip tekrar deneyin."}
         return {"status": "error", "message": str(e)}
@@ -357,7 +358,7 @@ async def telegram_webhook(request: Request):
 
 @app.on_event("startup")
 async def startup_event():
-    start_scheduler()  # <--- BURASI DÜZELDİ
+    start_scheduler()
 
 if __name__ == "__main__":
     import uvicorn
