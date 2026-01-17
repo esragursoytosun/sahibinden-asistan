@@ -128,7 +128,7 @@ async def root(): return {"status": "active", "message": "Sahibinden Asistan Sun
 @app.get("/version")
 async def check_version():
     return {
-        "latest_version": "2.4", # Frontend v2.4 ile uyumlu
+        "latest_version": "2.6",
         "message": "Güncel",
         "force_update": False
     }
@@ -240,12 +240,12 @@ async def upgrade_user(email: str, key: str):
     await users_collection.update_one({"email": email},{"$set": {"plan": "premium", "daily_usage": 0}})
     return {"status": "success", "message": f"{email} artık PREMIUM!"}
 
-# --- AI ANALİZ ---
+# --- AI ANALİZ (MODEL DÜZELTİLDİ) ---
 @app.post("/analyze-ai")
 async def ask_ai(data: ListingData):
     if not GEMINI_KEY: return {"status": "error", "message": "API Key Eksik!"}
     
-    # 1. MİSAFİR KONTROLÜ (Özel kod: login_required)
+    # 1. MİSAFİR KONTROLÜ (login_required kodu ile)
     if not data.user_id:
         return {"status": "login_required", "message": "Giriş yapın."}
 
@@ -279,14 +279,18 @@ async def ask_ai(data: ListingData):
     """
     
     try:
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        # --- KRİTİK DEĞİŞİKLİK ---
+        # "gemini-1.5-flash" yerine "gemini-pro" kullanıyoruz.
+        # Bu model daha eski kütüphanelerle uyumludur ve 404 hatasını çözer.
+        model = genai.GenerativeModel("gemini-pro") 
+        
         response = model.generate_content(prompt)
         return {"status": "success", "ai_response": response.text}
     except Exception as e:
         if "429" in str(e): return {"status": "error", "message": "⚠️ Sunucu çok yoğun, lütfen bekleyin."}
         return {"status": "error", "message": str(e)}
 
-# --- ANALİZ (GÜNCELLENDİ: SKELETON DOC FIX) ---
+# --- ANALİZ (SKELETON DOC FIX) ---
 @app.post("/analyze")
 async def analyze_listing(data: ListingData):
     if not data.id or not data.price: return {"status": "error"}
@@ -307,18 +311,9 @@ async def analyze_listing(data: ListingData):
 
         if existing:
             last_price = existing.get("current_price", data.price)
-            
             if last_price != data.price:
-                # Fiyat değişmişse geçmişe ekle ve güncelle
-                await listings_collection.update_one(
-                    {"_id": data.id}, 
-                    {
-                        "$set": update_doc,
-                        "$push": {"history": {"date": now, "price": last_price}}
-                    }
-                )
+                await listings_collection.update_one({"_id": data.id}, {"$set": update_doc, "$push": {"history": {"date": now, "price": last_price}}})
             else:
-                # Fiyat aynıysa sadece bilgileri güncelle (Eksik bilgi varsa tamamlar)
                 await listings_collection.update_one({"_id": data.id}, {"$set": update_doc})
             
             full_history = existing.get("history", [])
@@ -326,13 +321,7 @@ async def analyze_listing(data: ListingData):
             response["history"] = full_history
             response["comments"] = existing.get("comments", [])
         else:
-            new_record = {
-                "_id": data.id, 
-                "first_seen_at": now, 
-                "history": [], 
-                "comments": [],
-                **update_doc # Alanları birleştir
-            }
+            new_record = {"_id": data.id, "first_seen_at": now, "history": [], "comments": [], **update_doc}
             await listings_collection.insert_one(new_record)
             response["history"] = [{"date": "Şimdi", "price": data.price}]
             
@@ -341,7 +330,7 @@ async def analyze_listing(data: ListingData):
         return response
     except: return {"status": "error"}
 
-# --- YORUM VE ÖDÜL SİSTEMİ (KRİTİK DÜZELTME: UPSERT=TRUE) ---
+# --- YORUM (UPSERT KORUNDU) ---
 @app.post("/add_comment")
 async def add_comment(comment: CommentData):
     # 1. MİSAFİR KONTROLÜ
@@ -352,19 +341,19 @@ async def add_comment(comment: CommentData):
     user = await users_collection.find_one({"_id": comment.user_id})
     if user: user_name = user.get("name", user_name)
 
-    # Yorumu Ekle (UPSERT EKLENDİ - ARTIK SİLİNMEZ!)
+    # Yorumu Ekle (UPSERT=TRUE İLE KAYIT GARANTİSİ)
     new_comment = {"id": str(uuid.uuid4()), "user_id": comment.user_id, "user": user_name, "text": comment.text, "date": datetime.now().strftime("%Y-%m-%d %H:%M"), "liked_by": []}
     
     await listings_collection.update_one(
         {"_id": comment.listing_id}, 
         {"$push": {"comments": new_comment}},
-        upsert=True # <--- BU SATIR KAYDETME SORUNUNU ÇÖZER
+        upsert=True # İlan yoksa oluştur, varsa ekle
     )
 
     # 2. ÖDÜL SİSTEMİ
     reward_msg = "Yorum eklendi! ✅"
     
-    if user and user.get("plan") != "premium": # Premium değilse
+    if user and user.get("plan") != "premium": 
         today_str = datetime.now().strftime("%Y-%m-%d")
         last_date = user.get("last_comment_date", "")
         
