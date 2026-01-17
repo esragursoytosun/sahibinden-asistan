@@ -31,8 +31,8 @@ GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 
 # --- SABİTLER ---
-FREE_DAILY_LIMIT = 5  # Ücretsiz kullanıcılar için limit
-ADMIN_EMAILS = ["cemerentosun@gmail.com", "esragursoytosun@gmail.com"] # <-- PATRONLAR
+FREE_DAILY_LIMIT = 5  # Standart Günlük Hak
+ADMIN_EMAILS = ["cemerentosun@gmail.com", "esragursoytosun@gmail.com"]
 
 if GEMINI_KEY:
     try:
@@ -189,7 +189,7 @@ async def update_price_background(data: ListingData):
         return {"status": "success", "message": "Fiyat güncellendi"}
     return {"status": "error"}
 
-# --- AUTH & USER MANAGEMENT (ADMIN EKLENDİ) ---
+# --- AUTH & USER MANAGEMENT ---
 @app.post("/auth/google")
 async def google_login(data: GoogleLoginData):
     try:
@@ -206,7 +206,6 @@ async def google_login(data: GoogleLoginData):
         google_id = idinfo['sub']
         email = idinfo.get('email')
 
-        # GÜNCELLEME VERİSİ HAZIRLA
         update_data = {
             "$set": {
                 "email": email, 
@@ -216,15 +215,16 @@ async def google_login(data: GoogleLoginData):
             },
             "$setOnInsert": {
                 "daily_usage": 0,
+                "comment_progress": 0,
+                "earned_credits_today": 0,
                 "telegram_chat_id": None
             }
         }
 
-        # EĞER MAİL ADRESİ ADMIN LİSTESİNDEYSE -> ZORLA PREMIUM YAP
+        # PATRON MODU
         if email in ADMIN_EMAILS:
             update_data["$set"]["plan"] = "premium"
         else:
-            # Admin değilse, sadece ilk kayıtta 'free' olsun
             update_data["$setOnInsert"]["plan"] = "free"
 
         await users_collection.update_one({"_id": google_id}, update_data, upsert=True)
@@ -249,7 +249,7 @@ async def ask_ai(data: ListingData):
     if not data.user_id:
         return {
             "status": "error",
-            "message": "🔒 Analiz yapmak için **Giriş Yapmalısınız!**\n\n✅ Üye olunca:\n- Günde 5 Ücretsiz Analiz\n- Yorum Yapma Özelliği\nkazanırsınız.\n\n👑 Sınırsız analiz için Premium'a geçebilirsiniz."
+            "message": "🔒 Analiz yapmak için **Giriş Yapmalısınız!**"
         }
 
     # 2. LİMİT KONTROLÜ
@@ -262,10 +262,9 @@ async def ask_ai(data: ListingData):
         if plan != "premium" and usage >= FREE_DAILY_LIMIT:
             return {
                 "status": "limit_reached",
-                "message": f"🔒 Günlük {FREE_DAILY_LIMIT} adet ücretsiz analiz hakkınız doldu.\n\n👑 Sınırsız kullanım için **Premium'a geçebilirsiniz!**"
+                "message": f"🔒 Günlük {FREE_DAILY_LIMIT} adet ücretsiz analiz hakkınız doldu.\n\n💬 **İPUCU:** 5 farklı ilana yorum yaparsan **+1 Analiz Hakkı** kazanırsın!\n(Günde en fazla 2 ek hak kazanılabilir)\n\n👑 Sınırsız analiz için Premium'a geç."
             }
         
-        # Limiti aşmadıysa, kullanımı 1 artır
         await users_collection.update_one({"_id": data.user_id}, {"$inc": {"daily_usage": 1}})
 
     # 3. ANALİZ İŞLEMİ
@@ -290,41 +289,76 @@ async def ask_ai(data: ListingData):
         if "429" in str(e): return {"status": "error", "message": "⚠️ Sunucu çok yoğun, lütfen bekleyin."}
         return {"status": "error", "message": str(e)}
 
-@app.post("/analyze")
-async def analyze_listing(data: ListingData):
-    if not data.id or not data.price: return {"status": "error"}
-    try:
-        existing = await listings_collection.find_one({"_id": data.id})
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        response = {"status": "success", "comments": [], "is_price_drop": False, "history": []}
-        if existing:
-            last_price = existing.get("current_price", data.price)
-            if last_price != data.price:
-                await listings_collection.update_one({"_id": data.id}, {"$set": {"current_price": data.price}, "$push": {"history": {"date": now, "price": last_price}}})
-                if data.price < last_price: response["is_price_drop"] = True 
-            full_history = existing.get("history", [])
-            full_history.append({"date": "Şimdi", "price": data.price})
-            response["history"] = full_history
-            response["comments"] = existing.get("comments", [])
-        else:
-            new_record = {"_id": data.id, "title": data.title, "url": data.url, "first_seen_at": now, "current_price": data.price, "history": [], "comments": []}
-            await listings_collection.insert_one(new_record)
-            response["history"] = [{"date": "Şimdi", "price": data.price}]
-        valuation = await calculate_valuation(data.title, data.price, data.id)
-        response["valuation"] = valuation
-        await listings_collection.update_one({"_id": data.id}, {"$set": {"last_update": now}})
-        return response
-    except: return {"status": "error"}
-
+# --- YORUM VE ÖDÜL SİSTEMİ (YENİ KURGU: 5 Yorum = 1 Hak / Max 2 Kez) ---
 @app.post("/add_comment")
 async def add_comment(comment: CommentData):
+    # 1. MİSAFİR KONTROLÜ
+    if not comment.user_id:
+        return {"status": "error", "message": "❌ Yorum yapmak için giriş yapmalısınız!"}
+
     user_name = comment.username or "Misafir"
-    if comment.user_id:
-        user = await users_collection.find_one({"_id": comment.user_id})
-        if user: user_name = user.get("name", user_name)
+    user = await users_collection.find_one({"_id": comment.user_id})
+    if user: user_name = user.get("name", user_name)
+
+    # Yorumu Ekle
     new_comment = {"id": str(uuid.uuid4()), "user_id": comment.user_id, "user": user_name, "text": comment.text, "date": datetime.now().strftime("%Y-%m-%d %H:%M"), "liked_by": []}
     await listings_collection.update_one({"_id": comment.listing_id}, {"$push": {"comments": new_comment}})
-    return {"status": "success"}
+
+    # 2. ÖDÜL SİSTEMİ
+    reward_msg = "Yorum eklendi! ✅"
+    
+    if user and user.get("plan") != "premium": # Premium değilse
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        last_date = user.get("last_comment_date", "")
+        
+        # Eğer gün değiştiyse sayaçları sıfırla
+        if last_date != today_str:
+            earned_today = 0
+            current_progress = 0
+        else:
+            earned_today = user.get("earned_credits_today", 0)
+            current_progress = user.get("comment_progress", 0)
+
+        # Eğer günlük max ödül (2 tane) alınmadıysa devam et
+        if earned_today < 2:
+            current_progress += 1
+            
+            # 5 Yorum hedefine ulaşıldı mı?
+            if current_progress >= 5:
+                # Ödülü ver, sayacı sıfırla
+                await users_collection.update_one(
+                    {"_id": comment.user_id}, 
+                    {
+                        "$set": {
+                            "comment_progress": 0, 
+                            "last_comment_date": today_str,
+                            "earned_credits_today": earned_today + 1
+                        },
+                        "$inc": {"daily_usage": -1} # Limiti 1 geri çek (hak ver)
+                    }
+                )
+                reward_msg = f"🎉 TEBRİKLER! 5 yorum yaptın ve +1 Analiz Hakkı kazandın! (Bugün: {earned_today + 1}/2 Ödül) 🎁"
+            else:
+                # İlerlemeyi kaydet
+                await users_collection.update_one(
+                    {"_id": comment.user_id}, 
+                    {
+                        "$set": {
+                            "comment_progress": current_progress,
+                            "last_comment_date": today_str
+                        }
+                    }
+                )
+                reward_msg = f"Yorum eklendi. ({current_progress}/5 yorum sonra +1 Hak! 🎁)"
+        else:
+            # Günlük ödül limiti doldu
+             await users_collection.update_one(
+                    {"_id": comment.user_id}, 
+                    {"$set": {"last_comment_date": today_str}}
+            )
+             reward_msg = "Yorum eklendi. (Bugünlük kazanabileceğiniz maksimum ek hakka ulaştınız) ✅"
+
+    return {"status": "success", "message": reward_msg}
 
 @app.post("/like_comment")
 async def like_comment(data: LikeData):
