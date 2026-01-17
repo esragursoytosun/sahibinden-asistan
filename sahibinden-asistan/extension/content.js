@@ -1,40 +1,25 @@
-// content.js - BAI BİLMİŞ v2.5: AKILLI HATA YÖNETİMİ & HIZLI YORUM 🛡️⚡
+// content.js - BAI BİLMİŞ v2.6: AKILLI HATA YÖNETİMİ & HIZLI YORUM 🛡️⚡
 
 const API_URL = "https://sahiden.onrender.com"; 
 
-// --- VERSİYON ---
-const CURRENT_VERSION = "2.5"; 
-// ----------------
-
+const CURRENT_VERSION = "2.6"; 
 console.log(`BAI BILMIS: v${CURRENT_VERSION} Başlatıldı`); 
 
-// --- KULLANICI YÖNETİMİ ---
-// Profili her ihtiyaç duyulduğunda taze çeker, hata payını sıfırlar.
 function getUser() {
     try {
         const stored = localStorage.getItem("sahibinden_user_profile");
-        if (stored && stored !== "undefined" && stored !== "null") {
-            return JSON.parse(stored);
-        }
-    } catch (e) {
-        localStorage.removeItem("sahibinden_user_profile");
-    }
+        if (stored && stored !== "undefined" && stored !== "null") return JSON.parse(stored);
+    } catch (e) { localStorage.removeItem("sahibinden_user_profile"); }
     return null;
 }
 
-// Cihaz ID (Misafirler için)
-let deviceId = localStorage.getItem("sahibinden_userid");
-if (!deviceId) { 
-    deviceId = "uid_" + Math.random().toString(36).substr(2, 9); 
-    localStorage.setItem("sahibinden_userid", deviceId); 
-}
+let userId = localStorage.getItem("sahibinden_userid");
+if (!userId) { userId = "uid_" + Math.random().toString(36).substr(2, 9); localStorage.setItem("sahibinden_userid", userId); }
 
-// --- SÜPÜRGE MODU ---
 async function runSweepMode() {
     if (document.querySelector('table#searchResultsTable')) {
         let rows = document.querySelectorAll('tr.searchResultsItem');
         let batchData = [];
-        
         rows.forEach(row => {
             try {
                 let id = row.getAttribute('data-id');
@@ -44,59 +29,35 @@ async function runSweepMode() {
                 let attributes = row.querySelectorAll('.searchResultsAttributeValue');
                 let year = attributes.length > 0 ? attributes[0].innerText.trim() : null;
                 let km = attributes.length > 1 ? attributes[1].innerText.trim() : null;
-
                 if (id && priceText) {
                     let price = parseInt(priceText.replace(/\D/g, ''));
                     batchData.push({ id, price, title: title || "Liste İlanı", url: url || "", year, km });
                 }
             } catch (e) {}
         });
-
         if (batchData.length > 0) {
-            try {
-                await fetch(`${API_URL}/bulk-upload`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(batchData)
-                });
-            } catch (e) {}
+            try { await fetch(`${API_URL}/bulk-upload`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(batchData) }); } catch (e) {}
         }
     }
 }
 
-// --- LOGİN İŞLEMLERİ ---
 function loginWithGoogle() {
-    const btn = document.getElementById('googleLoginBtn'); 
-    if(btn) btn.innerText="⌛";
-    
-    // Yorum kısmındaki buton için
-    const commentBtn = document.getElementById('loginForCommentBtn');
-    if(commentBtn) commentBtn.innerText = "Giriş Yapılıyor...";
-
+    const btn = document.getElementById('googleLoginBtn'); if(btn) btn.innerText="⌛";
     chrome.runtime.sendMessage({ action: "login" }, (res) => {
         if (res && res.status === "success") {
             localStorage.setItem("sahibinden_user_profile", JSON.stringify(res.user));
-            location.reload(); // Sayfayı yenile ki her şey otursun
-        } else { 
-            alert("Giriş başarısız."); 
-            if(btn) btn.innerText="Giriş";
-            if(commentBtn) commentBtn.innerText = "🔒 Yorum Yapmak İçin Giriş Yap";
-        }
+            location.reload();
+        } else { alert("Giriş başarısız."); if(btn) btn.innerText="Giriş"; }
     });
 }
-
-function logout() { 
-    if(confirm("Çıkış yapmak istiyor musunuz?")) { 
-        localStorage.removeItem("sahibinden_user_profile"); 
-        location.reload(); 
-    } 
-}
+function logout() { if(confirm("Çıkış?")) { localStorage.removeItem("sahibinden_user_profile"); location.reload(); } }
 
 function handleTelegramClick() {
     const user = getUser();
-    if (!user) { if(confirm("Bildirim almak için giriş yapmalısınız. Yapılsın mı?")) loginWithGoogle(); return; }
+    if (!user) { if(confirm("Giriş yapmalısın. Yapılsın mı?")) loginWithGoogle(); return; }
     window.open(`https://t.me/BAIBilmisBot?start=${user.id}`, '_blank');
 }
 
-// --- VERİ ÇEKME ---
 function getListingData() {
     try {
         let price = parseInt((document.querySelector('.classifiedInfo h3')?.innerText || document.querySelector('div.price-info')?.innerText || "0").replace(/\D/g, ''));
@@ -113,7 +74,6 @@ function getListingData() {
     } catch (e) { return null; }
 }
 
-// --- GÖRSEL BİLEŞENLER ---
 function createValuationBar(val) {
     if (!val) return `<div style="font-size:11px; color:#999; text-align:center; margin-top:10px; background:#fff; padding:10px; border-radius:8px;">📉 <b>Yetersiz Güncel Veri</b><br>Son 30 günde yeterli benzer araç ilanı bulunamadı.</div>`;
     let percent = ((val.ratio - 0.7) / (1.3 - 0.7)) * 100;
@@ -165,25 +125,17 @@ function makeDraggable(el) {
 function showOverlay(data, result) {
     const old = document.getElementById('sahibinden-asistan-box'); if(old) old.remove();
     const overlay = document.createElement('div'); overlay.id = 'sahibinden-asistan-box';
-    
-    // KULLANICIYI BURADA TAZE ÇEKİYORUZ
     const currentUser = getUser();
     
     let chartHtml = result?.status==="success" ? createPriceChart(result.history) : "";
     let valuationHtml = result?.status==="success" ? createValuationBar(result.valuation) : ""; 
-    
-    // HEADER (Üst Kısım)
     let headerRight = currentUser ? 
         `<div style="display:flex;align-items:center;gap:6px;"><img src="${currentUser.picture}" style="width:22px;height:22px;border-radius:50%;"><span style="font-size:10px;font-weight:bold;">${currentUser.name.split(' ')[0]}</span><span id="logoutText" style="font-size:9px;text-decoration:underline;cursor:pointer;">Çıkış</span><span id="closeOverlayBtn" style="cursor:pointer;font-size:18px;margin-left:5px;">&times;</span></div>` : 
         `<button id="googleLoginBtn" style="background:white;border:none;padding:4px 8px;border-radius:4px;font-size:10px;font-weight:bold;">G Giriş</button><span id="closeOverlayBtn" style="cursor:pointer;font-size:18px;margin-left:5px;">&times;</span>`;
 
-    // YORUM ALANI (Giriş yaptıysa kutu, yapmadıysa buton)
-    let commentInputHtml = "";
-    if (currentUser) {
-        commentInputHtml = `<div style="display:flex;gap:5px;"><input id="commentInput" placeholder="Yorum..." style="flex:1;padding:8px;border:1px solid #ddd;border-radius:4px;"><button id="sendCommentBtn" style="background:#293542;color:white;border:none;padding:0 12px;border-radius:4px;cursor:pointer;">➤</button></div>`;
-    } else {
-        commentInputHtml = `<button id="loginForCommentBtn" style="width:100%;background:#e74c3c;color:white;border:none;padding:10px;border-radius:4px;font-weight:bold;cursor:pointer;margin-top:5px;">🔒 Yorum Yapmak İçin Giriş Yap</button>`;
-    }
+    let commentInputHtml = currentUser ? 
+        `<div style="display:flex;gap:5px;"><input id="commentInput" placeholder="Yorum..." style="flex:1;padding:8px;border:1px solid #ddd;border-radius:4px;"><button id="sendCommentBtn" style="background:#293542;color:white;border:none;padding:0 12px;border-radius:4px;cursor:pointer;">➤</button></div>` :
+        `<button id="loginForCommentBtn" style="width:100%;background:#e74c3c;color:white;border:none;padding:10px;border-radius:4px;font-weight:bold;cursor:pointer;margin-top:5px;">🔒 Yorum Yapmak İçin Giriş Yap</button>`;
 
     overlay.innerHTML = `
         <div id="sahibinden-asistan-header" style="background:#FFD000;color:#222;padding:10px 15px;border-top-left-radius:8px;border-top-right-radius:8px;display:flex;justify-content:space-between;align-items:center;cursor:grab;box-shadow:0 2px 5px rgba(0,0,0,0.1);">
@@ -213,13 +165,12 @@ function showOverlay(data, result) {
     overlay.style.cssText = `position:fixed;top:130px;right:20px;width:320px;background:transparent;border-radius:8px;box-shadow:0 15px 50px rgba(0,0,0,0.3);z-index:2147483647;font-family:'Open Sans',sans-serif;border:1px solid #dcdcdc;`;
     document.body.appendChild(overlay); makeDraggable(overlay);
 
-    // Event Listeners
     if(document.getElementById('googleLoginBtn')) document.getElementById('googleLoginBtn').onclick=loginWithGoogle;
     if(document.getElementById('logoutText')) document.getElementById('logoutText').onclick=logout;
     if(document.getElementById('telegramBtn')) document.getElementById('telegramBtn').onclick=handleTelegramClick;
     if(document.getElementById('loginForCommentBtn')) document.getElementById('loginForCommentBtn').onclick=loginWithGoogle;
-    
     document.getElementById('closeOverlayBtn').onclick=()=>overlay.remove();
+    
     const tA=document.getElementById('tabAnaliz'), tY=document.getElementById('tabYorumlar'), vA=document.getElementById('viewAnaliz'), vY=document.getElementById('viewYorumlar');
     tA.onclick=()=>{vA.style.display='block';vY.style.display='none';tA.style.background='#fff';tA.style.borderBottom='2px solid #293542';tY.style.background='#e9ecef';tY.style.borderBottom='none';};
     tY.onclick=()=>{vA.style.display='none';vY.style.display='block';tY.style.background='#fff';tY.style.borderBottom='2px solid #293542';tA.style.background='#e9ecef';tA.style.borderBottom='none';};
@@ -245,7 +196,7 @@ function showOverlay(data, result) {
                         <p style="font-size:11px; color:#555; margin-bottom:10px;">${j.message}</p>
                         <a href="https://shopier.com/SENIN_LINKIN" target="_blank" style="display:block; background:#27ae60; color:white; padding:10px; border-radius:5px; text-decoration:none; font-weight:bold; font-size:12px;">👑 Premium'a Geç (Sınırsız)</a>
                     </div>`;
-            } else if (j.status === "login_required") { // Sadece bu kod gelirse giriş iste
+            } else if (j.status === "login_required") { // Sadece Backend'den bu kod gelirse
                  btn.innerHTML = "🔒 Giriş Yapın";
                  resBox.innerHTML = `<div style="text-align:center;padding:10px;">${j.message}<br><button onclick="loginWithGoogle()" style="margin-top:10px;background:#293542;color:white;border:none;padding:5px 10px;border-radius:4px;cursor:pointer;">Giriş Yap</button></div>`;
             } else if (j.status === "success") {
@@ -304,29 +255,23 @@ function renderComments(c) {
     return c.map(x=>`<div style="border-bottom:1px solid #eee;padding:5px;font-size:11px;"><b>${x.user}</b>: ${x.text}</div>`).join('');
 }
 
-// --- GİZLİ AJAN & BAŞLATICI ---
 async function runBackgroundWorker() {
     try {
         const response = await fetch(`${API_URL}/get-update-task`);
         const task = await response.json();
         if (task.status === "task_found" && task.url) {
             const htmlResponse = await fetch(task.url);
-            const htmlText = await htmlResponse.text();
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(htmlText, "text/html");
+            const doc = new DOMParser().parseFromString(await htmlResponse.text(), "text/html");
             let priceText = doc.querySelector('.classifiedInfo h3')?.innerText || doc.querySelector('div.price-info')?.innerText;
             if (priceText) {
-                let price = parseInt(priceText.replace(/\D/g, ''));
-                await fetch(`${API_URL}/update-price-background`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: task.id, price: price }) });
+                await fetch(`${API_URL}/update-price-background`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: task.id, price: parseInt(priceText.replace(/\D/g, '')) }) });
             }
         }
     } catch (e) {}
 }
 
 async function init() {
-    // await checkUpdate(); // Kapalı
     await runSweepMode(); 
-    
     const data = getListingData();
     if(data) {
         try {
