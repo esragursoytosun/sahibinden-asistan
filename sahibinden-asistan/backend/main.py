@@ -130,6 +130,21 @@ async def check_version():
         "force_update": False
     }
 
+# --- YENİ DEBUG ENDPOINT (MODEL LİSTESİNİ GÖRMEK İÇİN) ---
+@app.get("/debug-models")
+async def debug_models():
+    """Sunucuda kullanılabilir Gemini modellerini listeler."""
+    if not GEMINI_KEY:
+        return {"error": "API Key eksik"}
+    try:
+        models = []
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                models.append(m.name)
+        return {"available_models": models}
+    except Exception as e:
+        return {"error": str(e)}
+
 # --- SÜPÜRGE MODU (BULK UPLOAD) ---
 @app.post("/bulk-upload")
 async def bulk_upload(listings: List[ListingData]):
@@ -281,7 +296,8 @@ async def ask_ai(data: ListingData):
     """
     
     try:
-        # GÜNCELLEME: Model ismi tam olarak belirtildi
+        # ÖNEMLİ: Model ismi. Eğer hata alırsan tarayıcıdan /debug-models adresine gir
+        # ve orada gördüğün model ismini buraya yaz.
         model = genai.GenerativeModel("gemini-1.5-flash-001")
         response = model.generate_content(prompt)
         return {"status": "success", "ai_response": response.text}
