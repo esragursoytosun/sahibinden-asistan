@@ -1,350 +1,270 @@
-import os
-import uuid
-import requests
-import json
-from datetime import datetime, timedelta
-from typing import List
-from fastapi import FastAPI, HTTPException, Request
-from pydantic import BaseModel
-from fastapi.middleware.cors import CORSMiddleware
-from google.oauth2 import id_token
-from google.auth.transport import requests as google_requests
-from dotenv import load_dotenv
+// content.js - BAI BİLMİŞ v2.7: MULTI-MODEL AI & HIZLI YORUM 🛡️⚡
 
-# --- AYARLAR ---
-load_dotenv()
-from backend.database import listings_collection, users_collection
-from backend.scheduler import start_scheduler
+const API_URL = "https://sahiden.onrender.com"; 
 
-app = FastAPI()
+const CURRENT_VERSION = "2.7"; 
+console.log(`BAI BILMIS: v${CURRENT_VERSION} Başlatıldı`); 
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+function getUser() {
+    try {
+        const stored = localStorage.getItem("sahibinden_user_profile");
+        if (stored && stored !== "undefined" && stored !== "null") return JSON.parse(stored);
+    } catch (e) { localStorage.removeItem("sahibinden_user_profile"); }
+    return null;
+}
 
-GEMINI_KEY = os.environ.get("GEMINI_API_KEY")
-GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
+let userId = localStorage.getItem("sahibinden_userid");
+if (!userId) { userId = "uid_" + Math.random().toString(36).substr(2, 9); localStorage.setItem("sahibinden_userid", userId); }
 
-# --- SABİTLER ---
-FREE_DAILY_LIMIT = 5
-ADMIN_EMAILS = ["cemerentosun@gmail.com", "esragursoytosun@gmail.com"]
+async function runSweepMode() {
+    if (document.querySelector('table#searchResultsTable')) {
+        let rows = document.querySelectorAll('tr.searchResultsItem');
+        let batchData = [];
+        rows.forEach(row => {
+            try {
+                let id = row.getAttribute('data-id');
+                let priceText = row.querySelector('.searchResultsPriceValue span')?.innerText;
+                let title = row.querySelector('.searchResultsTitleValue a')?.innerText;
+                let url = row.querySelector('.searchResultsTitleValue a')?.href;
+                let attributes = row.querySelectorAll('.searchResultsAttributeValue');
+                let year = attributes.length > 0 ? attributes[0].innerText.trim() : null;
+                let km = attributes.length > 1 ? attributes[1].innerText.trim() : null;
+                if (id && priceText) {
+                    let price = parseInt(priceText.replace(/\D/g, ''));
+                    batchData.push({ id, price, title: title || "Liste İlanı", url: url || "", year, km });
+                }
+            } catch (e) {}
+        });
+        if (batchData.length > 0) {
+            try { await fetch(`${API_URL}/bulk-upload`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(batchData) }); } catch (e) {}
+        }
+    }
+}
 
-# --- VERİ MODELLERİ ---
-class ListingData(BaseModel):
-    id: str | None = None
-    price: int | float | None = None
-    title: str | None = None
-    url: str | None = None
-    description: str | None = None
-    km: str | None = None
-    year: str | None = None
-    user_id: str | None = None
+function loginWithGoogle() {
+    const btn = document.getElementById('googleLoginBtn'); if(btn) btn.innerText="⌛";
+    chrome.runtime.sendMessage({ action: "login" }, (res) => {
+        if (res && res.status === "success") {
+            localStorage.setItem("sahibinden_user_profile", JSON.stringify(res.user));
+            location.reload();
+        } else { alert("Giriş başarısız."); if(btn) btn.innerText="Giriş"; }
+    });
+}
+function logout() { if(confirm("Çıkış?")) { localStorage.removeItem("sahibinden_user_profile"); location.reload(); } }
 
-class CommentData(BaseModel):
-    listing_id: str
-    user_id: str
-    text: str
-    username: str | None = None
+function handleTelegramClick() {
+    const user = getUser();
+    if (!user) { if(confirm("Giriş yapmalısın. Yapılsın mı?")) loginWithGoogle(); return; }
+    window.open(`https://t.me/BAIBilmisBot?start=${user.id}`, '_blank');
+}
 
-class LikeData(BaseModel):
-    listing_id: str
-    comment_id: str
-    user_id: str
+function getListingData() {
+    try {
+        let price = parseInt((document.querySelector('.classifiedInfo h3')?.innerText || document.querySelector('div.price-info')?.innerText || "0").replace(/\D/g, ''));
+        const id = document.getElementById('classifiedId')?.innerText.trim() || "Bilinmiyor";
+        const title = document.querySelector('.classifiedDetailTitle h1')?.innerText.trim() || document.title;
+        const desc = document.querySelector('#classifiedDescription')?.innerText || "";
+        let km="Bilinmiyor", year="Bilinmiyor";
+        document.querySelectorAll('.classifiedInfoList li').forEach(li => {
+            const lbl=li.querySelector('strong')?.innerText, val=li.querySelector('span')?.innerText;
+            if(lbl?.includes("KM")) km=val; if(lbl?.includes("Yıl")) year=val;
+        });
+        if (!price) return null;
+        return { id, price, title, description: desc, km, year, url: window.location.href };
+    } catch (e) { return null; }
+}
 
-class GoogleLoginData(BaseModel):
-    token: str
+function createValuationBar(val) {
+    if (!val) return `<div style="font-size:11px; color:#999; text-align:center; margin-top:10px; background:#fff; padding:10px; border-radius:8px;">📉 <b>Yetersiz Güncel Veri</b><br>Son 30 günde yeterli benzer araç ilanı bulunamadı.</div>`;
+    let percent = ((val.ratio - 0.7) / (1.3 - 0.7)) * 100;
+    if(percent < 0) percent = 5; if(percent > 100) percent = 95;
+    return `
+        <div style="margin-top:15px; padding:12px; background:white; border-radius:8px; border:1px solid #e0e0e0; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <span style="font-size:13px; font-weight:800; color:${val.color};">${val.status}</span>
+                <div style="text-align:right;">
+                    <div style="font-size:10px; color:#999;">Piyasa Ortalaması</div>
+                    <div style="font-size:12px; font-weight:bold; color:#333;">${val.average_price.toLocaleString('tr-TR')} TL</div>
+                </div>
+            </div>
+            <div style="width:100%; height:8px; background:#e0e0e0; border-radius:4px; position:relative; overflow:hidden;">
+                <div style="position:absolute; left:0; width:33%; height:100%; background:#d4edda;"></div>
+                <div style="position:absolute; left:33%; width:34%; height:100%; background:#fff3cd;"></div>
+                <div style="position:absolute; left:67%; width:33%; height:100%; background:#f8d7da;"></div>
+                <div style="position:absolute; left:${percent}%; top:0; width:4px; height:100%; background:#333; transform:scale(1.5); border:1px solid white; box-shadow:0 0 2px rgba(0,0,0,0.5);"></div>
+            </div>
+            <div style="display:flex; align-items:center; gap:5px; margin-top:8px; font-size:9px; color:#777;">
+                <span>📅</span><span>${val.info_msg || "Son 30 gün analizi"}</span>
+            </div>
+        </div>
+    `;
+}
 
-# --- YARDIMCI FONKSİYONLAR ---
-async def calculate_valuation(title, current_price, current_id):
-    if not title or not current_price: return None
-    try:
-        keywords = [k.lower() for k in title.split() if len(k) > 2][:3]
-        cursor = listings_collection.find().sort("first_seen_at", -1).limit(150)
-        all_listings = await cursor.to_list(length=150)
-        valid_prices = []
-        cutoff_date = datetime.now() - timedelta(days=30)
-        
-        for item in all_listings:
-            if str(item.get("_id")) == str(current_id): continue
-            date_str = item.get("first_seen_at", "2000-01-01 00:00:00")
-            try:
-                item_date = datetime.strptime(date_str.split(" ")[0], "%Y-%m-%d")
-                if item_date < cutoff_date: continue
-            except: continue
-            item_title = item.get("title", "").lower()
-            item_price = item.get("current_price", 0)
-            match_count = sum(1 for k in keywords if k in item_title)
-            if match_count >= 2 and item_price > 0:
-                valid_prices.append(item_price)
-        
-        if len(valid_prices) < 3: return None
-        valid_prices.sort()
-        trim_amount = int(len(valid_prices) * 0.1)
-        if trim_amount > 0: filtered_prices = valid_prices[trim_amount:-trim_amount]
-        else: filtered_prices = valid_prices
-        if not filtered_prices: filtered_prices = valid_prices
+function createPriceChart(history) {
+    if (!history || history.length < 2) return ''; 
+    const w=240, h=50, pad=5;
+    const prices=history.map(h=>h.price), min=Math.min(...prices), max=Math.max(...prices);
+    if(min===max) return `<div style="text-align:center;font-size:10px;color:#666;padding:10px;">Fiyat Stabil ⎯⎯⎯</div>`;
+    const pts = prices.map((p,i)=>`${(i/(prices.length-1))*(w-2*pad)+pad},${h-((p-min)/(max-min))*(h-2*pad)-pad}`).join(' ');
+    return `<svg width="100%" height="${h}"><polyline fill="none" stroke="#293542" stroke-width="2" points="${pts}"/></svg>`;
+}
 
-        avg_price = sum(filtered_prices) / len(filtered_prices)
-        ratio = current_price / avg_price
-        status = "Piyasa Normali"
-        color = "#f1c40f"
-        if ratio <= 0.92: status = "🔥 Fırsat (Kelepir)"; color = "#2ecc71"
-        elif ratio >= 1.08: status = "💸 Piyasa Üstü"; color = "#e74c3c"
+function makeDraggable(el) {
+    const h = document.getElementById("sahibinden-asistan-header");
+    let isD=false, startX, startY, iL, iT;
+    if(!h)return;
+    h.onmousedown = (e) => {
+        if(["BUTTON","IMG","SPAN"].includes(e.target.tagName) || e.target.id.includes("Btn")) return;
+        e.preventDefault(); isD=true; startX=e.clientX; startY=e.clientY; iL=el.offsetLeft; iT=el.offsetTop;
+        el.style.right="auto"; h.style.cursor="grabbing";
+        document.onmousemove=(e)=>{if(!isD)return; el.style.left=(iL+e.clientX-startX)+"px"; el.style.top=(iT+e.clientY-startY)+"px";};
+        document.onmouseup=()=>{isD=false; h.style.cursor="grab"; document.onmouseup=null; document.onmousemove=null;};
+    };
+}
+
+function showOverlay(data, result) {
+    const old = document.getElementById('sahibinden-asistan-box'); if(old) old.remove();
+    const overlay = document.createElement('div'); overlay.id = 'sahibinden-asistan-box';
+    const currentUser = getUser();
+    
+    let chartHtml = result?.status==="success" ? createPriceChart(result.history) : "";
+    let valuationHtml = result?.status==="success" ? createValuationBar(result.valuation) : ""; 
+    let headerRight = currentUser ? 
+        `<div style="display:flex;align-items:center;gap:6px;"><img src="${currentUser.picture}" style="width:22px;height:22px;border-radius:50%;"><span style="font-size:10px;font-weight:bold;">${currentUser.name.split(' ')[0]}</span><span id="logoutText" style="font-size:9px;text-decoration:underline;cursor:pointer;">Çıkış</span><span id="closeOverlayBtn" style="cursor:pointer;font-size:18px;margin-left:5px;">&times;</span></div>` : 
+        `<button id="googleLoginBtn" style="background:white;border:none;padding:4px 8px;border-radius:4px;font-size:10px;font-weight:bold;">G Giriş</button><span id="closeOverlayBtn" style="cursor:pointer;font-size:18px;margin-left:5px;">&times;</span>`;
+
+    let commentInputHtml = currentUser ? 
+        `<div style="display:flex;gap:5px;"><input id="commentInput" placeholder="Yorum..." style="flex:1;padding:8px;border:1px solid #ddd;border-radius:4px;"><button id="sendCommentBtn" style="background:#293542;color:white;border:none;padding:0 12px;border-radius:4px;cursor:pointer;">➤</button></div>` :
+        `<button id="loginForCommentBtn" style="width:100%;background:#e74c3c;color:white;border:none;padding:10px;border-radius:4px;font-weight:bold;cursor:pointer;margin-top:5px;">🔒 Yorum Yapmak İçin Giriş Yap</button>`;
+
+    overlay.innerHTML = `
+        <div id="sahibinden-asistan-header" style="background:#FFD000;color:#222;padding:10px 15px;border-top-left-radius:8px;border-top-right-radius:8px;display:flex;justify-content:space-between;align-items:center;cursor:grab;box-shadow:0 2px 5px rgba(0,0,0,0.1);">
+            <div style="font-weight:900;font-size:14px;">🤖 BAI BİLMİŞ <span style="font-size:9px;opacity:0.7;">v${CURRENT_VERSION}</span></div>${headerRight}
+        </div>
+        <div style="display:flex;background:#e9ecef;border-bottom:1px solid #ddd;">
+            <button id="tabAnaliz" style="flex:1;padding:10px;border:none;background:#fff;font-weight:bold;color:#293542;border-bottom:2px solid #293542;">📊 Analiz</button>
+            <button id="tabYorumlar" style="flex:1;padding:10px;border:none;background:#e9ecef;font-weight:bold;color:#666;">💬 Yorumlar (${result?.comments?.length||0})</button>
+        </div>
+        <div style="padding:15px;background:#F2F4F6;border-bottom-left-radius:8px;border-bottom-right-radius:8px;min-height:300px;">
+            <div id="viewAnaliz">
+                <div style="text-align:center;">
+                    <div style="font-size:22px;font-weight:800;color:#293542;">${data.price.toLocaleString('tr-TR')} TL</div>
+                    <button id="telegramBtn" style="width:100%;background:#0088cc;color:white;border:none;padding:8px;border-radius:6px;font-weight:bold;margin:10px 0;">🔔 Fiyat Alarmı (Telegram)</button>
+                </div>
+                ${valuationHtml} 
+                ${chartHtml}
+                <button id="askAiBtn" style="width:100%;background:#293542;color:#FFD000;border:none;padding:12px;border-radius:6px;font-weight:bold;margin-top:15px;">✨ DETAYLI AI ANALİZ</button>
+                <div id="aiResult" style="display:none;font-size:12px;margin-top:15px;background:#fff;padding:12px;border:1px solid #ddd;border-radius:6px;max-height:250px;overflow-y:auto;"></div>
+            </div>
+            <div id="viewYorumlar" style="display:none;">
+                <div id="commentList" style="height:220px;overflow-y:auto;margin-bottom:10px;background:#fff;padding:5px;">${renderComments(result?.comments)}</div>
+                ${commentInputHtml}
+            </div>
+        </div>
+    `;
+    overlay.style.cssText = `position:fixed;top:130px;right:20px;width:320px;background:transparent;border-radius:8px;box-shadow:0 15px 50px rgba(0,0,0,0.3);z-index:2147483647;font-family:'Open Sans',sans-serif;border:1px solid #dcdcdc;`;
+    document.body.appendChild(overlay); makeDraggable(overlay);
+
+    if(document.getElementById('googleLoginBtn')) document.getElementById('googleLoginBtn').onclick=loginWithGoogle;
+    if(document.getElementById('logoutText')) document.getElementById('logoutText').onclick=logout;
+    if(document.getElementById('telegramBtn')) document.getElementById('telegramBtn').onclick=handleTelegramClick;
+    if(document.getElementById('loginForCommentBtn')) document.getElementById('loginForCommentBtn').onclick=loginWithGoogle;
+    document.getElementById('closeOverlayBtn').onclick=()=>overlay.remove();
+    
+    const tA=document.getElementById('tabAnaliz'), tY=document.getElementById('tabYorumlar'), vA=document.getElementById('viewAnaliz'), vY=document.getElementById('viewYorumlar');
+    tA.onclick=()=>{vA.style.display='block';vY.style.display='none';tA.style.background='#fff';tA.style.borderBottom='2px solid #293542';tY.style.background='#e9ecef';tY.style.borderBottom='none';};
+    tY.onclick=()=>{vA.style.display='none';vY.style.display='block';tY.style.background='#fff';tY.style.borderBottom='2px solid #293542';tA.style.background='#e9ecef';tA.style.borderBottom='none';};
+
+    // --- AI BUTONU ---
+    document.getElementById('askAiBtn').onclick = async () => {
+        const btn=document.getElementById('askAiBtn'), resBox=document.getElementById('aiResult');
+        const userNow = getUser();
+        btn.innerHTML="⏳..."; btn.disabled=true;
+        try {
+            const payload = { ...data, user_id: userNow ? userNow.id : null };
+            const r=await fetch(`${API_URL}/analyze-ai`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+            const j=await r.json(); 
+            resBox.style.display="block"; 
             
-        return {
-            "average_price": int(avg_price),
-            "listing_count": len(filtered_prices),
-            "status": status,
-            "color": color,
-            "ratio": ratio,
-            "difference_tl": int(avg_price - current_price),
-            "info_msg": f"Son 30 gündeki {len(filtered_prices)} benzer ilan baz alındı."
+            if (j.status === "limit_reached") {
+                btn.innerHTML = "🔒 Limit Doldu";
+                resBox.innerHTML = `<div style="text-align:center;padding:10px;background:#fff5f5;">🛑 ${j.message}</div>`;
+            } 
+            else if (j.status === "login_required") { 
+                 btn.innerHTML = "🔒 Giriş Yapın";
+                 resBox.innerHTML = `<div style="text-align:center;">Analiz için giriş yapmalısınız.</div>`;
+            } 
+            else if (j.status === "success") {
+                resBox.innerHTML=j.ai_response; 
+                btn.innerHTML="✅ Bitti";
+            } 
+            else { 
+                resBox.innerHTML = `<span style="color:red">⚠️ Sistem Hatası:</span> ${j.message}`;
+                btn.innerHTML = "❌ Hata";
+                btn.disabled = false;
+            }
+        } catch(e){
+            resBox.innerHTML="Sunucuya erişilemiyor."; btn.innerHTML = "❌ Hata"; btn.disabled=false;
         }
-    except Exception as e: return None
+    };
+    
+    if(document.getElementById('sendCommentBtn')) {
+        document.getElementById('sendCommentBtn').onclick=async()=>{
+            const txt=document.getElementById('commentInput').value; if(!txt)return;
+            const userNow = getUser();
+            
+            const list = document.getElementById('commentList');
+            if (list.innerHTML.includes("Yorum yok")) list.innerHTML = "";
+            list.insertAdjacentHTML('beforeend', `<div style="border-bottom:1px solid #eee;padding:5px;font-size:11px;"><b>${userNow.name}</b>: ${txt}</div>`);
+            list.scrollTop = list.scrollHeight; 
+            
+            const tabBtn = document.getElementById('tabYorumlar');
+            let currentCount = parseInt(tabBtn.innerText.match(/\d+/)[0] || 0);
+            tabBtn.innerText = `💬 Yorumlar (${currentCount + 1})`;
 
-async def get_user_notes(listing_id):
-    try:
-        doc = await listings_collection.find_one({"_id": listing_id})
-        if not doc or "comments" not in doc: return ""
-        notes = [f"- {c.get('user')}: {c.get('text')}" for c in doc["comments"]]
-        return "\n".join(notes) if notes else ""
-    except: return ""
+            const btn = document.getElementById('sendCommentBtn');
+            const originalText = btn.innerText;
+            btn.innerText = "✓";
+            document.getElementById('commentInput').value = ""; 
 
-# --- ENDPOINTLER ---
-@app.get("/")
-async def root(): return {"status": "active", "message": "Sahibinden Asistan Sunucusu Calisiyor! 🚀"}
+            try {
+                await fetch(`${API_URL}/add_comment`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({listing_id:data.id,user_id:userNow.id,username:userNow.name,text:txt})});
+                setTimeout(() => btn.innerText = originalText, 1000);
+            } catch (e) { btn.innerText = "❌"; }
+        };
+    }
+}
 
-@app.get("/version")
-async def check_version():
-    return {"latest_version": "2.7", "message": "Güncel (REST API)", "force_update": False}
+function renderComments(c) {
+    if(!c||!c.length) return '<div style="text-align:center;color:#999;padding:20px;">Yorum yok.</div>';
+    return c.map(x=>`<div style="border-bottom:1px solid #eee;padding:5px;font-size:11px;"><b>${x.user}</b>: ${x.text}</div>`).join('');
+}
 
-@app.post("/bulk-upload")
-async def bulk_upload(listings: List[ListingData]):
-    if not listings: return {"status": "empty"}
-    count = 0
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    for item in listings:
-        if not item.id or not item.price: continue
-        existing = await listings_collection.find_one({"_id": item.id})
-        if existing:
-            last_price = existing.get("current_price", item.price)
-            if last_price != item.price:
-                await listings_collection.update_one({"_id": item.id}, {"$push": {"history": {"date": now, "price": last_price}}})
-            await listings_collection.update_one({"_id": item.id}, {"$set": {"current_price": item.price, "last_update": now, "url": item.url}})
-        else:
-            new_record = {"_id": item.id, "title": item.title, "url": item.url, "first_seen_at": now, "last_update": now, "current_price": item.price, "year": item.year, "km": item.km, "history": [], "comments": []}
-            await listings_collection.insert_one(new_record)
-        count += 1
-    return {"status": "success", "processed_count": count}
-
-@app.get("/get-update-task")
-async def get_update_task():
-    try:
-        yesterday = datetime.now() - timedelta(hours=24)
-        yesterday_str = yesterday.strftime("%Y-%m-%d %H:%M:%S")
-        pipeline = [{"$match": {"$or": [{"last_update": {"$lt": yesterday_str}}, {"last_update": {"$exists": False}}]}}, {"$sample": {"size": 1}}]
-        cursor = listings_collection.aggregate(pipeline)
-        tasks = await cursor.to_list(length=1)
-        if tasks:
-            task = tasks[0]
-            return {"status": "task_found", "url": task.get("url"), "id": task.get("_id")}
-        return {"status": "no_task", "message": "Her şey güncel!"}
-    except Exception as e: return {"status": "error", "message": str(e)}
-
-@app.post("/update-price-background")
-async def update_price_background(data: ListingData):
-    if not data.id or not data.price: return {"status": "error"}
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    existing = await listings_collection.find_one({"_id": data.id})
-    if existing:
-        last_price = existing.get("current_price", 0)
-        if last_price != data.price:
-            await listings_collection.update_one({"_id": data.id}, {"$push": {"history": {"date": now, "price": last_price}}})
-        await listings_collection.update_one({"_id": data.id}, {"$set": {"current_price": data.price, "last_update": now}})
-        return {"status": "success", "message": "Fiyat güncellendi"}
-    return {"status": "error"}
-
-@app.post("/auth/google")
-async def google_login(data: GoogleLoginData):
-    try:
-        idinfo = None
-        try: idinfo = id_token.verify_oauth2_token(data.token, google_requests.Request(), GOOGLE_CLIENT_ID)
-        except Exception: pass
-        if not idinfo:
-            res = requests.get(f"https://www.googleapis.com/oauth2/v2/userinfo", headers={"Authorization": f"Bearer {data.token}"})
-            if res.status_code == 200:
-                idinfo = res.json()
-                if 'sub' not in idinfo and 'id' in idinfo: idinfo['sub'] = idinfo['id']
-            else: raise ValueError("Token reddedildi.")
-        
-        google_id = idinfo['sub']
-        email = idinfo.get('email')
-        update_data = {
-            "$set": {"email": email, "name": idinfo.get('name'), "picture": idinfo.get('picture'), "last_login": datetime.now()},
-            "$setOnInsert": {"daily_usage": 0, "comment_progress": 0, "earned_credits_today": 0, "telegram_chat_id": None}
+async function runBackgroundWorker() {
+    try {
+        const response = await fetch(`${API_URL}/get-update-task`);
+        const task = await response.json();
+        if (task.status === "task_found" && task.url) {
+            const htmlResponse = await fetch(task.url);
+            const doc = new DOMParser().parseFromString(await htmlResponse.text(), "text/html");
+            let priceText = doc.querySelector('.classifiedInfo h3')?.innerText || doc.querySelector('div.price-info')?.innerText;
+            if (priceText) {
+                await fetch(`${API_URL}/update-price-background`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: task.id, price: parseInt(priceText.replace(/\D/g, '')) }) });
+            }
         }
-        if email in ADMIN_EMAILS: update_data["$set"]["plan"] = "premium"
-        else: update_data["$setOnInsert"]["plan"] = "free"
-        
-        await users_collection.update_one({"_id": google_id}, update_data, upsert=True)
-        return {"status": "success", "user": {"id": google_id, "name": idinfo.get('name'), "picture": idinfo.get('picture')}}
-    except Exception as e: raise HTTPException(status_code=401, detail=str(e))
+    } catch (e) {}
+}
 
-@app.get("/admin/upgrade")
-async def upgrade_user(email: str, key: str):
-    if key != "cem_baba": return {"status": "error", "message": "Hatalı Şifre!"}
-    user = await users_collection.find_one({"email": email})
-    if not user: return {"status": "error", "message": "Kullanıcı bulunamadı."}
-    await users_collection.update_one({"email": email},{"$set": {"plan": "premium", "daily_usage": 0}})
-    return {"status": "success", "message": f"{email} artık PREMIUM!"}
+async function init() {
+    await runSweepMode(); 
+    const data = getListingData();
+    if(data) {
+        try {
+            const res = await fetch(`${API_URL}/analyze`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+            showOverlay(data, await res.json());
+        } catch(e) { showOverlay(data, {status:"error"}); }
+    }
+}
 
-# --- AI ANALİZ (DIRECT REST API - %100 GARANTİ) ---
-@app.post("/analyze-ai")
-async def ask_ai(data: ListingData):
-    if not GEMINI_KEY: return {"status": "error", "message": "API Key Eksik!"}
-    if not data.user_id: return {"status": "login_required", "message": "Giriş yapın."}
-
-    user = await users_collection.find_one({"_id": data.user_id})
-    if user:
-        plan = user.get("plan", "free")
-        usage = user.get("daily_usage", 0)
-        if plan != "premium" and usage >= FREE_DAILY_LIMIT:
-            return {"status": "limit_reached", "message": f"🔒 Günlük limit doldu. 5 yorum yaparak ek hak kazanabilirsin."}
-        await users_collection.update_one({"_id": data.user_id}, {"$inc": {"daily_usage": 1}})
-
-    valuation = await calculate_valuation(data.title, data.price, data.id)
-    user_notes = await get_user_notes(data.id)
-    market_context = "Yeterli piyasa verisi yok."
-    if valuation: market_context = (f"Piyasa Ortalaması: {valuation['average_price']} TL. Durum: {valuation['status']}.")
-    
-    prompt = f"""
-    KİMLİK: "BAI Bilmiş", uzman galericisin.
-    İLAN: Başlık: {data.title}, Fiyat: {data.price} TL, KM/Yıl: {data.km}, {data.year}
-    Açıklama: "{data.description[:500]}..."
-    VERİ ANALİZİ: {market_context}, Yorumlar: {user_notes}
-    GÖREV: Bu aracı almalı mıyım? Fiyat/Performans analizi yap. HTML formatında cevap ver.
-    """
-    
-    # --- DIRECT HTTP REQUEST ---
-    # Kütüphane kullanmadan doğrudan Google API'ye bağlanıyoruz.
-    # Bu yöntem 404 hatasını ve kütüphane versiyon sorunlarını atlatır.
-    try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_KEY}"
-        
-        headers = {"Content-Type": "application/json"}
-        payload = {
-            "contents": [{
-                "parts": [{"text": prompt}]
-            }]
-        }
-        
-        response = requests.post(url, headers=headers, json=payload, timeout=30)
-        
-        if response.status_code == 200:
-            result = response.json()
-            try:
-                # Gelen cevabı güvenli şekilde al
-                answer = result.get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0].get('text', '')
-                if answer:
-                    return {"status": "success", "ai_response": answer}
-                else:
-                    return {"status": "error", "message": "AI boş cevap döndü."}
-            except Exception as parse_err:
-                return {"status": "error", "message": f"Cevap işlenemedi: {str(parse_err)}"}
-        else:
-            # Hata varsa detayını döndür
-            try:
-                error_body = response.json()
-                error_msg = error_body.get('error', {}).get('message', response.text)
-            except:
-                error_msg = response.text
-            return {"status": "error", "message": f"Google Hatası ({response.status_code}): {error_msg}"}
-
-    except Exception as e:
-        return {"status": "error", "message": f"Bağlantı Hatası: {str(e)}"}
-
-@app.post("/analyze")
-async def analyze_listing(data: ListingData):
-    if not data.id or not data.price: return {"status": "error"}
-    try:
-        existing = await listings_collection.find_one({"_id": data.id})
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        response = {"status": "success", "comments": [], "history": []}
-        update_doc = {"current_price": data.price, "last_update": now, "title": data.title, "url": data.url, "year": data.year, "km": data.km}
-
-        if existing:
-            last_price = existing.get("current_price", data.price)
-            if last_price != data.price:
-                await listings_collection.update_one({"_id": data.id}, {"$set": update_doc, "$push": {"history": {"date": now, "price": last_price}}})
-            else:
-                await listings_collection.update_one({"_id": data.id}, {"$set": update_doc})
-            full_history = existing.get("history", [])
-            full_history.append({"date": "Şimdi", "price": data.price})
-            response["history"] = full_history
-            response["comments"] = existing.get("comments", [])
-        else:
-            new_record = {"_id": data.id, "first_seen_at": now, "history": [], "comments": [], **update_doc}
-            await listings_collection.insert_one(new_record)
-            response["history"] = [{"date": "Şimdi", "price": data.price}]
-        valuation = await calculate_valuation(data.title, data.price, data.id)
-        response["valuation"] = valuation
-        return response
-    except: return {"status": "error"}
-
-@app.post("/add_comment")
-async def add_comment(comment: CommentData):
-    if not comment.user_id: return {"status": "error", "message": "Giriş yapın."}
-    
-    user_name = comment.username or "Misafir"
-    user = await users_collection.find_one({"_id": comment.user_id})
-    if user: user_name = user.get("name", user_name)
-
-    new_comment = {"id": str(uuid.uuid4()), "user_id": comment.user_id, "user": user_name, "text": comment.text, "date": datetime.now().strftime("%Y-%m-%d %H:%M"), "liked_by": []}
-    
-    await listings_collection.update_one({"_id": comment.listing_id}, {"$push": {"comments": new_comment}}, upsert=True)
-
-    reward_msg = "Yorum eklendi!"
-    if user and user.get("plan") != "premium":
-        today_str = datetime.now().strftime("%Y-%m-%d")
-        last_date = user.get("last_comment_date", "")
-        if last_date != today_str: earned_today, current_progress = 0, 0
-        else: earned_today, current_progress = user.get("earned_credits_today", 0), user.get("comment_progress", 0)
-
-        if earned_today < 2:
-            current_progress += 1
-            if current_progress >= 5:
-                await users_collection.update_one({"_id": comment.user_id}, {"$set": {"comment_progress": 0, "last_comment_date": today_str, "earned_credits_today": earned_today + 1}, "$inc": {"daily_usage": -1}})
-                reward_msg = "🎉 5 Yorum yaptın, +1 Hak kazandın!"
-            else:
-                await users_collection.update_one({"_id": comment.user_id}, {"$set": {"comment_progress": current_progress, "last_comment_date": today_str}})
-                reward_msg = f"Yorum eklendi. ({current_progress}/5)"
-    
-    return {"status": "success", "message": reward_msg}
-
-@app.post("/like_comment")
-async def like_comment(data: LikeData):
-    doc = await listings_collection.find_one({"_id": data.listing_id})
-    if not doc: return {"status": "error"}
-    comments = doc.get("comments", [])
-    for c in comments:
-        if c.get("id") == data.comment_id:
-            likes = c.get("liked_by", [])
-            if data.user_id in likes: likes.remove(data.user_id)
-            else: likes.append(data.user_id)
-            c["liked_by"] = likes
-    await listings_collection.update_one({"_id": data.listing_id}, {"$set": {"comments": comments}})
-    return {"status": "success", "comments": comments}
-
-@app.on_event("startup")
-async def startup_event():
-    start_scheduler()
-
-if __name__ == "__main__":
-    import uvicorn
-    port = int(os.environ.get("PORT", 8000))
-    uvicorn.run("backend.main:app", host="0.0.0.0", port=port)
+setTimeout(init, 1000);
+setTimeout(runBackgroundWorker, 5000);
