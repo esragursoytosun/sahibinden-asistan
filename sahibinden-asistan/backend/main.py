@@ -1,7 +1,7 @@
 import os
 import uuid
 import requests 
-from datetime import datetime, timedelta # timedelta EKLENDİ (Tarih hesabı için)
+from datetime import datetime, timedelta # timedelta Zaten Ekli
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
@@ -90,7 +90,6 @@ async def calculate_valuation(title, current_price, current_id):
             date_str = item.get("first_seen_at", "2000-01-01 00:00:00")
             try:
                 # Veritabanında tarih "YYYY-MM-DD HH:MM:SS" formatında olabilir
-                # String'in sadece ilk kısmını (YYYY-MM-DD) alıp parse edelim
                 item_date = datetime.strptime(date_str.split(" ")[0], "%Y-%m-%d")
                 
                 if item_date < cutoff_date:
@@ -182,11 +181,82 @@ async def check_models():
 async def check_version():
     """Eklentinin güncel olup olmadığını kontrol eder."""
     return {
-        "latest_version": "1.2",  # Versiyonu 1.2 yaptık
+        "latest_version": "1.2", 
         "message": "🔥 YENİ: Adil Fiyat Hesaplayıcı eklendi! Enflasyon korumalı analiz.",
         "force_update": False 
     }
+
+# --- ZOMBİ GÜNCELLEME SİSTEMİ (YENİ EKLENDİ) ---
+@app.get("/get-update-task")
+async def get_update_task():
+    """
+    En son güncellenme tarihi 24 saatten eski olan BİR ilanı getirir.
+    Eklenti bunu arka planda güncelleyecek.
+    """
+    try:
+        # 24 saat öncesini hesapla
+        yesterday = datetime.now() - timedelta(hours=24)
+        yesterday_str = yesterday.strftime("%Y-%m-%d %H:%M:%S")
+        
+        # Tarihi eski olan veya hiç tarihi olmayan bir ilanı bul
+        pipeline = [
+            {"$match": {
+                "$or": [
+                    {"last_update": {"$lt": yesterday_str}},
+                    {"last_update": {"$exists": False}}
+                ]
+            }},
+            {"$sample": {"size": 1}} # Rastgele 1 tane seç
+        ]
+        
+        cursor = listings_collection.aggregate(pipeline)
+        tasks = await cursor.to_list(length=1)
+        
+        if tasks:
+            task = tasks[0]
+            return {
+                "status": "task_found",
+                "url": task.get("url"),
+                "id": task.get("_id")
+            }
+        
+        return {"status": "no_task", "message": "Her şey güncel!"}
+            
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/update-price-background")
+async def update_price_background(data: ListingData):
+    """Eklentinin arka planda bulduğu fiyatı kaydeder"""
+    if not data.id or not data.price: return {"status": "error"}
     
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    # Mevcut veriyi al
+    existing = await listings_collection.find_one({"_id": data.id})
+    if existing:
+        last_price = existing.get("current_price", 0)
+        
+        # Fiyat değişmişse geçmişe ekle
+        if last_price != data.price:
+            await listings_collection.update_one(
+                {"_id": data.id}, 
+                {"$push": {"history": {"date": now, "price": last_price}}}
+            )
+            
+        # Her halükarda 'son güncelleme' tarihini ve fiyatı yenile
+        await listings_collection.update_one(
+            {"_id": data.id}, 
+            {"$set": {
+                "current_price": data.price,
+                "last_update": now  # <-- Son kontrol zamanını kaydet
+            }}
+        )
+        return {"status": "success", "message": "Fiyat güncellendi"}
+    
+    return {"status": "error"}
+# ------------------------------------------------
+
 @app.post("/auth/google")
 async def google_login(data: GoogleLoginData):
     """Google Giriş İşlemi"""
@@ -234,7 +304,7 @@ async def ask_ai(data: ListingData):
     if not GEMINI_KEY: 
         return {"status": "error", "message": "API Key Eksik!"}
 
-    # 1. Veri Toplama (YENİ: Değerleme Motorunu Kullan)
+    # 1. Veri Toplama (Değerleme Motorunu Kullan)
     valuation = await calculate_valuation(data.title, data.price, data.id)
     user_notes = await get_user_notes(data.id)
     
@@ -331,6 +401,9 @@ async def analyze_listing(data: ListingData):
         valuation = await calculate_valuation(data.title, data.price, data.id)
         response["valuation"] = valuation
         # ----------------------
+        
+        # Görüntülenme (View) anında güncelleme tarihini de yenileyelim
+        await listings_collection.update_one({"_id": data.id}, {"$set": {"last_update": now}})
 
         return response
     except: return {"status": "error"}
