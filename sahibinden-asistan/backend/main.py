@@ -34,7 +34,9 @@ TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 FREE_DAILY_LIMIT = 5  # Ücretsiz kullanıcılar için günlük analiz limiti
 
 if GEMINI_KEY:
-    genai.configure(api_key=GEMINI_KEY)
+    try:
+        genai.configure(api_key=GEMINI_KEY)
+    except: pass
 
 # --- VERİ MODELLERİ ---
 class ListingData(BaseModel):
@@ -130,65 +132,32 @@ async def check_version():
         "force_update": False
     }
 
-# --- YENİ DEBUG ENDPOINT (MODEL LİSTESİNİ GÖRMEK İÇİN) ---
 @app.get("/debug-models")
 async def debug_models():
-    """Sunucuda kullanılabilir Gemini modellerini listeler."""
-    if not GEMINI_KEY:
-        return {"error": "API Key eksik"}
+    if not GEMINI_KEY: return {"error": "API Key eksik"}
     try:
-        models = []
-        for m in genai.list_models():
-            if 'generateContent' in m.supported_generation_methods:
-                models.append(m.name)
+        models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
         return {"available_models": models}
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception as e: return {"error": str(e)}
 
-# --- SÜPÜRGE MODU (BULK UPLOAD) ---
+# --- SÜPÜRGE MODU ---
 @app.post("/bulk-upload")
 async def bulk_upload(listings: List[ListingData]):
     if not listings: return {"status": "empty"}
-    
     count = 0
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
     for item in listings:
         if not item.id or not item.price: continue
-        
         existing = await listings_collection.find_one({"_id": item.id})
-        
         if existing:
             last_price = existing.get("current_price", item.price)
             if last_price != item.price:
-                await listings_collection.update_one(
-                    {"_id": item.id},
-                    {"$push": {"history": {"date": now, "price": last_price}}}
-                )
-            await listings_collection.update_one(
-                {"_id": item.id},
-                {"$set": {
-                    "current_price": item.price,
-                    "last_update": now,
-                    "url": item.url
-                }}
-            )
+                await listings_collection.update_one({"_id": item.id}, {"$push": {"history": {"date": now, "price": last_price}}})
+            await listings_collection.update_one({"_id": item.id}, {"$set": {"current_price": item.price, "last_update": now, "url": item.url}})
         else:
-            new_record = {
-                "_id": item.id,
-                "title": item.title,
-                "url": item.url,
-                "first_seen_at": now,
-                "last_update": now,
-                "current_price": item.price,
-                "year": item.year,
-                "km": item.km,
-                "history": [],
-                "comments": []
-            }
+            new_record = {"_id": item.id, "title": item.title, "url": item.url, "first_seen_at": now, "last_update": now, "current_price": item.price, "year": item.year, "km": item.km, "history": [], "comments": []}
             await listings_collection.insert_one(new_record)
         count += 1
-        
     return {"status": "success", "processed_count": count}
 
 # --- ZOMBI AJAN ---
@@ -197,12 +166,7 @@ async def get_update_task():
     try:
         yesterday = datetime.now() - timedelta(hours=24)
         yesterday_str = yesterday.strftime("%Y-%m-%d %H:%M:%S")
-        pipeline = [
-            {"$match": {
-                "$or": [{"last_update": {"$lt": yesterday_str}}, {"last_update": {"$exists": False}}]
-            }},
-            {"$sample": {"size": 1}}
-        ]
+        pipeline = [{"$match": {"$or": [{"last_update": {"$lt": yesterday_str}}, {"last_update": {"$exists": False}}]}}, {"$sample": {"size": 1}}]
         cursor = listings_collection.aggregate(pipeline)
         tasks = await cursor.to_list(length=1)
         if tasks:
@@ -224,7 +188,7 @@ async def update_price_background(data: ListingData):
         return {"status": "success", "message": "Fiyat güncellendi"}
     return {"status": "error"}
 
-# --- AUTH & USER MANAGEMENT ---
+# --- AUTH ---
 @app.post("/auth/google")
 async def google_login(data: GoogleLoginData):
     try:
@@ -237,51 +201,39 @@ async def google_login(data: GoogleLoginData):
                 idinfo = res.json()
                 if 'sub' not in idinfo and 'id' in idinfo: idinfo['sub'] = idinfo['id']
             else: raise ValueError("Token reddedildi.")
-        
         google_id = idinfo['sub']
-        
-        await users_collection.update_one(
-            {"_id": google_id},
-            {
-                "$set": {
-                    "email": idinfo.get('email'),
-                    "name": idinfo.get('name'),
-                    "picture": idinfo.get('picture'),
-                    "last_login": datetime.now()
-                },
-                "$setOnInsert": {
-                    "plan": "free",
-                    "daily_usage": 0,
-                    "telegram_chat_id": None
-                }
-            },
-            upsert=True
-        )
+        await users_collection.update_one({"_id": google_id}, {"$set": {"email": idinfo.get('email'), "name": idinfo.get('name'), "picture": idinfo.get('picture'), "last_login": datetime.now()}, "$setOnInsert": {"plan": "free", "daily_usage": 0, "telegram_chat_id": None}}, upsert=True)
         return {"status": "success", "user": {"id": google_id, "name": idinfo.get('name'), "picture": idinfo.get('picture')}}
     except Exception as e: raise HTTPException(status_code=401, detail=str(e))
 
-# --- AI ANALİZ ---
+# --- AI ANALİZ (Misafir Engelli) ---
 @app.post("/analyze-ai")
 async def ask_ai(data: ListingData):
-    # 1. API Key Kontrolü
     if not GEMINI_KEY: return {"status": "error", "message": "API Key Eksik!"}
     
-    # 2. Limit Kontrolü
-    if data.user_id:
-        user = await users_collection.find_one({"_id": data.user_id})
-        if user:
-            plan = user.get("plan", "free")
-            usage = user.get("daily_usage", 0)
-            
-            if plan == "free" and usage >= FREE_DAILY_LIMIT:
-                return {
-                    "status": "limit_reached",
-                    "message": f"🔒 Günlük {FREE_DAILY_LIMIT} adet ücretsiz analiz hakkınız doldu. Premium'a geçerek sınırsız kullanabilirsiniz!"
-                }
-            
-            await users_collection.update_one({"_id": data.user_id}, {"$inc": {"daily_usage": 1}})
+    # 1. MİSAFİR KONTROLÜ (Giriş yapmamışsa engelle)
+    if not data.user_id:
+        return {
+            "status": "error",
+            "message": "🔒 Bu özellik sadece üyeler içindir. Lütfen giriş yapın."
+        }
 
-    # 3. Analiz Hazırlığı
+    # 2. LİMİT KONTROLÜ (Giriş yapmışsa hakkına bak)
+    user = await users_collection.find_one({"_id": data.user_id})
+    if user:
+        plan = user.get("plan", "free")
+        usage = user.get("daily_usage", 0)
+        
+        if plan == "free" and usage >= FREE_DAILY_LIMIT:
+            return {
+                "status": "limit_reached",
+                "message": f"🔒 Günlük {FREE_DAILY_LIMIT} adet ücretsiz analiz hakkınız doldu. Yarın tekrar bekleriz!"
+            }
+        
+        # Limiti aşmadıysa, kullanımı 1 artır
+        await users_collection.update_one({"_id": data.user_id}, {"$inc": {"daily_usage": 1}})
+
+    # 3. ANALİZ İŞLEMİ
     valuation = await calculate_valuation(data.title, data.price, data.id)
     user_notes = await get_user_notes(data.id)
     market_context = "Yeterli piyasa verisi yok."
@@ -296,14 +248,11 @@ async def ask_ai(data: ListingData):
     """
     
     try:
-        # ÖNEMLİ: Model ismi. Eğer hata alırsan tarayıcıdan /debug-models adresine gir
-        # ve orada gördüğün model ismini buraya yaz.
         model = genai.GenerativeModel("gemini-1.5-flash-001")
         response = model.generate_content(prompt)
         return {"status": "success", "ai_response": response.text}
     except Exception as e:
-        if "429" in str(e):
-            return {"status": "error", "message": "⚠️ Sunucu çok yoğun, lütfen biraz bekleyip tekrar deneyin."}
+        if "429" in str(e): return {"status": "error", "message": "⚠️ Sunucu çok yoğun, lütfen bekleyin."}
         return {"status": "error", "message": str(e)}
 
 @app.post("/analyze")
