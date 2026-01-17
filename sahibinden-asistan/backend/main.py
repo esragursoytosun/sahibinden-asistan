@@ -121,7 +121,7 @@ async def root(): return {"status": "active", "message": "Sahibinden Asistan Sun
 
 @app.get("/version")
 async def check_version():
-    return {"latest_version": "2.6", "message": "Güncel", "force_update": False}
+    return {"latest_version": "2.7", "message": "Güncel (REST API)", "force_update": False}
 
 @app.post("/bulk-upload")
 async def bulk_upload(listings: List[ListingData]):
@@ -232,33 +232,38 @@ async def ask_ai(data: ListingData):
     
     # --- DIRECT HTTP REQUEST ---
     # Kütüphane kullanmadan doğrudan Google API'ye bağlanıyoruz.
-    # Bu yöntem 404 hatasını atlatır.
+    # Bu yöntem 404 hatasını ve kütüphane versiyon sorunlarını atlatır.
     try:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_KEY}"
         
+        headers = {"Content-Type": "application/json"}
         payload = {
             "contents": [{
                 "parts": [{"text": prompt}]
             }]
         }
         
-        headers = {'Content-Type': 'application/json'}
-        
         response = requests.post(url, headers=headers, json=payload, timeout=30)
         
         if response.status_code == 200:
             result = response.json()
-            # Cevabı ayıkla
             try:
-                ai_text = result['candidates'][0]['content']['parts'][0]['text']
-                return {"status": "success", "ai_response": ai_text}
-            except:
-                return {"status": "error", "message": "AI cevabı okunamadı."}
+                # Gelen cevabı güvenli şekilde al
+                answer = result.get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0].get('text', '')
+                if answer:
+                    return {"status": "success", "ai_response": answer}
+                else:
+                    return {"status": "error", "message": "AI boş cevap döndü."}
+            except Exception as parse_err:
+                return {"status": "error", "message": f"Cevap işlenemedi: {str(parse_err)}"}
         else:
-            # Hata kodunu döndür
-            error_data = response.json()
-            error_msg = error_data.get('error', {}).get('message', 'Bilinmeyen Hata')
-            return {"status": "error", "message": f"AI Hatası ({response.status_code}): {error_msg}"}
+            # Hata varsa detayını döndür
+            try:
+                error_body = response.json()
+                error_msg = error_body.get('error', {}).get('message', response.text)
+            except:
+                error_msg = response.text
+            return {"status": "error", "message": f"Google Hatası ({response.status_code}): {error_msg}"}
 
     except Exception as e:
         return {"status": "error", "message": f"Bağlantı Hatası: {str(e)}"}
@@ -333,7 +338,7 @@ async def like_comment(data: LikeData):
             else: likes.append(data.user_id)
             c["liked_by"] = likes
     await listings_collection.update_one({"_id": data.listing_id}, {"$set": {"comments": comments}})
-    return {"status": "success", "comments": updated_comments}
+    return {"status": "success", "comments": comments}
 
 @app.on_event("startup")
 async def startup_event():
