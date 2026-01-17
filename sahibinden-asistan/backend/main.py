@@ -217,7 +217,7 @@ async def upgrade_user(email: str, key: str):
     await users_collection.update_one({"email": email},{"$set": {"plan": "premium", "daily_usage": 0}})
     return {"status": "success", "message": f"{email} artık PREMIUM!"}
 
-# --- AI ANALİZ (GEMINI-PRO) ---
+# --- AI ANALİZ (AKILLI MODEL SEÇİMİ) ---
 @app.post("/analyze-ai")
 async def ask_ai(data: ListingData):
     if not GEMINI_KEY: return {"status": "error", "message": "API Key Eksik!"}
@@ -244,14 +244,20 @@ async def ask_ai(data: ListingData):
     GÖREV: Bu aracı almalı mıyım? Fiyat/Performans analizi yap. HTML formatında cevap ver.
     """
     
+    # --- AKILLI MODEL SEÇİMİ ---
+    # Önce en yeni modeli dener, 404 veya hata alırsa eski modele düşer.
     try:
-        # 404 HATASI ÇÖZÜMÜ: 'gemini-pro' kullanılıyor.
-        model = genai.GenerativeModel("gemini-pro") 
-        response = model.generate_content(prompt)
+        try:
+            model = genai.GenerativeModel("gemini-1.5-flash") # En hızlı ve yeni
+            response = model.generate_content(prompt)
+        except Exception:
+            model = genai.GenerativeModel("gemini-pro") # Yedek (Eski)
+            response = model.generate_content(prompt)
+            
         return {"status": "success", "ai_response": response.text}
     except Exception as e:
         if "429" in str(e): return {"status": "error", "message": "⚠️ Sunucu çok yoğun."}
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": f"AI Hatası: {str(e)}"}
 
 @app.post("/analyze")
 async def analyze_listing(data: ListingData):
@@ -323,7 +329,7 @@ async def like_comment(data: LikeData):
             else: likes.append(data.user_id)
             c["liked_by"] = likes
     await listings_collection.update_one({"_id": data.listing_id}, {"$set": {"comments": comments}})
-    return {"status": "success", "comments": comments}
+    return {"status": "success", "comments": updated_comments}
 
 @app.on_event("startup")
 async def startup_event():
