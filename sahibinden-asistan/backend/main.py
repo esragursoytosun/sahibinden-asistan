@@ -217,7 +217,7 @@ async def upgrade_user(email: str, key: str):
     await users_collection.update_one({"email": email},{"$set": {"plan": "premium", "daily_usage": 0}})
     return {"status": "success", "message": f"{email} artık PREMIUM!"}
 
-# --- AI ANALİZ (AKILLI MODEL SEÇİMİ) ---
+# --- AI ANALİZ (KARARLI MODEL: gemini-1.5-flash) ---
 @app.post("/analyze-ai")
 async def ask_ai(data: ListingData):
     if not GEMINI_KEY: return {"status": "error", "message": "API Key Eksik!"}
@@ -244,20 +244,16 @@ async def ask_ai(data: ListingData):
     GÖREV: Bu aracı almalı mıyım? Fiyat/Performans analizi yap. HTML formatında cevap ver.
     """
     
-    # --- AKILLI MODEL SEÇİMİ ---
-    # Önce en yeni modeli dener, 404 veya hata alırsa eski modele düşer.
     try:
-        try:
-            model = genai.GenerativeModel("gemini-1.5-flash") # En hızlı ve yeni
-            response = model.generate_content(prompt)
-        except Exception:
-            model = genai.GenerativeModel("gemini-pro") # Yedek (Eski)
-            response = model.generate_content(prompt)
-            
+        # --- KESİN ÇÖZÜM ---
+        # gemini-1.5-flash (soneki yok, pro yok, sadece flash)
+        model = genai.GenerativeModel("gemini-1.5-flash") 
+        response = model.generate_content(prompt)
         return {"status": "success", "ai_response": response.text}
     except Exception as e:
         if "429" in str(e): return {"status": "error", "message": "⚠️ Sunucu çok yoğun."}
-        return {"status": "error", "message": f"AI Hatası: {str(e)}"}
+        # 404 Hatası alırsan requirements.txt dosyasını güncellemelisin!
+        return {"status": "error", "message": str(e)}
 
 @app.post("/analyze")
 async def analyze_listing(data: ListingData):
@@ -297,6 +293,7 @@ async def add_comment(comment: CommentData):
 
     new_comment = {"id": str(uuid.uuid4()), "user_id": comment.user_id, "user": user_name, "text": comment.text, "date": datetime.now().strftime("%Y-%m-%d %H:%M"), "liked_by": []}
     
+    # YORUM GARANTİSİ: upsert=True
     await listings_collection.update_one({"_id": comment.listing_id}, {"$push": {"comments": new_comment}}, upsert=True)
 
     reward_msg = "Yorum eklendi!"
@@ -329,7 +326,7 @@ async def like_comment(data: LikeData):
             else: likes.append(data.user_id)
             c["liked_by"] = likes
     await listings_collection.update_one({"_id": data.listing_id}, {"$set": {"comments": comments}})
-    return {"status": "success", "comments": updated_comments}
+    return {"status": "success", "comments": comments}
 
 @app.on_event("startup")
 async def startup_event():
