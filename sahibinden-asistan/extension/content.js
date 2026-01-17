@@ -1,270 +1,245 @@
-// content.js - BAI BİLMİŞ: VERSİYON KONTROLLÜ FİNAL SÜRÜM 🚀
+// content.js - BAI BİLMİŞ: DEĞERLEME MOTORLU VE AJANLI SÜRÜM (v1.2) 🚀
 
 const API_URL = "https://sahiden.onrender.com"; 
 
 // --- GÜNCELLEME AYARI ---
-const CURRENT_VERSION = "1.1"; 
+const CURRENT_VERSION = "1.2"; 
 // ------------------------
 
 console.log(`BAI BILMIS: v${CURRENT_VERSION} Başlatıldı`); 
 
-// --- KİMLİK & LOGİN KONTROLÜ ---
 let userId = localStorage.getItem("sahibinden_userid");
 let userProfile = null;
 
 try {
-    const storedProfile = localStorage.getItem("sahibinden_user_profile");
-    if (storedProfile && storedProfile !== "undefined") {
-        userProfile = JSON.parse(storedProfile);
-    }
-} catch (e) {
-    localStorage.removeItem("sahibinden_user_profile");
-}
+    const stored = localStorage.getItem("sahibinden_user_profile");
+    if (stored && stored !== "undefined") userProfile = JSON.parse(stored);
+} catch (e) { localStorage.removeItem("sahibinden_user_profile"); }
 
 if (!userId) { 
     userId = "uid_" + Math.random().toString(36).substr(2, 9); 
     localStorage.setItem("sahibinden_userid", userId); 
 }
 
-// --- VERSİYON KONTROL FONKSİYONU ---
+// --- FONKSİYONLAR ---
 async function checkUpdate() {
     try {
-        const response = await fetch(`${API_URL}/version`);
-        if (!response.ok) return;
-        const data = await response.json();
-        
-        if (data.latest_version !== CURRENT_VERSION) {
-            showUpdateBanner(data.message);
-        }
-    } catch (e) {
-        console.log("Versiyon kontrolü pas geçildi.");
-    }
+        const res = await fetch(`${API_URL}/version`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.latest_version !== CURRENT_VERSION) showUpdateBanner(data.message);
+    } catch (e) {}
 }
 
 function showUpdateBanner(msg) {
-    const banner = document.createElement("div");
-    banner.innerHTML = `
-        <div style="background:#e74c3c; color:white; padding:10px; text-align:center; font-weight:bold; font-size:13px; position:fixed; top:0; left:0; width:100%; z-index:999999; box-shadow:0 2px 10px rgba(0,0,0,0.2); font-family: sans-serif;">
-            🚀 GÜNCELLEME GEREKLİ: ${msg} <br>
-            <span style="font-weight:normal; font-size:11px; opacity:0.9;">(Chrome Eklentiler sayfasına gidip 'Yenile' butonuna basın)</span>
-            <button id="closeUpdate" style="background:none; border:1px solid white; color:white; cursor:pointer; margin-left:15px; padding:2px 8px; border-radius:4px; font-size:11px;">Tamam</button>
-        </div>
-    `;
-    document.body.prepend(banner);
-    document.getElementById("closeUpdate").onclick = () => banner.remove();
+    const b = document.createElement("div");
+    b.innerHTML = `<div style="background:#e74c3c;color:white;padding:10px;text-align:center;font-weight:bold;font-size:13px;position:fixed;top:0;left:0;width:100%;z-index:999999;box-shadow:0 2px 10px rgba(0,0,0,0.2);font-family:sans-serif;">🚀 GÜNCELLEME: ${msg}<br><span style="font-weight:normal;font-size:11px;">(Eklentiyi Yenile)</span><button id="closeUpdate" style="background:none;border:1px solid white;color:white;cursor:pointer;margin-left:15px;border-radius:4px;font-size:11px;">OK</button></div>`;
+    document.body.prepend(b);
+    document.getElementById("closeUpdate").onclick=()=>b.remove();
 }
 
-// --- LOGİN FONKSİYONU ---
 function loginWithGoogle() {
-    const btn = document.getElementById('googleLoginBtn');
-    if(btn) btn.innerHTML = "⌛...";
-    
-    chrome.runtime.sendMessage({ action: "login" }, (response) => {
-        if (response && response.status === "success") {
-            userProfile = response.user;
+    const btn = document.getElementById('googleLoginBtn'); if(btn) btn.innerText="⌛";
+    chrome.runtime.sendMessage({ action: "login" }, (res) => {
+        if (res && res.status === "success") {
+            userProfile = res.user;
             localStorage.setItem("sahibinden_user_profile", JSON.stringify(userProfile));
-            localStorage.setItem("sahibinden_userid", userProfile.id);
-            alert(`✅ Hoş geldin, ${userProfile.name}`);
             location.reload();
-        } else {
-            alert("❌ Giriş hatası.");
-            if(btn) btn.innerHTML = '<span style="color:#4285F4; font-weight:900;">G</span> Giriş Yap';
-        }
+        } else { alert("Giriş başarısız."); if(btn) btn.innerText="Giriş"; }
     });
 }
+function logout() { if(confirm("Çıkış?")) { localStorage.removeItem("sahibinden_user_profile"); location.reload(); } }
 
-function logout() {
-    if(confirm("Çıkış yapmak istiyor musun?")) {
-        localStorage.removeItem("sahibinden_user_profile");
-        userId = "uid_" + Math.random().toString(36).substr(2, 9);
-        localStorage.setItem("sahibinden_userid", userId);
-        location.reload();
-    }
-}
-
-// --- TELEGRAM ---
 function handleTelegramClick() {
-    if (!userProfile) {
-        if (confirm("⚠️ Fiyat alarmı için Google ile giriş yapmalısınız.\nGiriş yapılsın mı?")) {
-            loginWithGoogle();
-        }
-        return;
-    }
-    let botName = "BAIBilmisBot"; 
-    window.open(`https://t.me/${botName}?start=${userProfile.id}`, '_blank');
+    if (!userProfile) { if(confirm("Giriş yapmalısın. Yapılsın mı?")) loginWithGoogle(); return; }
+    window.open(`https://t.me/BAIBilmisBot?start=${userProfile.id}`, '_blank');
 }
 
-// --- VERİ OKUMA ---
 function getListingData() {
     try {
-        let priceText = document.querySelector('.classifiedInfo h3')?.innerText || document.querySelector('div.price-info')?.innerText;
-        let price = priceText ? parseInt(priceText.replace(/\D/g, '')) : 0;
+        let price = parseInt((document.querySelector('.classifiedInfo h3')?.innerText || document.querySelector('div.price-info')?.innerText || "0").replace(/\D/g, ''));
+        const id = document.getElementById('classifiedId')?.innerText.trim() || "Bilinmiyor";
+        const title = document.querySelector('.classifiedDetailTitle h1')?.innerText.trim() || document.title;
+        const desc = document.querySelector('#classifiedDescription')?.innerText || "";
         
-        const idElement = document.getElementById('classifiedId');
-        const listingId = idElement ? idElement.innerText.trim() : "Bilinmiyor";
-        
-        const titleElement = document.querySelector('.classifiedDetailTitle h1');
-        const title = titleElement ? titleElement.innerText.trim() : document.title;
-        
-        const description = document.querySelector('#classifiedDescription')?.innerText || "";
-        
-        let km = "Bilinmiyor"; let year = "Bilinmiyor";
-        const details = document.querySelectorAll('.classifiedInfoList li');
-        details.forEach(li => {
-            const label = li.querySelector('strong')?.innerText;
-            const value = li.querySelector('span')?.innerText;
-            if(label?.includes("KM")) km = value;
-            if(label?.includes("Yıl")) year = value;
+        let km="Bilinmiyor", year="Bilinmiyor";
+        document.querySelectorAll('.classifiedInfoList li').forEach(li => {
+            const lbl=li.querySelector('strong')?.innerText, val=li.querySelector('span')?.innerText;
+            if(lbl?.includes("KM")) km=val; if(lbl?.includes("Yıl")) year=val;
         });
-
-        if (price === 0) return null;
-        return { id: listingId, price, title, description, km, year, url: window.location.href };
+        if (!price) return null;
+        return { id, price, title, description: desc, km, year, url: window.location.href };
     } catch (e) { return null; }
+}
+
+// --- DEĞERLEME BARI (Piyasa Analizi) ---
+function createValuationBar(val) {
+    if (!val) return `<div style="font-size:11px; color:#999; text-align:center; margin-top:10px; background:#fff; padding:10px; border-radius:8px;">📉 <b>Yetersiz Güncel Veri</b><br>Son 30 günde yeterli benzer araç ilanı bulunamadı.</div>`;
+    
+    let percent = ((val.ratio - 0.7) / (1.3 - 0.7)) * 100;
+    if(percent < 0) percent = 5; if(percent > 100) percent = 95;
+    
+    return `
+        <div style="margin-top:15px; padding:12px; background:white; border-radius:8px; border:1px solid #e0e0e0; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <span style="font-size:13px; font-weight:800; color:${val.color};">${val.status}</span>
+                <div style="text-align:right;">
+                    <div style="font-size:10px; color:#999;">Piyasa Ortalaması</div>
+                    <div style="font-size:12px; font-weight:bold; color:#333;">${val.average_price.toLocaleString('tr-TR')} TL</div>
+                </div>
+            </div>
+            
+            <div style="width:100%; height:8px; background:#e0e0e0; border-radius:4px; position:relative; overflow:hidden;">
+                <div style="position:absolute; left:0; width:33%; height:100%; background:#d4edda;"></div>
+                <div style="position:absolute; left:33%; width:34%; height:100%; background:#fff3cd;"></div>
+                <div style="position:absolute; left:67%; width:33%; height:100%; background:#f8d7da;"></div>
+                <div style="position:absolute; left:${percent}%; top:0; width:4px; height:100%; background:#333; transform:scale(1.5); border:1px solid white; box-shadow:0 0 2px rgba(0,0,0,0.5);"></div>
+            </div>
+            
+            <div style="display:flex; align-items:center; gap:5px; margin-top:8px; font-size:9px; color:#777;">
+                <span>📅</span>
+                <span>${val.info_msg || "Son 30 gün analizi"}</span>
+            </div>
+        </div>
+    `;
 }
 
 function createPriceChart(history) {
     if (!history || history.length < 2) return ''; 
-    const width = 240; const height = 50; const padding = 5;
-    const prices = history.map(h => h.price);
-    const minPrice = Math.min(...prices); const maxPrice = Math.max(...prices);
-    if (minPrice === maxPrice) return `<div style="text-align:center; font-size:10px; color:#666; padding:10px;">Fiyat Stabil ⎯⎯⎯</div>`;
-    const points = prices.map((p, i) => {
-        const x = (i / (prices.length - 1)) * (width - 2 * padding) + padding;
-        const y = height - ((p - minPrice) / (maxPrice - minPrice)) * (height - 2 * padding) - padding;
-        return `${x},${y}`;
-    }).join(' ');
-    return `<svg width="100%" height="${height}"><polyline fill="none" stroke="#293542" stroke-width="2" points="${points}" /></svg>`;
+    const w=240, h=50, pad=5;
+    const prices=history.map(h=>h.price), min=Math.min(...prices), max=Math.max(...prices);
+    if(min===max) return `<div style="text-align:center;font-size:10px;color:#666;padding:10px;">Fiyat Stabil ⎯⎯⎯</div>`;
+    const pts = prices.map((p,i)=>`${(i/(prices.length-1))*(w-2*pad)+pad},${h-((p-min)/(max-min))*(h-2*pad)-pad}`).join(' ');
+    return `<svg width="100%" height="${h}"><polyline fill="none" stroke="#293542" stroke-width="2" points="${pts}"/></svg>`;
 }
 
 function makeDraggable(el) {
-    const header = document.getElementById("sahibinden-asistan-header");
-    let isDragging = false; let startX, startY, initialLeft, initialTop;
-    if (!header) return;
-    header.onmousedown = function(e) {
-        if(["closeOverlayBtn","googleLoginBtn","logoutText","BUTTON"].includes(e.target.tagName) || e.target.id === "telegramBtn") return; 
-        e.preventDefault(); isDragging = true;
-        startX = e.clientX; startY = e.clientY;
-        initialLeft = el.offsetLeft; initialTop = el.offsetTop;
-        el.style.right = "auto"; header.style.cursor = "grabbing";
-        document.onmousemove = (e) => { if(!isDragging) return; el.style.left = (initialLeft + e.clientX - startX) + "px"; el.style.top = (initialTop + e.clientY - startY) + "px"; };
-        document.onmouseup = () => { isDragging = false; header.style.cursor = "grab"; document.onmouseup = null; document.onmousemove = null; };
+    const h = document.getElementById("sahibinden-asistan-header");
+    let isD=false, startX, startY, iL, iT;
+    if(!h)return;
+    h.onmousedown = (e) => {
+        if(["BUTTON","IMG","SPAN"].includes(e.target.tagName) || e.target.id.includes("Btn")) return;
+        e.preventDefault(); isD=true; startX=e.clientX; startY=e.clientY; iL=el.offsetLeft; iT=el.offsetTop;
+        el.style.right="auto"; h.style.cursor="grabbing";
+        document.onmousemove=(e)=>{if(!isD)return; el.style.left=(iL+e.clientX-startX)+"px"; el.style.top=(iT+e.clientY-startY)+"px";};
+        document.onmouseup=()=>{isD=false; h.style.cursor="grab"; document.onmouseup=null; document.onmousemove=null;};
     };
 }
 
 // --- PANEL ---
 function showOverlay(data, result) {
-    const oldOverlay = document.getElementById('sahibinden-asistan-box');
-    if (oldOverlay) oldOverlay.remove();
-
-    const overlay = document.createElement('div');
-    overlay.id = 'sahibinden-asistan-box';
+    const old = document.getElementById('sahibinden-asistan-box'); if(old) old.remove();
+    const overlay = document.createElement('div'); overlay.id = 'sahibinden-asistan-box';
     
-    let chartHtml = (!result || result.status === "error") ? "" : createPriceChart(result.history);
-    const commentCount = (result && result.comments) ? result.comments.length : 0;
-
-    let headerRightHtml = userProfile ? 
-        `<div style="display:flex; align-items:center; gap:6px;">
-            <img src="${userProfile.picture}" style="width:22px; height:22px; border-radius:50%; border:1px solid #fff;">
-            <div style="display:flex; flex-direction:column; line-height:1;">
-                <span style="font-size:10px; font-weight:bold;">${userProfile.name.split(' ')[0]}</span>
-                <span id="logoutText" style="font-size:9px; text-decoration:underline; cursor:pointer; color:#444;">Çıkış</span>
-            </div>
-            <span id="closeOverlayBtn" style="cursor:pointer; font-size:18px; font-weight:bold; color:#333; margin-left:5px;">&times;</span>
-        </div>` : 
-        `<div style="display:flex; align-items:center; gap:5px;">
-            <button id="googleLoginBtn" style="background:white; color:#333; border:none; padding:4px 8px; border-radius:4px; font-size:10px; cursor:pointer; font-weight:bold; display:flex; align-items:center; gap:3px;">
-                <span style="color:#4285F4; font-weight:900;">G</span> Giriş Yap
-            </button>
-            <span id="closeOverlayBtn" style="cursor:pointer; font-size:18px; font-weight:bold; color:#333; padding:0 4px;">&times;</span>
-        </div>`;
+    let chartHtml = result?.status==="success" ? createPriceChart(result.history) : "";
+    let valuationHtml = result?.status==="success" ? createValuationBar(result.valuation) : ""; // DEĞERLEME EKLENDİ
+    
+    let headerRight = userProfile ? 
+        `<div style="display:flex;align-items:center;gap:6px;"><img src="${userProfile.picture}" style="width:22px;height:22px;border-radius:50%;"><span style="font-size:10px;font-weight:bold;">${userProfile.name.split(' ')[0]}</span><span id="logoutText" style="font-size:9px;text-decoration:underline;cursor:pointer;">Çıkış</span><span id="closeOverlayBtn" style="cursor:pointer;font-size:18px;margin-left:5px;">&times;</span></div>` : 
+        `<button id="googleLoginBtn" style="background:white;border:none;padding:4px 8px;border-radius:4px;font-size:10px;font-weight:bold;">G Giriş</button><span id="closeOverlayBtn" style="cursor:pointer;font-size:18px;margin-left:5px;">&times;</span>`;
 
     overlay.innerHTML = `
-        <div id="sahibinden-asistan-header" style="background: #FFD000; color: #222; padding: 10px 15px; border-top-left-radius: 8px; border-top-right-radius: 8px; display: flex; justify-content: space-between; align-items: center; cursor: grab; user-select: none; box-shadow: 0 2px 5px rgba(0,0,0,0.1); z-index: 10;">
-            <div style="font-weight: 900; font-size:14px; display:flex; align-items:center; gap:5px;"><span>🤖</span> BAI BİLMİŞ <span style="font-size:8px; opacity:0.6;">v${CURRENT_VERSION}</span></div>
-            ${headerRightHtml}
+        <div id="sahibinden-asistan-header" style="background:#FFD000;color:#222;padding:10px 15px;border-top-left-radius:8px;border-top-right-radius:8px;display:flex;justify-content:space-between;align-items:center;cursor:grab;box-shadow:0 2px 5px rgba(0,0,0,0.1);">
+            <div style="font-weight:900;font-size:14px;">🤖 BAI BİLMİŞ <span style="font-size:9px;opacity:0.7;">v${CURRENT_VERSION}</span></div>${headerRight}
         </div>
-        <div style="display:flex; background:#e9ecef; border-bottom:1px solid #ddd;">
-            <button id="tabAnaliz" style="flex:1; padding:10px; border:none; background:#fff; font-weight:bold; color:#293542; cursor:pointer; font-size:12px; border-bottom: 2px solid #293542;">📊 Analiz</button>
-            <button id="tabYorumlar" style="flex:1; padding:10px; border:none; background:#e9ecef; font-weight:bold; color:#666; cursor:pointer; font-size:12px; border-bottom: 2px solid transparent;">💬 Yorumlar (<span id="commentCountBadge">${commentCount}</span>)</button>
+        <div style="display:flex;background:#e9ecef;border-bottom:1px solid #ddd;">
+            <button id="tabAnaliz" style="flex:1;padding:10px;border:none;background:#fff;font-weight:bold;color:#293542;border-bottom:2px solid #293542;">📊 Analiz</button>
+            <button id="tabYorumlar" style="flex:1;padding:10px;border:none;background:#e9ecef;font-weight:bold;color:#666;">💬 Yorumlar (${result?.comments?.length||0})</button>
         </div>
-        <div style="padding: 15px; background: #F2F4F6; border-bottom-left-radius: 8px; border-bottom-right-radius: 8px; color: #333; min-height: 300px;">
+        <div style="padding:15px;background:#F2F4F6;border-bottom-left-radius:8px;border-bottom-right-radius:8px;min-height:300px;">
             <div id="viewAnaliz">
-                <div style="text-align:center; margin-bottom:10px;">
-                    <div style="font-size: 22px; font-weight: 800; color:#293542; letter-spacing:-0.5px;">${data.price.toLocaleString('tr-TR')} TL</div>
-                    <button id="telegramBtn" style="width:100%; background: #0088cc; color: white; border: none; padding: 8px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: bold; margin: 10px 0; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display:flex; align-items:center; justify-content:center; gap:5px;">🔔 Fiyat Alarmını Aç (Telegram)</button>
-                    <div style="font-size:10px; color:#777;">Güncel İlan Fiyatı</div>
+                <div style="text-align:center;">
+                    <div style="font-size:22px;font-weight:800;color:#293542;">${data.price.toLocaleString('tr-TR')} TL</div>
+                    <button id="telegramBtn" style="width:100%;background:#0088cc;color:white;border:none;padding:8px;border-radius:6px;font-weight:bold;margin:10px 0;">🔔 Fiyat Alarmı (Telegram)</button>
                 </div>
-                ${chartHtml}
-                <button id="askAiBtn" style="width:100%; background: #293542; color: #FFD000; border: none; padding: 12px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: bold; margin-top: 15px; box-shadow: 0 3px 6px rgba(0,0,0,0.15);">✨ DETAYLI ANALİZ ET</button>
-                <div id="aiResult" style="display:none; font-size:12px; margin-top:15px; background: #fff; padding: 12px; border: 1px solid #ddd; border-radius: 6px; max-height: 250px; overflow-y: auto; line-height: 1.5;"></div>
+                ${valuationHtml} ${chartHtml}
+                <button id="askAiBtn" style="width:100%;background:#293542;color:#FFD000;border:none;padding:12px;border-radius:6px;font-weight:bold;margin-top:15px;">✨ DETAYLI AI ANALİZ</button>
+                <div id="aiResult" style="display:none;font-size:12px;margin-top:15px;background:#fff;padding:12px;border:1px solid #ddd;border-radius:6px;max-height:250px;overflow-y:auto;"></div>
             </div>
-            <div id="viewYorumlar" style="display:none; height:100%;">
-                <div id="commentList" style="height: 220px; overflow-y: auto; margin-bottom: 10px; background: #fff; border: 1px solid #e1e1e1; border-radius: 4px; padding: 5px;">${renderComments(result ? result.comments : [])}</div>
-                <div style="display:flex; gap:5px;">
-                    <input id="commentInput" placeholder="Yorum ekle..." style="flex:1; border:1px solid #ccc; padding:8px; font-size:12px; border-radius:4px; outline:none;">
-                    <button id="sendCommentBtn" style="background:#293542; color:white; border:none; padding:0 12px; border-radius:4px; cursor:pointer;">➤</button>
-                </div>
+            <div id="viewYorumlar" style="display:none;">
+                <div id="commentList" style="height:220px;overflow-y:auto;margin-bottom:10px;background:#fff;padding:5px;">${renderComments(result?.comments)}</div>
+                <div style="display:flex;gap:5px;"><input id="commentInput" placeholder="Yorum..." style="flex:1;padding:8px;"><button id="sendCommentBtn" style="background:#293542;color:white;border:none;padding:0 12px;">➤</button></div>
             </div>
         </div>
     `;
 
-    overlay.style.cssText = `position: fixed !important; top: 130px !important; right: 20px !important; width: 320px !important; background-color: transparent !important; border-radius: 8px !important; box-shadow: 0 15px 50px rgba(0,0,0,0.3) !important; z-index: 2147483647 !important; font-family: 'Open Sans', Helvetica, Arial, sans-serif !important; border: 1px solid #dcdcdc !important;`;
+    overlay.style.cssText = `position:fixed;top:130px;right:20px;width:320px;background:transparent;border-radius:8px;box-shadow:0 15px 50px rgba(0,0,0,0.3);z-index:2147483647;font-family:'Open Sans',sans-serif;border:1px solid #dcdcdc;`;
     document.body.appendChild(overlay);
     makeDraggable(overlay);
 
-    // Events
-    if(document.getElementById('googleLoginBtn')) document.getElementById('googleLoginBtn').onclick = loginWithGoogle;
-    if(document.getElementById('logoutText')) document.getElementById('logoutText').onclick = logout;
-    if(document.getElementById('telegramBtn')) document.getElementById('telegramBtn').onclick = handleTelegramClick;
+    // Eventler
+    if(document.getElementById('googleLoginBtn')) document.getElementById('googleLoginBtn').onclick=loginWithGoogle;
+    if(document.getElementById('logoutText')) document.getElementById('logoutText').onclick=logout;
+    if(document.getElementById('telegramBtn')) document.getElementById('telegramBtn').onclick=handleTelegramClick;
+    document.getElementById('closeOverlayBtn').onclick=()=>overlay.remove();
     
-    // Tab Events
-    const tabA = document.getElementById('tabAnaliz'), tabY = document.getElementById('tabYorumlar'), viewA = document.getElementById('viewAnaliz'), viewY = document.getElementById('viewYorumlar');
-    tabA.onclick = () => { viewA.style.display='block'; viewY.style.display='none'; tabA.style.background='#fff'; tabA.style.borderBottom='2px solid #293542'; tabY.style.background='#e9ecef'; tabY.style.borderBottom='none'; };
-    tabY.onclick = () => { viewA.style.display='none'; viewY.style.display='block'; tabY.style.background='#fff'; tabY.style.borderBottom='2px solid #293542'; tabA.style.background='#e9ecef'; tabA.style.borderBottom='none'; };
-    
-    document.getElementById('closeOverlayBtn').onclick = () => overlay.remove();
+    const tA=document.getElementById('tabAnaliz'), tY=document.getElementById('tabYorumlar'), vA=document.getElementById('viewAnaliz'), vY=document.getElementById('viewYorumlar');
+    tA.onclick=()=>{vA.style.display='block';vY.style.display='none';tA.style.background='#fff';tA.style.borderBottom='2px solid #293542';tY.style.background='#e9ecef';tY.style.borderBottom='none';};
+    tY.onclick=()=>{vA.style.display='none';vY.style.display='block';tY.style.background='#fff';tY.style.borderBottom='2px solid #293542';tA.style.background='#e9ecef';tA.style.borderBottom='none';};
+
     document.getElementById('askAiBtn').onclick = async () => {
-        const btn = document.getElementById('askAiBtn'); const resBox = document.getElementById('aiResult');
-        btn.innerHTML = "⏳ Analiz yapılıyor..."; btn.disabled = true;
+        const btn=document.getElementById('askAiBtn'), resBox=document.getElementById('aiResult');
+        btn.innerHTML="⏳..."; btn.disabled=true;
         try {
-            const res = await fetch(`${API_URL}/analyze-ai`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
-            const json = await res.json();
-            resBox.style.display = "block";
-            resBox.innerHTML = json.status === "success" ? json.ai_response : "Hata: " + json.message;
-            btn.innerHTML = "✅ Analiz Bitti";
-        } catch(e) { resBox.innerHTML = "Bağlantı hatası."; } finally { btn.disabled = false; }
+            const r=await fetch(`${API_URL}/analyze-ai`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+            const j=await r.json(); resBox.style.display="block"; resBox.innerHTML=j.ai_response||j.message; btn.innerHTML="✅ Bitti";
+        } catch(e){resBox.innerHTML="Hata"; btn.disabled=false;}
     };
-    setupCommentEvents(data);
-}
-
-function renderComments(comments) {
-    if (!comments || comments.length === 0) return '<div style="font-size:11px; text-align:center; padding:20px; color:#999;">Henüz yorum yok.</div>';
-    return comments.map(c => `<div style="border-bottom:1px solid #eee; padding:5px; font-size:11px;"><b>${c.user}</b>: ${c.text} <div style="text-align:right;"><button class="like-btn" data-id="${c.id}" style="border:none; bg:none; cursor:pointer; color:red;">❤️ ${c.liked_by?.length||0}</button></div></div>`).join('');
-}
-
-function setupCommentEvents(data) {
-    document.getElementById('sendCommentBtn').onclick = async () => {
-        const txt = document.getElementById('commentInput').value;
-        if(!txt) return;
+    
+    document.getElementById('sendCommentBtn').onclick=async()=>{
+        const txt=document.getElementById('commentInput').value; if(!txt)return;
         if(!userProfile) return loginWithGoogle();
-        await fetch(`${API_URL}/add_comment`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({listing_id:data.id, user_id:userProfile.id, username:userProfile.name, text:txt}) });
-        alert("Yorum gönderildi!");
+        await fetch(`${API_URL}/add_comment`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({listing_id:data.id,user_id:userProfile.id,username:userProfile.name,text:txt})});
+        alert("Yorum gitti!");
     };
 }
 
-// --- DÜZELTİLEN KISIM: FONKSİYON GERİ GELDİ ---
-async function analyzeListing() {
-    const data = getListingData();
-    if (!data) return;
+function renderComments(c) {
+    if(!c||!c.length) return '<div style="text-align:center;color:#999;padding:20px;">Yorum yok.</div>';
+    return c.map(x=>`<div style="border-bottom:1px solid #eee;padding:5px;font-size:11px;"><b>${x.user}</b>: ${x.text}</div>`).join('');
+}
+
+// --- GİZLİ AJAN (BACKGROUND WORKER) ---
+async function runBackgroundWorker() {
+    console.log("🕵️ Ajan: Görev kontrol ediliyor...");
     try {
-        const res = await fetch(`${API_URL}/analyze`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
-        showOverlay(data, await res.json());
-    } catch (e) { showOverlay(data, { status: "error" }); }
+        const response = await fetch(`${API_URL}/get-update-task`);
+        const task = await response.json();
+        
+        if (task.status === "task_found" && task.url) {
+            console.log(`🕵️ Ajan: Görev alındı! İlan no: ${task.id} kontrol ediliyor...`);
+            const htmlResponse = await fetch(task.url);
+            const htmlText = await htmlResponse.text();
+            
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(htmlText, "text/html");
+            let priceText = doc.querySelector('.classifiedInfo h3')?.innerText || doc.querySelector('div.price-info')?.innerText;
+            
+            if (priceText) {
+                let price = parseInt(priceText.replace(/\D/g, ''));
+                console.log(`🕵️ Ajan: Fiyat bulundu -> ${price} TL`);
+                await fetch(`${API_URL}/update-price-background`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: task.id, price: price })
+                });
+                console.log("🕵️ Ajan: Veritabanı güncellendi! ✅");
+            } else { console.log("🕵️ Ajan: Fiyat okunamadı."); }
+        } else { console.log("🕵️ Ajan: Güncellenecek eski ilan yok. ☕"); }
+    } catch (e) { console.log("🕵️ Ajan Hatası:", e); }
 }
 
 async function init() {
-    await checkUpdate(); // 1. Versiyon kontrolü
-    await analyzeListing(); // 2. Analiz başlat (HATA BURADAYDI, ARTIK ÇÖZÜLDÜ)
+    await checkUpdate();
+    const data = getListingData();
+    if(data) {
+        try {
+            const res = await fetch(`${API_URL}/analyze`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+            showOverlay(data, await res.json());
+        } catch(e) { showOverlay(data, {status:"error"}); }
+    }
 }
 
+// Başlatıcılar
 setTimeout(init, 1000);
+setTimeout(runBackgroundWorker, 5000); // Ajan 5 sn sonra başlar
