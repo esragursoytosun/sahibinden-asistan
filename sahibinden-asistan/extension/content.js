@@ -1,30 +1,37 @@
-// content.js - BAI BİLMİŞ v2.1: ANLIK YORUM & ÖDÜL SİSTEMİ 🧹🚀💰
+// content.js - BAI BİLMİŞ v2.3: KARARLI OTURUM & HIZLI YORUM 🔐⚡
 
 const API_URL = "https://sahiden.onrender.com"; 
 
-// --- GÜNCELLEME AYARI ---
-const CURRENT_VERSION = "2.1"; 
-// ------------------------
+// --- VERSİYON ---
+const CURRENT_VERSION = "2.3"; 
+// ----------------
 
 console.log(`BAI BILMIS: v${CURRENT_VERSION} Başlatıldı`); 
 
-let userId = localStorage.getItem("sahibinden_userid");
-let userProfile = null;
+// --- KULLANICI YÖNETİMİ (GÜNCELLENDİ) ---
+// Profili her ihtiyaç duyulduğunda taze çeker, hata payını sıfırlar.
+function getUser() {
+    try {
+        const stored = localStorage.getItem("sahibinden_user_profile");
+        if (stored && stored !== "undefined" && stored !== "null") {
+            return JSON.parse(stored);
+        }
+    } catch (e) {
+        localStorage.removeItem("sahibinden_user_profile");
+    }
+    return null;
+}
 
-try {
-    const stored = localStorage.getItem("sahibinden_user_profile");
-    if (stored && stored !== "undefined") userProfile = JSON.parse(stored);
-} catch (e) { localStorage.removeItem("sahibinden_user_profile"); }
-
-if (!userId) { 
-    userId = "uid_" + Math.random().toString(36).substr(2, 9); 
-    localStorage.setItem("sahibinden_userid", userId); 
+// Cihaz ID (Misafirler için)
+let deviceId = localStorage.getItem("sahibinden_userid");
+if (!deviceId) { 
+    deviceId = "uid_" + Math.random().toString(36).substr(2, 9); 
+    localStorage.setItem("sahibinden_userid", deviceId); 
 }
 
 // --- SÜPÜRGE MODU ---
 async function runSweepMode() {
     if (document.querySelector('table#searchResultsTable')) {
-        console.log("🧹 Süpürge Modu: Liste sayfası algılandı. Vakumlama başlıyor...");
         let rows = document.querySelectorAll('tr.searchResultsItem');
         let batchData = [];
         
@@ -46,54 +53,50 @@ async function runSweepMode() {
         });
 
         if (batchData.length > 0) {
-            console.log(`🧹 Süpürge: ${batchData.length} ilan bulundu. Sunucuya gönderiliyor... 🚀`);
             try {
                 await fetch(`${API_URL}/bulk-upload`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(batchData)
                 });
-                console.log("🧹 Süpürge: İşlem Tamam! Veritabanı beslendi. ✅");
-            } catch (e) { console.log("🧹 Süpürge Hatası:", e); }
+            } catch (e) {}
         }
     }
 }
 
-// --- MEVCUT FONKSİYONLAR ---
-async function checkUpdate() {
-    // KIRMIZI BANT GEÇİCİ OLARAK KAPATILDI
-    /*
-    try {
-        const res = await fetch(`${API_URL}/version`);
-        if (!res.ok) return;
-        const data = await res.json();
-        if (data.latest_version !== CURRENT_VERSION) showUpdateBanner(data.message);
-    } catch (e) {}
-    */
-}
-
-function showUpdateBanner(msg) {
-    const b = document.createElement("div");
-    b.innerHTML = `<div style="background:#e74c3c;color:white;padding:10px;text-align:center;font-weight:bold;font-size:13px;position:fixed;top:0;left:0;width:100%;z-index:999999;box-shadow:0 2px 10px rgba(0,0,0,0.2);font-family:sans-serif;">🚀 GÜNCELLEME: ${msg}<br><span style="font-weight:normal;font-size:11px;">(Eklentiyi Yenile)</span><button id="closeUpdate" style="background:none;border:1px solid white;color:white;cursor:pointer;margin-left:15px;border-radius:4px;font-size:11px;">OK</button></div>`;
-    document.body.prepend(b);
-    document.getElementById("closeUpdate").onclick=()=>b.remove();
-}
-
+// --- LOGİN İŞLEMLERİ ---
 function loginWithGoogle() {
-    const btn = document.getElementById('googleLoginBtn'); if(btn) btn.innerText="⌛";
+    const btn = document.getElementById('googleLoginBtn'); 
+    if(btn) btn.innerText="⌛";
+    
+    // Yorum kısmındaki buton için
+    const commentBtn = document.getElementById('loginForCommentBtn');
+    if(commentBtn) commentBtn.innerText = "Giriş Yapılıyor...";
+
     chrome.runtime.sendMessage({ action: "login" }, (res) => {
         if (res && res.status === "success") {
-            userProfile = res.user;
-            localStorage.setItem("sahibinden_user_profile", JSON.stringify(userProfile));
-            location.reload();
-        } else { alert("Giriş başarısız."); if(btn) btn.innerText="Giriş"; }
+            localStorage.setItem("sahibinden_user_profile", JSON.stringify(res.user));
+            location.reload(); // Sayfayı yenile ki her şey otursun
+        } else { 
+            alert("Giriş başarısız."); 
+            if(btn) btn.innerText="Giriş";
+            if(commentBtn) commentBtn.innerText = "🔒 Yorum Yapmak İçin Giriş Yap";
+        }
     });
 }
-function logout() { if(confirm("Çıkış?")) { localStorage.removeItem("sahibinden_user_profile"); location.reload(); } }
 
-function handleTelegramClick() {
-    if (!userProfile) { if(confirm("Giriş yapmalısın. Yapılsın mı?")) loginWithGoogle(); return; }
-    window.open(`https://t.me/BAIBilmisBot?start=${userProfile.id}`, '_blank');
+function logout() { 
+    if(confirm("Çıkış yapmak istiyor musunuz?")) { 
+        localStorage.removeItem("sahibinden_user_profile"); 
+        location.reload(); 
+    } 
 }
 
+function handleTelegramClick() {
+    const user = getUser();
+    if (!user) { if(confirm("Bildirim almak için giriş yapmalısınız. Yapılsın mı?")) loginWithGoogle(); return; }
+    window.open(`https://t.me/BAIBilmisBot?start=${user.id}`, '_blank');
+}
+
+// --- VERİ ÇEKME ---
 function getListingData() {
     try {
         let price = parseInt((document.querySelector('.classifiedInfo h3')?.innerText || document.querySelector('div.price-info')?.innerText || "0").replace(/\D/g, ''));
@@ -110,6 +113,7 @@ function getListingData() {
     } catch (e) { return null; }
 }
 
+// --- GÖRSEL BİLEŞENLER ---
 function createValuationBar(val) {
     if (!val) return `<div style="font-size:11px; color:#999; text-align:center; margin-top:10px; background:#fff; padding:10px; border-radius:8px;">📉 <b>Yetersiz Güncel Veri</b><br>Son 30 günde yeterli benzer araç ilanı bulunamadı.</div>`;
     let percent = ((val.ratio - 0.7) / (1.3 - 0.7)) * 100;
@@ -161,15 +165,21 @@ function makeDraggable(el) {
 function showOverlay(data, result) {
     const old = document.getElementById('sahibinden-asistan-box'); if(old) old.remove();
     const overlay = document.createElement('div'); overlay.id = 'sahibinden-asistan-box';
+    
+    // KULLANICIYI BURADA TAZE ÇEKİYORUZ
+    const currentUser = getUser();
+    
     let chartHtml = result?.status==="success" ? createPriceChart(result.history) : "";
     let valuationHtml = result?.status==="success" ? createValuationBar(result.valuation) : ""; 
-    let headerRight = userProfile ? 
-        `<div style="display:flex;align-items:center;gap:6px;"><img src="${userProfile.picture}" style="width:22px;height:22px;border-radius:50%;"><span style="font-size:10px;font-weight:bold;">${userProfile.name.split(' ')[0]}</span><span id="logoutText" style="font-size:9px;text-decoration:underline;cursor:pointer;">Çıkış</span><span id="closeOverlayBtn" style="cursor:pointer;font-size:18px;margin-left:5px;">&times;</span></div>` : 
+    
+    // HEADER (Üst Kısım)
+    let headerRight = currentUser ? 
+        `<div style="display:flex;align-items:center;gap:6px;"><img src="${currentUser.picture}" style="width:22px;height:22px;border-radius:50%;"><span style="font-size:10px;font-weight:bold;">${currentUser.name.split(' ')[0]}</span><span id="logoutText" style="font-size:9px;text-decoration:underline;cursor:pointer;">Çıkış</span><span id="closeOverlayBtn" style="cursor:pointer;font-size:18px;margin-left:5px;">&times;</span></div>` : 
         `<button id="googleLoginBtn" style="background:white;border:none;padding:4px 8px;border-radius:4px;font-size:10px;font-weight:bold;">G Giriş</button><span id="closeOverlayBtn" style="cursor:pointer;font-size:18px;margin-left:5px;">&times;</span>`;
 
-    // --- MİSAFİR KUTUSU KONTROLÜ ---
+    // YORUM ALANI (Giriş yaptıysa kutu, yapmadıysa buton)
     let commentInputHtml = "";
-    if (userProfile) {
+    if (currentUser) {
         commentInputHtml = `<div style="display:flex;gap:5px;"><input id="commentInput" placeholder="Yorum..." style="flex:1;padding:8px;border:1px solid #ddd;border-radius:4px;"><button id="sendCommentBtn" style="background:#293542;color:white;border:none;padding:0 12px;border-radius:4px;cursor:pointer;">➤</button></div>`;
     } else {
         commentInputHtml = `<button id="loginForCommentBtn" style="width:100%;background:#e74c3c;color:white;border:none;padding:10px;border-radius:4px;font-weight:bold;cursor:pointer;margin-top:5px;">🔒 Yorum Yapmak İçin Giriş Yap</button>`;
@@ -203,6 +213,7 @@ function showOverlay(data, result) {
     overlay.style.cssText = `position:fixed;top:130px;right:20px;width:320px;background:transparent;border-radius:8px;box-shadow:0 15px 50px rgba(0,0,0,0.3);z-index:2147483647;font-family:'Open Sans',sans-serif;border:1px solid #dcdcdc;`;
     document.body.appendChild(overlay); makeDraggable(overlay);
 
+    // Event Listeners
     if(document.getElementById('googleLoginBtn')) document.getElementById('googleLoginBtn').onclick=loginWithGoogle;
     if(document.getElementById('logoutText')) document.getElementById('logoutText').onclick=logout;
     if(document.getElementById('telegramBtn')) document.getElementById('telegramBtn').onclick=handleTelegramClick;
@@ -216,10 +227,11 @@ function showOverlay(data, result) {
     // --- AI BUTONU ---
     document.getElementById('askAiBtn').onclick = async () => {
         const btn=document.getElementById('askAiBtn'), resBox=document.getElementById('aiResult');
+        const userNow = getUser(); // Güncel kullanıcıyı al
         btn.innerHTML="⏳..."; btn.disabled=true;
         
         try {
-            const payload = { ...data, user_id: userProfile ? userProfile.id : null };
+            const payload = { ...data, user_id: userNow ? userNow.id : null };
             const r=await fetch(`${API_URL}/analyze-ai`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
             const j=await r.json(); 
             
@@ -251,32 +263,37 @@ function showOverlay(data, result) {
         }
     };
     
-    // --- YORUM GÖNDERME (ANLIK GÜNCELLEME EKLENDİ) ---
+    // --- YORUM GÖNDERME (ANLIK & SESSİZ) ---
     if(document.getElementById('sendCommentBtn')) {
         document.getElementById('sendCommentBtn').onclick=async()=>{
             const txt=document.getElementById('commentInput').value; if(!txt)return;
+            const userNow = getUser();
             
-            // Sunucuya gönder
-            const r = await fetch(`${API_URL}/add_comment`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({listing_id:data.id,user_id:userProfile.id,username:userProfile.name,text:txt})});
-            const result = await r.json();
-            
-            // 1. ANLIK EKRANA EKLE (Sayfa Yenilemeden)
+            // 1. ANINDA LİSTEYE EKLE
             const list = document.getElementById('commentList');
-            if (list.innerHTML.includes("Yorum yok")) list.innerHTML = ""; // "Yorum yok" varsa temizle
-            
-            const newCommentHtml = `<div style="border-bottom:1px solid #eee;padding:5px;font-size:11px;"><b>${userProfile.name}</b>: ${txt}</div>`;
+            if (list.innerHTML.includes("Yorum yok")) list.innerHTML = "";
+            const newCommentHtml = `<div style="border-bottom:1px solid #eee;padding:5px;font-size:11px;"><b>${userNow.name}</b>: ${txt}</div>`;
             list.insertAdjacentHTML('beforeend', newCommentHtml);
+            list.scrollTop = list.scrollHeight; 
             
             // 2. SAYAÇ GÜNCELLE
             const tabBtn = document.getElementById('tabYorumlar');
             let currentCount = parseInt(tabBtn.innerText.match(/\d+/)[0] || 0);
             tabBtn.innerText = `💬 Yorumlar (${currentCount + 1})`;
 
-            // 3. ÖDÜL MESAJINI GÖSTER
-            alert(result.message || "Yorum gönderildi.");
-            
-            // 4. KUTUYU TEMİZLE
-            document.getElementById('commentInput').value = "";
+            // 3. BUTON TEPKİSİ (Alert yerine)
+            const btn = document.getElementById('sendCommentBtn');
+            const originalText = btn.innerText;
+            btn.innerText = "✓";
+            document.getElementById('commentInput').value = ""; 
+
+            // 4. SUNUCUYA GÖNDER
+            try {
+                await fetch(`${API_URL}/add_comment`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({listing_id:data.id,user_id:userNow.id,username:userNow.name,text:txt})});
+                setTimeout(() => btn.innerText = originalText, 1000);
+            } catch (e) {
+                btn.innerText = "❌";
+            }
         };
     }
 }
@@ -310,7 +327,7 @@ async function runBackgroundWorker() {
 }
 
 async function init() {
-    await checkUpdate();
+    // await checkUpdate(); // Kapalı
     await runSweepMode(); 
     
     const data = getListingData();
