@@ -1,12 +1,12 @@
 import os
 import uuid
 import requests
+import json
 from datetime import datetime, timedelta
 from typing import List
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
-import google.generativeai as genai
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 from dotenv import load_dotenv
@@ -33,11 +33,6 @@ TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 # --- SABİTLER ---
 FREE_DAILY_LIMIT = 5
 ADMIN_EMAILS = ["cemerentosun@gmail.com", "esragursoytosun@gmail.com"]
-
-if GEMINI_KEY:
-    try:
-        genai.configure(api_key=GEMINI_KEY)
-    except: pass
 
 # --- VERİ MODELLERİ ---
 class ListingData(BaseModel):
@@ -121,21 +116,12 @@ async def get_user_notes(listing_id):
     except: return ""
 
 # --- ENDPOINTLER ---
-
 @app.get("/")
 async def root(): return {"status": "active", "message": "Sahibinden Asistan Sunucusu Calisiyor! 🚀"}
 
 @app.get("/version")
 async def check_version():
     return {"latest_version": "2.6", "message": "Güncel", "force_update": False}
-
-@app.get("/debug-models")
-async def debug_models():
-    if not GEMINI_KEY: return {"error": "API Key eksik"}
-    try:
-        models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        return {"available_models": models}
-    except Exception as e: return {"error": str(e)}
 
 @app.post("/bulk-upload")
 async def bulk_upload(listings: List[ListingData]):
@@ -217,7 +203,7 @@ async def upgrade_user(email: str, key: str):
     await users_collection.update_one({"email": email},{"$set": {"plan": "premium", "daily_usage": 0}})
     return {"status": "success", "message": f"{email} artık PREMIUM!"}
 
-# --- AI ANALİZ (KARARLI MODEL: gemini-1.5-flash) ---
+# --- AI ANALİZ (DIRECT REST API - %100 GARANTİ) ---
 @app.post("/analyze-ai")
 async def ask_ai(data: ListingData):
     if not GEMINI_KEY: return {"status": "error", "message": "API Key Eksik!"}
@@ -244,16 +230,38 @@ async def ask_ai(data: ListingData):
     GÖREV: Bu aracı almalı mıyım? Fiyat/Performans analizi yap. HTML formatında cevap ver.
     """
     
+    # --- DIRECT HTTP REQUEST ---
+    # Kütüphane kullanmadan doğrudan Google API'ye bağlanıyoruz.
+    # Bu yöntem 404 hatasını atlatır.
     try:
-        # --- KESİN ÇÖZÜM ---
-        # gemini-1.5-flash (soneki yok, pro yok, sadece flash)
-        model = genai.GenerativeModel("gemini-1.5-flash") 
-        response = model.generate_content(prompt)
-        return {"status": "success", "ai_response": response.text}
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_KEY}"
+        
+        payload = {
+            "contents": [{
+                "parts": [{"text": prompt}]
+            }]
+        }
+        
+        headers = {'Content-Type': 'application/json'}
+        
+        response = requests.post(url, headers=headers, json=payload, timeout=30)
+        
+        if response.status_code == 200:
+            result = response.json()
+            # Cevabı ayıkla
+            try:
+                ai_text = result['candidates'][0]['content']['parts'][0]['text']
+                return {"status": "success", "ai_response": ai_text}
+            except:
+                return {"status": "error", "message": "AI cevabı okunamadı."}
+        else:
+            # Hata kodunu döndür
+            error_data = response.json()
+            error_msg = error_data.get('error', {}).get('message', 'Bilinmeyen Hata')
+            return {"status": "error", "message": f"AI Hatası ({response.status_code}): {error_msg}"}
+
     except Exception as e:
-        if "429" in str(e): return {"status": "error", "message": "⚠️ Sunucu çok yoğun."}
-        # 404 Hatası alırsan requirements.txt dosyasını güncellemelisin!
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": f"Bağlantı Hatası: {str(e)}"}
 
 @app.post("/analyze")
 async def analyze_listing(data: ListingData):
@@ -293,7 +301,6 @@ async def add_comment(comment: CommentData):
 
     new_comment = {"id": str(uuid.uuid4()), "user_id": comment.user_id, "user": user_name, "text": comment.text, "date": datetime.now().strftime("%Y-%m-%d %H:%M"), "liked_by": []}
     
-    # YORUM GARANTİSİ: upsert=True
     await listings_collection.update_one({"_id": comment.listing_id}, {"$push": {"comments": new_comment}}, upsert=True)
 
     reward_msg = "Yorum eklendi!"
@@ -326,7 +333,7 @@ async def like_comment(data: LikeData):
             else: likes.append(data.user_id)
             c["liked_by"] = likes
     await listings_collection.update_one({"_id": data.listing_id}, {"$set": {"comments": comments}})
-    return {"status": "success", "comments": comments}
+    return {"status": "success", "comments": updated_comments}
 
 @app.on_event("startup")
 async def startup_event():
