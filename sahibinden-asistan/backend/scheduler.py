@@ -3,6 +3,7 @@ import asyncio
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from backend.database import listings_collection, users_collection
 import requests
+from datetime import datetime
 
 # Render'a kaydettiğimiz şifreyi (Token) alıyoruz
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
@@ -54,9 +55,7 @@ async def check_price_drops():
             if old_price == 0: continue
 
             # --- SİMÜLASYON BÖLÜMÜ (ÖNEMLİ) ---
-            # Şu an Sahibinden.com'a istek atarsak banlanabiliriz.
-            # Bu yüzden şimdilik "gerçek fiyatı çekmişiz de fiyat aynıymış" gibi davranıyoruz.
-            # İleride buraya Proxy servisi eklenecek.
+            # Şimdilik fiyat aynıymış gibi davranıyoruz.
             current_price = old_price 
             
             # TEST İÇİN: Eğer gerçekten sistemin mesaj attığını görmek istersen
@@ -69,10 +68,7 @@ async def check_price_drops():
                 print(f"🚨 FİYAT DÜŞTÜ! {title} (İndirim: {drop_amount} TL)")
                 
                 # Bu ilanı favorileyen kullanıcıyı bulmamız lazım.
-                # Şimdilik sistemin çalışıp çalışmadığını anlamak için
-                # Veritabanında 'telegram_chat_id'si olan İLK kullanıcıya mesaj atalım.
-                # (Gerçek senaryoda ilanı kim takip ediyorsa ona atacağız)
-                
+                # Şimdilik veritabanında 'telegram_chat_id'si olan İLK kullanıcıya mesaj atalım.
                 user = await users_collection.find_one({"telegram_chat_id": {"$exists": True}})
                 
                 if user:
@@ -96,7 +92,30 @@ async def check_price_drops():
 
     print("✅ Fiyat kontrol turu tamamlandı.")
 
+# --- YENİ EKLENEN FONKSİYON: LİMİT SIFIRLAMA ---
+async def reset_daily_limits():
+    """
+    Her gece 00:00'da tüm kullanıcıların günlük kullanımını (daily_usage) 0 yapar.
+    """
+    print("🕛 Gece Yarısı Operasyonu: Günlük limitler sıfırlanıyor...")
+    
+    try:
+        # Tüm kullanıcıların 'daily_usage' alanını 0 yap
+        result = await users_collection.update_many(
+            {}, # Filtre yok, herkesi seç
+            {"$set": {"daily_usage": 0}}
+        )
+        print(f"✅ Limitler sıfırlandı! Toplam {result.modified_count} kullanıcının hakkı yenilendi.")
+    except Exception as e:
+        print(f"❌ Limit sıfırlama hatası: {e}")
+
 def start_scheduler():
-    # Her 6 saatte bir çalıştır (Test ederken bunu 'minutes=1' yapabilirsin)
+    # 1. Mevcut Görev: Fiyat kontrolü (Her 6 saatte bir)
     scheduler.add_job(check_price_drops, 'interval', hours=6)
+    
+    # 2. YENİ GÖREV: Limitleri sıfırla (Her gece saat 00:00'da)
+    # 'cron' modu belirli saatlerde çalışmak için kullanılır.
+    scheduler.add_job(reset_daily_limits, 'cron', hour=0, minute=0)
+    
     scheduler.start()
+    print("⏰ Zamanlayıcı başlatıldı (Fiyat Kontrolü + Limit Sıfırlama).")
