@@ -128,8 +128,8 @@ async def root(): return {"status": "active", "message": "Sahibinden Asistan Sun
 @app.get("/version")
 async def check_version():
     return {
-        "latest_version": "1.4",
-        "message": "🧹 SÜPÜRGE MODU AKTİF! Liste sayfalarındaki ilanlar artık otomatik kaydediliyor.",
+        "latest_version": "2.4", # Frontend v2.4 ile uyumlu
+        "message": "Güncel",
         "force_update": False
     }
 
@@ -245,12 +245,9 @@ async def upgrade_user(email: str, key: str):
 async def ask_ai(data: ListingData):
     if not GEMINI_KEY: return {"status": "error", "message": "API Key Eksik!"}
     
-    # 1. MİSAFİR KONTROLÜ
+    # 1. MİSAFİR KONTROLÜ (Özel kod: login_required)
     if not data.user_id:
-        return {
-            "status": "error",
-            "message": "🔒 Analiz yapmak için **Giriş Yapmalısınız!**"
-        }
+        return {"status": "login_required", "message": "Giriş yapın."}
 
     # 2. LİMİT KONTROLÜ
     user = await users_collection.find_one({"_id": data.user_id})
@@ -289,7 +286,62 @@ async def ask_ai(data: ListingData):
         if "429" in str(e): return {"status": "error", "message": "⚠️ Sunucu çok yoğun, lütfen bekleyin."}
         return {"status": "error", "message": str(e)}
 
-# --- YORUM VE ÖDÜL SİSTEMİ (YENİ KURGU: 5 Yorum = 1 Hak / Max 2 Kez) ---
+# --- ANALİZ (GÜNCELLENDİ: SKELETON DOC FIX) ---
+@app.post("/analyze")
+async def analyze_listing(data: ListingData):
+    if not data.id or not data.price: return {"status": "error"}
+    try:
+        existing = await listings_collection.find_one({"_id": data.id})
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        response = {"status": "success", "comments": [], "history": []}
+        
+        # Güncellenecek veya eklenecek alanlar
+        update_doc = {
+            "current_price": data.price,
+            "last_update": now,
+            "title": data.title,
+            "url": data.url,
+            "year": data.year,
+            "km": data.km
+        }
+
+        if existing:
+            last_price = existing.get("current_price", data.price)
+            
+            if last_price != data.price:
+                # Fiyat değişmişse geçmişe ekle ve güncelle
+                await listings_collection.update_one(
+                    {"_id": data.id}, 
+                    {
+                        "$set": update_doc,
+                        "$push": {"history": {"date": now, "price": last_price}}
+                    }
+                )
+            else:
+                # Fiyat aynıysa sadece bilgileri güncelle (Eksik bilgi varsa tamamlar)
+                await listings_collection.update_one({"_id": data.id}, {"$set": update_doc})
+            
+            full_history = existing.get("history", [])
+            full_history.append({"date": "Şimdi", "price": data.price})
+            response["history"] = full_history
+            response["comments"] = existing.get("comments", [])
+        else:
+            new_record = {
+                "_id": data.id, 
+                "first_seen_at": now, 
+                "history": [], 
+                "comments": [],
+                **update_doc # Alanları birleştir
+            }
+            await listings_collection.insert_one(new_record)
+            response["history"] = [{"date": "Şimdi", "price": data.price}]
+            
+        valuation = await calculate_valuation(data.title, data.price, data.id)
+        response["valuation"] = valuation
+        return response
+    except: return {"status": "error"}
+
+# --- YORUM VE ÖDÜL SİSTEMİ (KRİTİK DÜZELTME: UPSERT=TRUE) ---
 @app.post("/add_comment")
 async def add_comment(comment: CommentData):
     # 1. MİSAFİR KONTROLÜ
@@ -300,9 +352,14 @@ async def add_comment(comment: CommentData):
     user = await users_collection.find_one({"_id": comment.user_id})
     if user: user_name = user.get("name", user_name)
 
-    # Yorumu Ekle
+    # Yorumu Ekle (UPSERT EKLENDİ - ARTIK SİLİNMEZ!)
     new_comment = {"id": str(uuid.uuid4()), "user_id": comment.user_id, "user": user_name, "text": comment.text, "date": datetime.now().strftime("%Y-%m-%d %H:%M"), "liked_by": []}
-    await listings_collection.update_one({"_id": comment.listing_id}, {"$push": {"comments": new_comment}})
+    
+    await listings_collection.update_one(
+        {"_id": comment.listing_id}, 
+        {"$push": {"comments": new_comment}},
+        upsert=True # <--- BU SATIR KAYDETME SORUNUNU ÇÖZER
+    )
 
     # 2. ÖDÜL SİSTEMİ
     reward_msg = "Yorum eklendi! ✅"
@@ -311,7 +368,6 @@ async def add_comment(comment: CommentData):
         today_str = datetime.now().strftime("%Y-%m-%d")
         last_date = user.get("last_comment_date", "")
         
-        # Eğer gün değiştiyse sayaçları sıfırla
         if last_date != today_str:
             earned_today = 0
             current_progress = 0
@@ -319,44 +375,25 @@ async def add_comment(comment: CommentData):
             earned_today = user.get("earned_credits_today", 0)
             current_progress = user.get("comment_progress", 0)
 
-        # Eğer günlük max ödül (2 tane) alınmadıysa devam et
         if earned_today < 2:
             current_progress += 1
-            
-            # 5 Yorum hedefine ulaşıldı mı?
             if current_progress >= 5:
-                # Ödülü ver, sayacı sıfırla
                 await users_collection.update_one(
                     {"_id": comment.user_id}, 
                     {
-                        "$set": {
-                            "comment_progress": 0, 
-                            "last_comment_date": today_str,
-                            "earned_credits_today": earned_today + 1
-                        },
-                        "$inc": {"daily_usage": -1} # Limiti 1 geri çek (hak ver)
+                        "$set": {"comment_progress": 0, "last_comment_date": today_str, "earned_credits_today": earned_today + 1},
+                        "$inc": {"daily_usage": -1}
                     }
                 )
-                reward_msg = f"🎉 TEBRİKLER! 5 yorum yaptın ve +1 Analiz Hakkı kazandın! (Bugün: {earned_today + 1}/2 Ödül) 🎁"
+                reward_msg = f"🎉 5 yorum yaptın, +1 Hak kazandın!"
             else:
-                # İlerlemeyi kaydet
                 await users_collection.update_one(
                     {"_id": comment.user_id}, 
-                    {
-                        "$set": {
-                            "comment_progress": current_progress,
-                            "last_comment_date": today_str
-                        }
-                    }
+                    {"$set": {"comment_progress": current_progress, "last_comment_date": today_str}}
                 )
-                reward_msg = f"Yorum eklendi. ({current_progress}/5 yorum sonra +1 Hak! 🎁)"
+                reward_msg = f"Yorum eklendi. ({current_progress}/5)"
         else:
-            # Günlük ödül limiti doldu
-             await users_collection.update_one(
-                    {"_id": comment.user_id}, 
-                    {"$set": {"last_comment_date": today_str}}
-            )
-             reward_msg = "Yorum eklendi. (Bugünlük kazanabileceğiniz maksimum ek hakka ulaştınız) ✅"
+             await users_collection.update_one({"_id": comment.user_id}, {"$set": {"last_comment_date": today_str}})
 
     return {"status": "success", "message": reward_msg}
 
