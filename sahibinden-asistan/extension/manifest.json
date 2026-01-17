@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Sahibinden AI Asistan (BAI Bilmiş)",
-  "version": "1.0",
+  "version": "1.2",
   "description": "Sahibinden.com ilanlarını yapay zeka ile analiz eder ve Google ile giriş sağlar.",
   "permissions": [
     "activeTab",
@@ -12,9 +12,8 @@
   "oauth2": {
     "client_id": "1025920967974-67v172dj822e60elm4722g2egr8suc67.apps.googleusercontent.com",
     "scopes": [
-      "openid",
-      "email",
-      "profile"
+      "https://www.googleapis.com/auth/userinfo.email",
+      "https://www.googleapis.com/auth/userinfo.profile"
     ]
   },
   "host_permissions": [
@@ -26,8 +25,15 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://*.sahibinden.com/ilan/*"],
-      "js": ["content.js"]
+      "matches": ["https://*.sahibinden.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["icon.png"],
+      "matches": ["<all_urls>"]
     }
   ]
 }
