@@ -35,12 +35,10 @@ FREE_DAILY_LIMIT = 5
 ADMIN_EMAILS = ["cemerentosun@gmail.com", "esragursoytosun@gmail.com"]
 
 # --- MODEL LİSTESİ (Sırayla denenecek) ---
-# Biri 404 verirse diğeri devreye girer.
+# "v1beta" yerine "v1" endpointi kullanılacak.
 GEMINI_MODELS = [
     "gemini-1.5-flash",
-    "gemini-1.5-flash-001",
-    "gemini-1.5-flash-002",
-    "gemini-1.5-flash-8b",
+    "gemini-pro",
     "gemini-1.5-pro",
     "gemini-1.0-pro"
 ]
@@ -132,7 +130,7 @@ async def root(): return {"status": "active", "message": "Sahibinden Asistan Sun
 
 @app.get("/version")
 async def check_version():
-    return {"latest_version": "2.8", "message": "Güncel (Multi-Model REST API)", "force_update": False}
+    return {"latest_version": "2.8", "message": "Güncel (v1 API)", "force_update": False}
 
 @app.post("/bulk-upload")
 async def bulk_upload(listings: List[ListingData]):
@@ -214,7 +212,7 @@ async def upgrade_user(email: str, key: str):
     await users_collection.update_one({"email": email},{"$set": {"plan": "premium", "daily_usage": 0}})
     return {"status": "success", "message": f"{email} artık PREMIUM!"}
 
-# --- AI ANALİZ (MULTI-MODEL REST API) ---
+# --- AI ANALİZ (MULTI-MODEL REST API - v1) ---
 @app.post("/analyze-ai")
 async def ask_ai(data: ListingData):
     if not GEMINI_KEY: return {"status": "error", "message": "API Key Eksik!"}
@@ -245,11 +243,12 @@ async def ask_ai(data: ListingData):
     last_error = ""
     for model_name in GEMINI_MODELS:
         try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_KEY}"
+            # v1beta yerine v1 kullanıyoruz (ÇOK ÖNEMLİ)
+            url = f"https://generativelanguage.googleapis.com/v1/models/{model_name}:generateContent?key={GEMINI_KEY}"
             headers = {"Content-Type": "application/json"}
             payload = {"contents": [{"parts": [{"text": prompt}]}]}
             
-            response = requests.post(url, headers=headers, json=payload, timeout=20)
+            response = requests.post(url, headers=headers, json=payload, timeout=25)
             
             if response.status_code == 200:
                 result = response.json()
@@ -259,7 +258,6 @@ async def ask_ai(data: ListingData):
                 except:
                     continue # Cevap bozuksa sonrakini dene
             
-            # Hata varsa (404, 500) kaydet ve sonrakini dene
             last_error = f"Model {model_name} Hatası: {response.status_code} - {response.text}"
             print(last_error) # Loglara yaz
             
@@ -267,9 +265,8 @@ async def ask_ai(data: ListingData):
             last_error = f"Bağlantı hatası ({model_name}): {str(e)}"
             continue
 
-    # Hiçbiri çalışmazsa
     if "429" in last_error: return {"status": "error", "message": "⚠️ Kota doldu (429)."}
-    return {"status": "error", "message": f"Tüm modeller denendi, başarısız: {last_error}"}
+    return {"status": "error", "message": f"Tüm modeller denendi. Son hata: {last_error}"}
 
 @app.post("/analyze")
 async def analyze_listing(data: ListingData):
