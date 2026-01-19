@@ -34,13 +34,15 @@ TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 FREE_DAILY_LIMIT = 5
 ADMIN_EMAILS = ["cemerentosun@gmail.com", "esragursoytosun@gmail.com"]
 
-# --- MODEL LİSTESİ (Sırayla denenecek) ---
-# "v1beta" yerine "v1" endpointi kullanılacak.
+# --- MODEL LİSTESİ (En Yeniden Eskiye) ---
+# v1beta endpointi ile bu modellerin hepsini dener.
 GEMINI_MODELS = [
-    "gemini-1.5-flash",
-    "gemini-pro",
+    "gemini-2.0-flash-exp", # En yeni deneysel model
+    "gemini-1.5-flash",     # Standart hızlı model
+    "gemini-1.5-flash-latest",
+    "gemini-1.5-flash-001",
     "gemini-1.5-pro",
-    "gemini-1.0-pro"
+    "gemini-pro"            # En eski yedek
 ]
 
 # --- VERİ MODELLERİ ---
@@ -130,7 +132,7 @@ async def root(): return {"status": "active", "message": "Sahibinden Asistan Sun
 
 @app.get("/version")
 async def check_version():
-    return {"latest_version": "2.8", "message": "Güncel (v1 API)", "force_update": False}
+    return {"latest_version": "2.8", "message": "Güncel (v1beta + Yeni Key)", "force_update": False}
 
 @app.post("/bulk-upload")
 async def bulk_upload(listings: List[ListingData]):
@@ -212,7 +214,7 @@ async def upgrade_user(email: str, key: str):
     await users_collection.update_one({"email": email},{"$set": {"plan": "premium", "daily_usage": 0}})
     return {"status": "success", "message": f"{email} artık PREMIUM!"}
 
-# --- AI ANALİZ (MULTI-MODEL REST API - v1) ---
+# --- AI ANALİZ (MULTI-MODEL REST API - v1beta) ---
 @app.post("/analyze-ai")
 async def ask_ai(data: ListingData):
     if not GEMINI_KEY: return {"status": "error", "message": "API Key Eksik!"}
@@ -243,8 +245,8 @@ async def ask_ai(data: ListingData):
     last_error = ""
     for model_name in GEMINI_MODELS:
         try:
-            # v1beta yerine v1 kullanıyoruz (ÇOK ÖNEMLİ)
-            url = f"https://generativelanguage.googleapis.com/v1/models/{model_name}:generateContent?key={GEMINI_KEY}"
+            # v1beta endpointi kullanıyoruz (Yeni key ile)
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_KEY}"
             headers = {"Content-Type": "application/json"}
             payload = {"contents": [{"parts": [{"text": prompt}]}]}
             
@@ -256,17 +258,17 @@ async def ask_ai(data: ListingData):
                     ai_text = result['candidates'][0]['content']['parts'][0]['text']
                     return {"status": "success", "ai_response": ai_text} # BAŞARILI!
                 except:
-                    continue # Cevap bozuksa sonrakini dene
+                    continue 
             
             last_error = f"Model {model_name} Hatası: {response.status_code} - {response.text}"
-            print(last_error) # Loglara yaz
+            print(last_error) 
             
         except Exception as e:
             last_error = f"Bağlantı hatası ({model_name}): {str(e)}"
             continue
 
     if "429" in last_error: return {"status": "error", "message": "⚠️ Kota doldu (429)."}
-    return {"status": "error", "message": f"Tüm modeller denendi. Son hata: {last_error}"}
+    return {"status": "error", "message": f"Tüm modeller denendi. Yeni anahtarı kontrol et. Son hata: {last_error}"}
 
 @app.post("/analyze")
 async def analyze_listing(data: ListingData):
