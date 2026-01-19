@@ -7,8 +7,7 @@ from typing import List
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
-from google.oauth2 import id_token
-from google.auth.transport import requests as google_requests
+# Google kütüphanelerini kaldırdık, requests ile manuel istek atacağız.
 from dotenv import load_dotenv
 
 # --- AYARLAR ---
@@ -27,6 +26,7 @@ app.add_middleware(
 )
 
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY")
+# Diğer keylere gerek kalmadı ama kod bozulmasın diye tutuyoruz
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 
@@ -34,15 +34,14 @@ TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 FREE_DAILY_LIMIT = 5
 ADMIN_EMAILS = ["cemerentosun@gmail.com", "esragursoytosun@gmail.com"]
 
-# --- MODEL LİSTESİ (En Yeniden Eskiye) ---
-# v1beta endpointi ile bu modellerin hepsini dener.
+# --- MODEL LİSTESİ (Sırayla denenecek) ---
+# v1beta endpointi en güncelidir.
 GEMINI_MODELS = [
-    "gemini-2.0-flash-exp", # En yeni deneysel model
-    "gemini-1.5-flash",     # Standart hızlı model
+    "gemini-1.5-flash",
     "gemini-1.5-flash-latest",
-    "gemini-1.5-flash-001",
     "gemini-1.5-pro",
-    "gemini-pro"            # En eski yedek
+    "gemini-1.0-pro",
+    "gemini-pro"
 ]
 
 # --- VERİ MODELLERİ ---
@@ -132,7 +131,7 @@ async def root(): return {"status": "active", "message": "Sahibinden Asistan Sun
 
 @app.get("/version")
 async def check_version():
-    return {"latest_version": "2.8", "message": "Güncel (v1beta + Yeni Key)", "force_update": False}
+    return {"latest_version": "2.8", "message": "Güncel (REST API v1beta)", "force_update": False}
 
 @app.post("/bulk-upload")
 async def bulk_upload(listings: List[ListingData]):
@@ -184,14 +183,21 @@ async def update_price_background(data: ListingData):
 async def google_login(data: GoogleLoginData):
     try:
         idinfo = None
-        try: idinfo = id_token.verify_oauth2_token(data.token, google_requests.Request(), GOOGLE_CLIENT_ID)
-        except Exception: pass
-        if not idinfo:
+        try:
+            # Sadece request kütüphanesi ile basit bir doğrulama yapabiliriz veya
+            # google-auth kütüphanesi kullanılabilir. Şimdilik basit tutalım.
             res = requests.get(f"https://www.googleapis.com/oauth2/v2/userinfo", headers={"Authorization": f"Bearer {data.token}"})
             if res.status_code == 200:
                 idinfo = res.json()
                 if 'sub' not in idinfo and 'id' in idinfo: idinfo['sub'] = idinfo['id']
             else: raise ValueError("Token reddedildi.")
+        except Exception:
+             # Yedek olarak endpoint kontrolü
+             res = requests.get(f"https://www.googleapis.com/oauth2/v2/userinfo", headers={"Authorization": f"Bearer {data.token}"})
+             if res.status_code == 200:
+                idinfo = res.json()
+                if 'sub' not in idinfo and 'id' in idinfo: idinfo['sub'] = idinfo['id']
+             else: raise ValueError("Token geçersiz.")
         
         google_id = idinfo['sub']
         email = idinfo.get('email')
@@ -214,7 +220,7 @@ async def upgrade_user(email: str, key: str):
     await users_collection.update_one({"email": email},{"$set": {"plan": "premium", "daily_usage": 0}})
     return {"status": "success", "message": f"{email} artık PREMIUM!"}
 
-# --- AI ANALİZ (MULTI-MODEL REST API - v1beta) ---
+# --- AI ANALİZ (REST API - v1beta - MULTI MODEL) ---
 @app.post("/analyze-ai")
 async def ask_ai(data: ListingData):
     if not GEMINI_KEY: return {"status": "error", "message": "API Key Eksik!"}
@@ -245,7 +251,7 @@ async def ask_ai(data: ListingData):
     last_error = ""
     for model_name in GEMINI_MODELS:
         try:
-            # v1beta endpointi kullanıyoruz (Yeni key ile)
+            # v1beta endpointi kullanıyoruz
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_KEY}"
             headers = {"Content-Type": "application/json"}
             payload = {"contents": [{"parts": [{"text": prompt}]}]}
@@ -260,6 +266,7 @@ async def ask_ai(data: ListingData):
                 except:
                     continue 
             
+            # Hata kodunu kaydet
             last_error = f"Model {model_name} Hatası: {response.status_code} - {response.text}"
             print(last_error) 
             
@@ -268,7 +275,7 @@ async def ask_ai(data: ListingData):
             continue
 
     if "429" in last_error: return {"status": "error", "message": "⚠️ Kota doldu (429)."}
-    return {"status": "error", "message": f"Tüm modeller denendi. Yeni anahtarı kontrol et. Son hata: {last_error}"}
+    return {"status": "error", "message": f"Tüm modeller denendi. Lütfen 'Sahiden' API anahtarını kullandığından emin ol. Son hata: {last_error}"}
 
 @app.post("/analyze")
 async def analyze_listing(data: ListingData):
