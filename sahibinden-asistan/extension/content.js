@@ -1,8 +1,8 @@
-// content.js - BAI BİLMİŞ v2.6: AKILLI HATA YÖNETİMİ & HIZLI YORUM 🛡️⚡
+// content.js - BAI BİLMİŞ v2.8: MULTI-MODEL AI & HIZLI YORUM 🛡️⚡
 
 const API_URL = "https://sahiden.onrender.com"; 
 
-const CURRENT_VERSION = "2.6"; 
+const CURRENT_VERSION = "2.8"; 
 console.log(`BAI BILMIS: v${CURRENT_VERSION} Başlatıldı`); 
 
 function getUser() {
@@ -175,77 +175,62 @@ function showOverlay(data, result) {
     tA.onclick=()=>{vA.style.display='block';vY.style.display='none';tA.style.background='#fff';tA.style.borderBottom='2px solid #293542';tY.style.background='#e9ecef';tY.style.borderBottom='none';};
     tY.onclick=()=>{vA.style.display='none';vY.style.display='block';tY.style.background='#fff';tY.style.borderBottom='2px solid #293542';tA.style.background='#e9ecef';tA.style.borderBottom='none';};
 
-    // --- AI BUTONU (DÜZELTİLDİ: Sadece Login Gerekliyse Butonu Değiştirir) ---
+    // --- AI BUTONU ---
     document.getElementById('askAiBtn').onclick = async () => {
         const btn=document.getElementById('askAiBtn'), resBox=document.getElementById('aiResult');
-        const userNow = getUser(); // Güncel kullanıcıyı al
+        const userNow = getUser();
         btn.innerHTML="⏳..."; btn.disabled=true;
-        
         try {
             const payload = { ...data, user_id: userNow ? userNow.id : null };
             const r=await fetch(`${API_URL}/analyze-ai`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
             const j=await r.json(); 
-            
             resBox.style.display="block"; 
+            
             if (j.status === "limit_reached") {
                 btn.innerHTML = "🔒 Limit Doldu";
-                resBox.innerHTML = `
-                    <div style="text-align:center; padding:15px; background:#fff5f5; border:1px solid #ffcccc; border-radius:8px;">
-                        <div style="font-size:32px; margin-bottom:10px;">🛑</div>
-                        <div style="font-weight:bold; color:#c0392b; margin-bottom:5px;">Günlük Limit Doldu</div>
-                        <p style="font-size:11px; color:#555; margin-bottom:10px;">${j.message}</p>
-                        <a href="https://shopier.com/SENIN_LINKIN" target="_blank" style="display:block; background:#27ae60; color:white; padding:10px; border-radius:5px; text-decoration:none; font-weight:bold; font-size:12px;">👑 Premium'a Geç (Sınırsız)</a>
-                    </div>`;
-            } else if (j.status === "login_required") { // Sadece Backend'den bu kod gelirse
+                resBox.innerHTML = `<div style="text-align:center;padding:10px;background:#fff5f5;">🛑 ${j.message}</div>`;
+            } 
+            else if (j.status === "login_required") { 
                  btn.innerHTML = "🔒 Giriş Yapın";
-                 resBox.innerHTML = `<div style="text-align:center;padding:10px;">${j.message}<br><button onclick="loginWithGoogle()" style="margin-top:10px;background:#293542;color:white;border:none;padding:5px 10px;border-radius:4px;cursor:pointer;">Giriş Yap</button></div>`;
-            } else if (j.status === "success") {
+                 resBox.innerHTML = `<div style="text-align:center;">Analiz için giriş yapmalısınız.</div>`;
+            } 
+            else if (j.status === "success") {
                 resBox.innerHTML=j.ai_response; 
                 btn.innerHTML="✅ Bitti";
-            } else {
-                // Diğer tüm hatalarda (404, 500 vb.) hata mesajını göster ama butonu "Giriş Yap" yapma
+            } 
+            else { 
                 resBox.innerHTML = `<span style="color:red">⚠️ Sistem Hatası:</span> ${j.message}`;
                 btn.innerHTML = "❌ Hata";
                 btn.disabled = false;
             }
         } catch(e){
-            resBox.innerHTML="Sunucu hatası veya internet yok."; 
-            btn.innerHTML = "❌ Hata";
-            btn.disabled=false;
+            resBox.innerHTML="Sunucuya erişilemiyor."; btn.innerHTML = "❌ Hata"; btn.disabled=false;
         }
     };
     
-    // --- YORUM GÖNDERME (ANLIK & SESSİZ) ---
     if(document.getElementById('sendCommentBtn')) {
         document.getElementById('sendCommentBtn').onclick=async()=>{
             const txt=document.getElementById('commentInput').value; if(!txt)return;
             const userNow = getUser();
             
-            // 1. ANINDA LİSTEYE EKLE
             const list = document.getElementById('commentList');
             if (list.innerHTML.includes("Yorum yok")) list.innerHTML = "";
-            const newCommentHtml = `<div style="border-bottom:1px solid #eee;padding:5px;font-size:11px;"><b>${userNow.name}</b>: ${txt}</div>`;
-            list.insertAdjacentHTML('beforeend', newCommentHtml);
+            list.insertAdjacentHTML('beforeend', `<div style="border-bottom:1px solid #eee;padding:5px;font-size:11px;"><b>${userNow.name}</b>: ${txt}</div>`);
             list.scrollTop = list.scrollHeight; 
             
-            // 2. SAYAÇ GÜNCELLE
             const tabBtn = document.getElementById('tabYorumlar');
             let currentCount = parseInt(tabBtn.innerText.match(/\d+/)[0] || 0);
             tabBtn.innerText = `💬 Yorumlar (${currentCount + 1})`;
 
-            // 3. BUTON TEPKİSİ
             const btn = document.getElementById('sendCommentBtn');
             const originalText = btn.innerText;
             btn.innerText = "✓";
             document.getElementById('commentInput').value = ""; 
 
-            // 4. SUNUCUYA GÖNDER
             try {
                 await fetch(`${API_URL}/add_comment`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({listing_id:data.id,user_id:userNow.id,username:userNow.name,text:txt})});
                 setTimeout(() => btn.innerText = originalText, 1000);
-            } catch (e) {
-                btn.innerText = "❌";
-            }
+            } catch (e) { btn.innerText = "❌"; }
         };
     }
 }
