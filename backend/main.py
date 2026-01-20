@@ -286,52 +286,64 @@ async def ask_ai(data: ListingData):
     GÖREV: Fiyat/Performans analizi yap. HTML ile cevap ver.
     """
     
-    # 🟢 MODEL LİSTESİ VE HATA YÖNETİMİ (RETRY MEKANİZMASI İLE) 🟢
-    import time
+    # 🟢 GÜNCEL MODEL LİSTESİ 🟢
     import asyncio
     
+    # Google AI Studio'dan alınan güncel model isimleri
     models_to_try = [
-        "gemini-1.5-flash-latest",  # En güncel flash
-        "gemini-1.5-pro-latest",    # Pro versiyon
-        "gemini-1.0-pro",           # Eski stabil
-        "gemini-pro",               # Legacy isim
+        "models/gemini-1.5-flash",      # Güncel flash model
+        "models/gemini-1.5-pro",        # Güncel pro model  
+        "models/gemini-pro",            # Eski pro model
     ]
     
-    max_retries = 3
     last_error = ""
     
     for model_name in models_to_try:
-        for retry in range(max_retries):
-            try:
-                model = genai.GenerativeModel(model_name)
-                response = model.generate_content(prompt)
+        try:
+            print(f"🤖 Deneniyor: {model_name}")
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(prompt)
+            
+            if response and response.text:
+                print(f"✅ Başarılı: {model_name}")
                 return {"status": "success", "ai_response": response.text}
-            except Exception as e:
-                error_str = str(e).lower()
-                print(f"❌ Model {model_name} Hatası (Deneme {retry+1}/{max_retries}): {e}")
-                last_error = str(e)
+            else:
+                print(f"⚠️ Boş yanıt: {model_name}")
+                continue
                 
-                # Rate limit veya resource exhausted hatası mı kontrol et
-                if "resource" in error_str or "exhausted" in error_str or "429" in error_str or "quota" in error_str or "rate" in error_str:
-                    # Bu model için bekle ve tekrar dene
-                    if retry < max_retries - 1:
-                        wait_time = (retry + 1) * 2  # 2, 4, 6 saniye bekle
-                        print(f"⏳ AI meşgul, {wait_time} saniye bekleniyor...")
-                        await asyncio.sleep(wait_time)
-                        continue
-                    else:
-                        # Bu model için tüm denemeler tükendi, sonraki modele geç
-                        break
-                else:
-                    # Başka bir hata, sonraki modele geç
-                    break
-
-    # Tüm modeller başarısız olduysa
-    error_lower = last_error.lower()
-    if "resource" in error_lower or "exhausted" in error_lower or "429" in error_lower or "quota" in error_lower or "rate" in error_lower:
-        return {"status": "error", "message": "🔄 AI şu an yoğun. Lütfen birkaç saniye sonra tekrar deneyin."}
+        except Exception as e:
+            error_str = str(e).lower()
+            print(f"❌ Hata ({model_name}): {e}")
+            last_error = str(e)
+            
+            # 404 = model yok, hemen sonrakine geç
+            if "404" in error_str or "not found" in error_str:
+                continue
+            
+            # Rate limit = bekle ve tekrar dene
+            if "429" in error_str or "quota" in error_str or "resource" in error_str or "exhausted" in error_str:
+                try:
+                    print(f"⏳ Rate limit, 3 saniye bekleniyor...")
+                    await asyncio.sleep(3)
+                    model = genai.GenerativeModel(model_name)
+                    response = model.generate_content(prompt)
+                    if response and response.text:
+                        return {"status": "success", "ai_response": response.text}
+                except Exception as retry_error:
+                    print(f"❌ Retry hatası: {retry_error}")
+                    last_error = str(retry_error)
+            
+            continue
     
-    return {"status": "error", "message": f"AI Bağlantı Hatası: {last_error}"}
+    # Hiçbir model çalışmadı
+    print(f"❌ Tüm modeller başarısız. Son hata: {last_error}")
+    
+    if "404" in last_error.lower() or "not found" in last_error.lower():
+        return {"status": "error", "message": "AI modelleri şu an kullanılamıyor. Lütfen daha sonra tekrar deneyin."}
+    elif "quota" in last_error.lower() or "429" in last_error.lower():
+        return {"status": "error", "message": "🔄 AI şu an yoğun. Lütfen birkaç saniye sonra tekrar deneyin."}
+    else:
+        return {"status": "error", "message": f"AI Hatası: {last_error[:100]}"}
 
 @app.post("/analyze")
 async def analyze_listing(data: ListingData):
