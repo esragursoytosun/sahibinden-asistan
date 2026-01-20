@@ -118,8 +118,10 @@ async def get_user_notes(listing_id):
 
 # --- ENDPOINTLER ---
 
-# GÜNCELLENEN KISIM BURASI (Keep-Alive için)
+# 🟢 KRİTİK GÜNCELLEME BURADA 🟢
+# UptimeRobot hem GET hem HEAD isteği atabilir. İkisini de karşılıyoruz.
 @app.get("/")
+@app.head("/") 
 async def root():
     return {"status": "active", "message": "Sahiden Asistan Uyanık! ☕"}
 
