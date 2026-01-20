@@ -499,6 +499,8 @@ async def upgrade_user(email: str, key: str):
 
 # --- ADMIN PANEL API'LERİ ---
 
+ADMIN_KEY = "cem_baba"  # Admin şifresi
+
 class AdminAction(BaseModel):
     admin_email: str
     user_id: str = None
@@ -508,6 +510,23 @@ class AdminAction(BaseModel):
 async def verify_admin(email: str) -> bool:
     """Admin yetkisini kontrol eder"""
     return email in ADMIN_EMAILS
+
+@app.post("/admin/login")
+async def admin_login(data: dict):
+    """Admin girişi - email ve şifre ile"""
+    email = data.get("email", "").strip().lower()
+    key = data.get("key", "")
+    
+    if not email or not key:
+        return {"status": "error", "is_admin": False, "message": "Email ve şifre gerekli!"}
+    
+    if key != ADMIN_KEY:
+        return {"status": "error", "is_admin": False, "message": "Şifre hatalı!"}
+    
+    if email not in [e.lower() for e in ADMIN_EMAILS]:
+        return {"status": "error", "is_admin": False, "message": "Bu email admin değil!"}
+    
+    return {"status": "success", "is_admin": True, "email": email}
 
 @app.post("/admin/verify")
 async def admin_verify(data: dict):

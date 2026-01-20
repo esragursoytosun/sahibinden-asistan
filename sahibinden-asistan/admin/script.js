@@ -11,7 +11,7 @@ const USERS_PER_PAGE = 20;
 // DOM Elements
 const loginScreen = document.getElementById('loginScreen');
 const adminPanel = document.getElementById('adminPanel');
-const googleLoginBtn = document.getElementById('googleLoginBtn');
+const loginBtn = document.getElementById('loginBtn');
 const logoutBtn = document.getElementById('logoutBtn');
 const searchInput = document.getElementById('searchInput');
 const searchBtn = document.getElementById('searchBtn');
@@ -29,15 +29,20 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function setupEventListeners() {
-    googleLoginBtn.addEventListener('click', loginWithGoogle);
+    loginBtn.addEventListener('click', login);
     logoutBtn.addEventListener('click', logout);
     searchBtn.addEventListener('click', searchUsers);
     refreshBtn.addEventListener('click', () => loadUsers(currentPage));
     prevPageBtn.addEventListener('click', () => changePage(-1));
     nextPageBtn.addEventListener('click', () => changePage(1));
-    
+
     searchInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') searchUsers();
+    });
+
+    // Enter tuşu ile giriş
+    document.getElementById('adminKey').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') login();
     });
 }
 
@@ -53,92 +58,54 @@ function checkExistingLogin() {
     }
 }
 
-// Google Login
-async function loginWithGoogle() {
-    googleLoginBtn.innerHTML = '⏳ Giriş yapılıyor...';
-    googleLoginBtn.disabled = true;
-    
-    try {
-        // Google OAuth popup
-        const clientId = '755978aborov.apps.googleusercontent.com'; // Eklentideki client ID
-        const redirectUri = encodeURIComponent(window.location.origin + '/admin/');
-        const scope = encodeURIComponent('email profile');
-        
-        const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=token&scope=${scope}`;
-        
-        // Check if we have a token in URL (redirect callback)
-        const hash = window.location.hash;
-        if (hash && hash.includes('access_token')) {
-            const params = new URLSearchParams(hash.substring(1));
-            const accessToken = params.get('access_token');
-            if (accessToken) {
-                await handleGoogleToken(accessToken);
-                return;
-            }
-        }
-        
-        // Redirect to Google OAuth
-        window.location.href = authUrl;
-    } catch (e) {
-        showToast('Giriş hatası: ' + e.message, 'error');
-        resetLoginButton();
-    }
-}
+// Email + Key Login
+async function login() {
+    const email = document.getElementById('adminEmail').value.trim();
+    const key = document.getElementById('adminKey').value.trim();
 
-async function handleGoogleToken(token) {
+    if (!email) {
+        showToast('Email girin', 'error');
+        return;
+    }
+    if (!key) {
+        showToast('Şifre girin', 'error');
+        return;
+    }
+
+    loginBtn.innerHTML = '⏳ Kontrol ediliyor...';
+    loginBtn.disabled = true;
+
     try {
-        // Get user info from Google
-        const res = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        
-        if (!res.ok) throw new Error('Token geçersiz');
-        
-        const userInfo = await res.json();
-        
-        // Verify admin status
-        const verifyRes = await fetch(`${API_URL}/admin/verify`, {
+        // Backend'e admin doğrulaması yap
+        const res = await fetch(`${API_URL}/admin/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: userInfo.email })
+            body: JSON.stringify({ email: email, key: key })
         });
-        
-        const verifyData = await verifyRes.json();
-        
-        if (verifyData.is_admin) {
+
+        const data = await res.json();
+
+        if (data.status === 'success' && data.is_admin) {
             currentAdmin = {
-                email: userInfo.email,
-                name: userInfo.name,
-                picture: userInfo.picture
+                email: email,
+                name: email.split('@')[0]
             };
             localStorage.setItem('bai_admin', JSON.stringify(currentAdmin));
-            
-            // Clear URL hash
-            history.replaceState(null, '', window.location.pathname);
-            
             showAdminPanel();
-            showToast('Hoş geldin, ' + currentAdmin.name + '! 👋', 'success');
+            showToast('Hoş geldin! 👋', 'success');
         } else {
-            showToast('❌ Admin yetkiniz yok!', 'error');
+            showToast('❌ ' + (data.message || 'Giriş başarısız!'), 'error');
             resetLoginButton();
         }
     } catch (e) {
-        showToast('Giriş hatası: ' + e.message, 'error');
+        showToast('Sunucu hatası: ' + e.message, 'error');
         resetLoginButton();
     }
 }
 
 function resetLoginButton() {
-    googleLoginBtn.innerHTML = `
-        <svg width="20" height="20" viewBox="0 0 48 48">
-            <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
-            <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
-            <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
-            <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
-        </svg>
-        Google ile Giriş Yap
-    `;
-    googleLoginBtn.disabled = false;
+    loginBtn.innerHTML = '🔐 Giriş Yap';
+    loginBtn.disabled = false;
 }
 
 function logout() {
@@ -147,16 +114,17 @@ function logout() {
         currentAdmin = null;
         adminPanel.style.display = 'none';
         loginScreen.style.display = 'flex';
+        document.getElementById('adminEmail').value = '';
+        document.getElementById('adminKey').value = '';
     }
 }
 
 function showAdminPanel() {
     loginScreen.style.display = 'none';
     adminPanel.style.display = 'block';
-    
-    document.getElementById('adminName').textContent = currentAdmin.name;
-    document.getElementById('adminPicture').src = currentAdmin.picture;
-    
+
+    document.getElementById('adminName').textContent = currentAdmin.email;
+
     loadStats();
     loadUsers(1);
 }
@@ -166,7 +134,7 @@ async function loadStats() {
     try {
         const res = await fetch(`${API_URL}/admin/stats?admin_email=${encodeURIComponent(currentAdmin.email)}`);
         const data = await res.json();
-        
+
         if (data.status === 'success') {
             document.getElementById('totalUsers').textContent = data.stats.total_users;
             document.getElementById('premiumUsers').textContent = data.stats.premium_users;
@@ -182,7 +150,7 @@ async function loadStats() {
 async function loadUsers(page) {
     usersTableBody.innerHTML = '<tr><td colspan="6" class="loading-row">⏳ Yükleniyor...</td></tr>';
     currentPage = page;
-    
+
     try {
         const res = await fetch(`${API_URL}/admin/users`, {
             method: 'POST',
@@ -193,9 +161,9 @@ async function loadUsers(page) {
                 skip: (page - 1) * USERS_PER_PAGE
             })
         });
-        
+
         const data = await res.json();
-        
+
         if (data.status === 'success') {
             totalUsers = data.total;
             renderUsers(data.users);
@@ -215,14 +183,14 @@ async function searchUsers() {
         loadUsers(1);
         return;
     }
-    
+
     if (query.length < 2) {
         showToast('En az 2 karakter girin', 'error');
         return;
     }
-    
+
     usersTableBody.innerHTML = '<tr><td colspan="6" class="loading-row">🔍 Aranıyor...</td></tr>';
-    
+
     try {
         const res = await fetch(`${API_URL}/admin/search`, {
             method: 'POST',
@@ -232,9 +200,9 @@ async function searchUsers() {
                 query: query
             })
         });
-        
+
         const data = await res.json();
-        
+
         if (data.status === 'success') {
             renderUsers(data.users);
             pageInfo.textContent = `${data.count} sonuç`;
@@ -254,7 +222,7 @@ function renderUsers(users) {
         usersTableBody.innerHTML = '<tr><td colspan="6" class="loading-row">Kullanıcı bulunamadı</td></tr>';
         return;
     }
-    
+
     usersTableBody.innerHTML = users.map(user => `
         <tr>
             <td>
@@ -273,10 +241,10 @@ function renderUsers(users) {
             <td>${user.daily_usage}/5</td>
             <td>${formatDate(user.last_login)}</td>
             <td>
-                ${user.plan === 'premium' 
-                    ? `<button class="action-btn free-btn" onclick="changePlan('${user.id}', 'free')">Ücretsiz Yap</button>`
-                    : `<button class="action-btn premium-btn" onclick="changePlan('${user.id}', 'premium')">⭐ Premium Yap</button>`
-                }
+                ${user.plan === 'premium'
+            ? `<button class="action-btn free-btn" onclick="changePlan('${user.id}', 'free')">Ücretsiz Yap</button>`
+            : `<button class="action-btn premium-btn" onclick="changePlan('${user.id}', 'premium')">⭐ Premium Yap</button>`
+        }
             </td>
         </tr>
     `).join('');
@@ -285,11 +253,11 @@ function renderUsers(users) {
 // Change User Plan
 async function changePlan(userId, newPlan) {
     const actionText = newPlan === 'premium' ? 'Premium yapmak' : 'Ücretsiz yapmak';
-    
+
     if (!confirm(`Bu kullanıcıyı ${actionText} istediğinize emin misiniz?`)) {
         return;
     }
-    
+
     try {
         const res = await fetch(`${API_URL}/admin/set-plan`, {
             method: 'POST',
@@ -300,9 +268,9 @@ async function changePlan(userId, newPlan) {
                 plan: newPlan
             })
         });
-        
+
         const data = await res.json();
-        
+
         if (data.status === 'success') {
             showToast('✅ ' + data.message, 'success');
             loadUsers(currentPage);
@@ -319,7 +287,7 @@ async function changePlan(userId, newPlan) {
 function changePage(delta) {
     const newPage = currentPage + delta;
     const maxPage = Math.ceil(totalUsers / USERS_PER_PAGE);
-    
+
     if (newPage >= 1 && newPage <= maxPage) {
         loadUsers(newPage);
     }
@@ -327,7 +295,7 @@ function changePage(delta) {
 
 function updatePagination() {
     const maxPage = Math.ceil(totalUsers / USERS_PER_PAGE);
-    
+
     prevPageBtn.disabled = currentPage <= 1;
     nextPageBtn.disabled = currentPage >= maxPage;
     pageInfo.textContent = `Sayfa ${currentPage} / ${maxPage} (${totalUsers} kullanıcı)`;
@@ -337,18 +305,18 @@ function updatePagination() {
 function escapeHtml(str) {
     if (!str) return '';
     return str.replace(/&/g, '&amp;')
-              .replace(/</g, '&lt;')
-              .replace(/>/g, '&gt;')
-              .replace(/"/g, '&quot;');
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
 }
 
 function formatDate(dateStr) {
     if (!dateStr) return '-';
     try {
         const date = new Date(dateStr);
-        return date.toLocaleDateString('tr-TR', { 
-            day: '2-digit', 
-            month: '2-digit', 
+        return date.toLocaleDateString('tr-TR', {
+            day: '2-digit',
+            month: '2-digit',
             year: 'numeric',
             hour: '2-digit',
             minute: '2-digit'
@@ -361,20 +329,8 @@ function formatDate(dateStr) {
 function showToast(message, type = 'success') {
     toast.textContent = message;
     toast.className = 'toast show ' + type;
-    
+
     setTimeout(() => {
         toast.className = 'toast';
     }, 3000);
 }
-
-// Check for OAuth callback on page load
-window.addEventListener('load', () => {
-    const hash = window.location.hash;
-    if (hash && hash.includes('access_token')) {
-        const params = new URLSearchParams(hash.substring(1));
-        const accessToken = params.get('access_token');
-        if (accessToken) {
-            handleGoogleToken(accessToken);
-        }
-    }
-});
