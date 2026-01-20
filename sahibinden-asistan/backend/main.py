@@ -295,14 +295,13 @@ async def ask_ai(data: ListingData):
     if not GEMINI_KEY:
         return {"status": "error", "message": "API Key eksik!"}
     
-    # Olası model isimleri (Geniş liste)
+    # Olası model isimleri (Geniş liste - Loglardan alındı)
     models_to_try = [
-        "gemini-1.5-flash",
-        "gemini-1.5-flash-latest",
-        "gemini-1.5-pro",
-        "gemini-1.0-pro",
-        "gemini-pro",
-        "gemini-2.0-flash-exp", 
+        "gemini-2.0-flash-lite",      # En hafif (kota dostu)
+        "gemini-2.0-flash",           # Standart hızlı
+        "gemini-flash-latest",        # En son flash
+        "gemini-2.0-flash-exp",       # Deneysel
+        "gemini-2.5-flash",           # Yeni nesil
     ]
     
     last_error = ""
