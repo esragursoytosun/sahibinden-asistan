@@ -287,49 +287,76 @@ async def ask_ai(data: ListingData):
     GÖREV: Fiyat/Performans analizi yap. HTML ile cevap ver.
     """
     
-    # 🟢 YENİ GOOGLE AI SDK 🟢
+    # 🟢 GOOGLE AI REST API (v1beta) 🟢
     import asyncio
+    import requests
+    import json
     
     if not GEMINI_KEY:
         return {"status": "error", "message": "API Key eksik!"}
     
-    print(f"🔑 API Key durumu: VAR")
-    
-    # Yeni SDK ile model isimleri
+    # Olası model isimleri (Geniş liste)
     models_to_try = [
         "gemini-1.5-flash",
+        "gemini-1.5-flash-latest",
         "gemini-1.5-pro",
+        "gemini-1.0-pro",
         "gemini-pro",
+        "gemini-2.0-flash-exp", 
     ]
     
     last_error = ""
+    success = False
     
+    # 1. GENERATE DENEMESİ
     for model_name in models_to_try:
         try:
-            print(f"🤖 Deneniyor: {model_name}")
+            print(f"🤖 Deneniyor (v1beta): {model_name}")
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_KEY}"
             
-            # Yeni SDK formatı
-            response = client.models.generate_content(
-                model=model_name,
-                contents=prompt
-            )
+            payload = { "contents": [{ "parts": [{"text": prompt}] }] }
+            response = requests.post(url, json=payload, timeout=30)
             
-            if response and response.text:
-                print(f"✅ Başarılı: {model_name}")
-                return {"status": "success", "ai_response": response.text}
+            if response.status_code == 200:
+                result = response.json()
+                if "candidates" in result and len(result["candidates"]) > 0:
+                    candidate = result["candidates"][0]
+                    if "content" in candidate and "parts" in candidate["content"]:
+                        text = "".join([part.get("text", "") for part in candidate["content"]["parts"]])
+                        if text:
+                            print(f"✅ Başarılı: {model_name}")
+                            return {"status": "success", "ai_response": text}
             
-            print(f"⚠️ Boş yanıt: {model_name}")
-            continue
+            # Hata detayını al
+            try:
+                error_msg = response.json()
+            except:
+                error_msg = response.text
                 
+            print(f"⚠️ Başarısız ({model_name}): {response.status_code} - {error_msg}")
+            last_error = str(error_msg)
+            
         except Exception as e:
-            error_str = str(e)
-            print(f"❌ Hata ({model_name}): {error_str}")
-            last_error = error_str
+            print(f"❌ Hata ({model_name}): {e}")
+            last_error = str(e)
             continue
-    
-    # Hiçbir model çalışmadı
-    print(f"❌ Tüm modeller başarısız. Son hata: {last_error}")
-    return {"status": "error", "message": f"AI Hatası: {last_error[:150]}"}
+
+    # 2. HİÇBİRİ ÇALIŞMAZSA: MEVCUT MODELLERİ LİSTELE (DEBUG)
+    print("❌ Tüm denemeler başarısız. Mevcut modeller listeleniyor...")
+    try:
+        list_url = f"https://generativelanguage.googleapis.com/v1beta/models?key={GEMINI_KEY}"
+        list_res = requests.get(list_url, timeout=10)
+        if list_res.status_code == 200:
+            models_data = list_res.json()
+            available_models = [m['name'] for m in models_data.get('models', []) if 'generateContent' in m.get('supportedGenerationMethods', [])]
+            print(f"📋 KULLANILABİLİR MODELLER: {available_models}")
+            last_error += f" | Mevcutlar: {', '.join(available_models[:5])}..."
+        else:
+            print(f"📋 Model listesi alınamadı: {list_res.text}")
+    except Exception as e:
+        print(f"📋 Liste alma hatası: {e}")
+
+    return {"status": "error", "message": f"AI Hatası: {last_error[:200]}"}
 
 @app.post("/analyze")
 async def analyze_listing(data: ListingData):
