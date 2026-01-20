@@ -118,8 +118,10 @@ async def get_user_notes(listing_id):
 
 # --- ENDPOINTLER ---
 
+# GÜNCELLENEN KISIM BURASI (Keep-Alive için)
 @app.get("/")
-async def root(): return {"status": "active", "message": "Sahibinden Asistan (Clean Start) 🚀"}
+async def root():
+    return {"status": "active", "message": "Sahiden Asistan Uyanık! ☕"}
 
 @app.post("/analyze-ai")
 async def ask_ai(data: ListingData):
