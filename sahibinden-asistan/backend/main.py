@@ -114,7 +114,8 @@ async def calculate_valuation(title, current_price, current_id, current_year, ca
                 match_count = sum(1 for k in keywords if k in t)
                 if match_count < 2: continue
 
-            # 🟢 TAM YIL EŞLEŞMESİ (STRICT YEAR MATCH) 🟢
+            # 🟢 TAM YIL EŞLEŞMESİ (Strict Year Match) 🟢
+            # Hedef yıl varsa, SADECE o yılın araçlarını al. (±0 Yıl)
             if target_year > 1900 and y > 1900:
                 if y != target_year: 
                     continue 
@@ -170,7 +171,7 @@ async def get_user_notes(listing_id):
 async def root():
     return {"status": "active", "message": "Sahiden Asistan Uyanık! ☕"}
 
-# 🟢 YENİ EKLENDİ: Arka Plan Görevleri (404 Hatasını Çözer)
+# 🟢 YENİ EKLENDİ: Arka Plan Görevleri (404 Hatasını Çözer) 🟢
 @app.get("/get-update-task")
 async def get_update_task():
     """Arka plan işçisi için güncellenmesi gereken eski bir ilanı döndürür."""
@@ -252,15 +253,26 @@ async def ask_ai(data: ListingData):
     GÖREV: Fiyat/Performans analizi yap. HTML ile cevap ver.
     """
     
-    models_to_try = ["gemini-2.0-flash", "gemini-2.5-flash", "gemini-1.5-flash", "gemini-pro"]
+    # 🟢 MODEL LİSTESİ VE HATA YÖNETİMİ 🟢
+    models_to_try = [
+        "gemini-2.0-flash",       # 2026'da standart
+        "gemini-2.0-flash-lite",  # Hafif sürüm
+        "gemini-1.5-flash",       # Yedek
+        "gemini-pro"              # En eski yedek
+    ]
+    
+    last_error = ""
     for model_name in models_to_try:
         try:
             model = genai.GenerativeModel(model_name)
             response = model.generate_content(prompt)
             return {"status": "success", "ai_response": response.text}
-        except: continue
+        except Exception as e:
+            print(f"❌ Model {model_name} Hatası: {e}") # Konsola hata bas
+            last_error = str(e)
+            continue
 
-    return {"status": "error", "message": "AI meşgul."}
+    return {"status": "error", "message": f"AI Bağlantı Hatası: {last_error}"}
 
 @app.post("/analyze")
 async def analyze_listing(data: ListingData):
@@ -386,10 +398,7 @@ async def bulk_upload(listings: List[ListingData]):
     for item in listings:
         if not item.id or not item.price: continue
         
-        # $min OPERATÖRÜ İLE ZEKİ TARİH GÜNCELLEMESİ:
-        # 1. Kayıt YENİ ise -> first_seen_at = BUGÜN olur.
-        # 2. Kayıt ESKİ ama tarihi YOKSA -> first_seen_at = BUGÜN olur.
-        # 3. Kayıt ESKİ ve tarihi ESKİ ise -> Dokunmaz (Orijinal tarih korunur).
+        # $min OPERATÖRÜ İLE ZEKİ TARİH GÜNCELLEMESİ
         await listings_collection.update_one(
             {"_id": item.id}, 
             {
