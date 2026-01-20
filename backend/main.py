@@ -297,65 +297,62 @@ async def ask_ai(data: ListingData):
     
     # Olası model isimleri (Geniş liste - Loglardan alındı)
     models_to_try = [
-        "gemini-2.0-flash-lite",      # En hafif (kota dostu)
-        "gemini-2.0-flash",           # Standart hızlı
-        "gemini-flash-latest",        # En son flash
-        "gemini-2.0-flash-exp",       # Deneysel
-        "gemini-2.5-flash",           # Yeni nesil
+        "gemini-2.0-flash-lite",      # En hafif
+        "gemini-2.0-flash",           # Standart
+        "gemini-2.0-flash-lite-preview-02-05", # Alternatif preview
+        "gemini-flash-latest",        # Backup
     ]
     
     last_error = ""
-    success = False
     
     # 1. GENERATE DENEMESİ
     for model_name in models_to_try:
-        try:
-            print(f"🤖 Deneniyor (v1beta): {model_name}")
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_KEY}"
-            
-            payload = { "contents": [{ "parts": [{"text": prompt}] }] }
-            response = requests.post(url, json=payload, timeout=30)
-            
-            if response.status_code == 200:
-                result = response.json()
-                if "candidates" in result and len(result["candidates"]) > 0:
-                    candidate = result["candidates"][0]
-                    if "content" in candidate and "parts" in candidate["content"]:
-                        text = "".join([part.get("text", "") for part in candidate["content"]["parts"]])
-                        if text:
-                            print(f"✅ Başarılı: {model_name}")
-                            return {"status": "success", "ai_response": text}
-            
-            # Hata detayını al
+        # Her model için 2 deneme hakkı (429 yersek bekleyip tekrar deneriz)
+        for attempt in range(2): 
             try:
-                error_msg = response.json()
-            except:
-                error_msg = response.text
+                print(f"🤖 Deneniyor ({model_name}) - Deneme {attempt+1}")
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_KEY}"
                 
-            print(f"⚠️ Başarısız ({model_name}): {response.status_code} - {error_msg}")
-            last_error = str(error_msg)
-            
-        except Exception as e:
-            print(f"❌ Hata ({model_name}): {e}")
-            last_error = str(e)
-            continue
+                payload = { "contents": [{ "parts": [{"text": prompt}] }] }
+                response = requests.post(url, json=payload, timeout=40)
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    if "candidates" in result and len(result["candidates"]) > 0:
+                        candidate = result["candidates"][0]
+                        if "content" in candidate and "parts" in candidate["content"]:
+                            text = "".join([part.get("text", "") for part in candidate["content"]["parts"]])
+                            if text:
+                                print(f"✅ Başarılı: {model_name}")
+                                return {"status": "success", "ai_response": text}
+                
+                # Hata yönetimi
+                error_msg = response.text
+                status_code = response.status_code
+                
+                print(f"⚠️ Yanıt: {status_code} - {error_msg[:200]}")
+                
+                # Eğer Rate Limit (429) ise bekle
+                if status_code == 429:
+                    if attempt == 0: # İlk denemeyse bekle
+                        import time
+                        wait_sec = 4
+                        print(f"⏳ Kota doldu ({model_name}). {wait_sec} sn bekleniyor...")
+                        time.sleep(wait_sec)
+                        continue # Döngü başa döner, 2. denemeyi yapar
+                    else:
+                        last_error = "Rate Limit (Kota Doldu)"
+                else:
+                    # 429 değilse (örn 404, 500) direkt diğer modele geç
+                    last_error = str(error_msg)
+                    break 
+                    
+            except Exception as e:
+                print(f"❌ Hata ({model_name}): {e}")
+                last_error = str(e)
+                break # Exception durumunda diğer modele geç
 
-    # 2. HİÇBİRİ ÇALIŞMAZSA: MEVCUT MODELLERİ LİSTELE (DEBUG)
-    print("❌ Tüm denemeler başarısız. Mevcut modeller listeleniyor...")
-    try:
-        list_url = f"https://generativelanguage.googleapis.com/v1beta/models?key={GEMINI_KEY}"
-        list_res = requests.get(list_url, timeout=10)
-        if list_res.status_code == 200:
-            models_data = list_res.json()
-            available_models = [m['name'] for m in models_data.get('models', []) if 'generateContent' in m.get('supportedGenerationMethods', [])]
-            print(f"📋 KULLANILABİLİR MODELLER: {available_models}")
-            last_error += f" | Mevcutlar: {', '.join(available_models[:5])}..."
-        else:
-            print(f"📋 Model listesi alınamadı: {list_res.text}")
-    except Exception as e:
-        print(f"📋 Liste alma hatası: {e}")
-
-    return {"status": "error", "message": f"AI Hatası: {last_error[:200]}"}
+    return {"status": "error", "message": f"AI Şu an yoğun: {last_error[:100]}. Lütfen biraz bekleyip tekrar deneyin."}
 
 @app.post("/analyze")
 async def analyze_listing(data: ListingData):
