@@ -291,10 +291,10 @@ async def ask_ai(data: ListingData):
     import asyncio
     
     models_to_try = [
-        "gemini-2.0-flash",       # 2026'da standart
-        "gemini-2.0-flash-lite",  # Hafif sürüm
-        "gemini-1.5-flash",       # Yedek
-        "gemini-pro"              # En eski yedek
+        "gemini-1.5-flash-latest",  # En güncel flash
+        "gemini-1.5-pro-latest",    # Pro versiyon
+        "gemini-1.0-pro",           # Eski stabil
+        "gemini-pro",               # Legacy isim
     ]
     
     max_retries = 3
