@@ -5,10 +5,13 @@ import re
 from datetime import datetime, timedelta
 from typing import List
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 import google.generativeai as genai
 from dotenv import load_dotenv
+from pathlib import Path
 
 # --- AYARLAR ---
 load_dotenv()
@@ -170,6 +173,36 @@ async def get_user_notes(listing_id):
 @app.head("/")
 async def root():
     return {"status": "active", "message": "Sahiden Asistan Uyanık! ☕"}
+
+# 🟢 ADMIN PANEL STATIC FILES
+ADMIN_DIR = Path(__file__).parent.parent / "admin"
+
+@app.get("/admin", response_class=HTMLResponse)
+@app.get("/admin/", response_class=HTMLResponse)
+async def admin_panel():
+    """Admin panel ana sayfasını döndürür"""
+    index_path = ADMIN_DIR / "index.html"
+    if index_path.exists():
+        return HTMLResponse(content=index_path.read_text(encoding="utf-8"))
+    return HTMLResponse(content="<h1>Admin Panel Bulunamadı</h1>", status_code=404)
+
+@app.get("/admin/{filename}")
+async def admin_static(filename: str):
+    """Admin panel static dosyalarını döndürür"""
+    file_path = ADMIN_DIR / filename
+    if file_path.exists() and file_path.is_file():
+        content_types = {
+            ".css": "text/css",
+            ".js": "application/javascript",
+            ".html": "text/html",
+            ".png": "image/png",
+            ".jpg": "image/jpeg",
+            ".ico": "image/x-icon"
+        }
+        suffix = file_path.suffix.lower()
+        media_type = content_types.get(suffix, "application/octet-stream")
+        return FileResponse(file_path, media_type=media_type)
+    raise HTTPException(status_code=404, detail="Dosya bulunamadı")
 
 # 🟢 YENİ EKLENDİ: Arka Plan Görevleri (404 Hatasını Çözer) 🟢
 @app.get("/get-update-task")
@@ -463,6 +496,153 @@ async def upgrade_user(email: str, key: str):
     if not user: return {"status": "error", "message": "Kullanıcı bulunamadı."}
     await users_collection.update_one({"email": email},{"$set": {"plan": "premium", "daily_usage": 0}})
     return {"status": "success", "message": f"{email} artık PREMIUM!"}
+
+# --- ADMIN PANEL API'LERİ ---
+
+class AdminAction(BaseModel):
+    admin_email: str
+    user_id: str = None
+    plan: str = None
+    search_query: str = None
+
+async def verify_admin(email: str) -> bool:
+    """Admin yetkisini kontrol eder"""
+    return email in ADMIN_EMAILS
+
+@app.post("/admin/verify")
+async def admin_verify(data: dict):
+    """Admin girişini doğrular"""
+    email = data.get("email", "")
+    if await verify_admin(email):
+        return {"status": "success", "is_admin": True}
+    return {"status": "error", "is_admin": False, "message": "Yetkiniz yok!"}
+
+@app.post("/admin/users")
+async def admin_get_users(data: dict):
+    """Tüm kullanıcıları listeler (Admin only)"""
+    admin_email = data.get("admin_email", "")
+    if not await verify_admin(admin_email):
+        return {"status": "error", "message": "Yetkiniz yok!"}
+    
+    try:
+        limit = data.get("limit", 50)
+        skip = data.get("skip", 0)
+        
+        cursor = users_collection.find().sort("last_login", -1).skip(skip).limit(limit)
+        users = await cursor.to_list(length=limit)
+        total = await users_collection.count_documents({})
+        
+        user_list = []
+        for u in users:
+            user_list.append({
+                "id": u.get("_id"),
+                "name": u.get("name", "İsimsiz"),
+                "email": u.get("email", ""),
+                "picture": u.get("picture", ""),
+                "plan": u.get("plan", "free"),
+                "daily_usage": u.get("daily_usage", 0),
+                "last_login": str(u.get("last_login", "")) if u.get("last_login") else None,
+                "is_admin": u.get("email") in ADMIN_EMAILS
+            })
+        
+        return {"status": "success", "users": user_list, "total": total}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/admin/set-plan")
+async def admin_set_plan(data: dict):
+    """Kullanıcı planını değiştirir (Admin only)"""
+    admin_email = data.get("admin_email", "")
+    if not await verify_admin(admin_email):
+        return {"status": "error", "message": "Yetkiniz yok!"}
+    
+    user_id = data.get("user_id")
+    new_plan = data.get("plan", "free")
+    
+    if new_plan not in ["free", "premium"]:
+        return {"status": "error", "message": "Geçersiz plan!"}
+    
+    try:
+        result = await users_collection.update_one(
+            {"_id": user_id},
+            {"$set": {"plan": new_plan, "daily_usage": 0}}
+        )
+        
+        if result.modified_count > 0:
+            return {"status": "success", "message": f"Kullanıcı '{new_plan}' planına alındı!"}
+        else:
+            return {"status": "error", "message": "Kullanıcı bulunamadı veya zaten bu plandaydı."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/admin/search")
+async def admin_search_users(data: dict):
+    """Kullanıcı arar (Admin only)"""
+    admin_email = data.get("admin_email", "")
+    if not await verify_admin(admin_email):
+        return {"status": "error", "message": "Yetkiniz yok!"}
+    
+    query = data.get("query", "").strip()
+    if not query or len(query) < 2:
+        return {"status": "error", "message": "En az 2 karakter girin."}
+    
+    try:
+        # Email veya isimde arama yap
+        cursor = users_collection.find({
+            "$or": [
+                {"email": {"$regex": query, "$options": "i"}},
+                {"name": {"$regex": query, "$options": "i"}}
+            ]
+        }).limit(20)
+        
+        users = await cursor.to_list(length=20)
+        
+        user_list = []
+        for u in users:
+            user_list.append({
+                "id": u.get("_id"),
+                "name": u.get("name", "İsimsiz"),
+                "email": u.get("email", ""),
+                "picture": u.get("picture", ""),
+                "plan": u.get("plan", "free"),
+                "daily_usage": u.get("daily_usage", 0),
+                "is_admin": u.get("email") in ADMIN_EMAILS
+            })
+        
+        return {"status": "success", "users": user_list, "count": len(user_list)}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.get("/admin/stats")
+async def admin_get_stats(admin_email: str):
+    """Genel istatistikleri döndürür (Admin only)"""
+    if not await verify_admin(admin_email):
+        return {"status": "error", "message": "Yetkiniz yok!"}
+    
+    try:
+        total_users = await users_collection.count_documents({})
+        premium_users = await users_collection.count_documents({"plan": "premium"})
+        free_users = total_users - premium_users
+        total_listings = await listings_collection.count_documents({})
+        
+        # Bugün giriş yapanlar
+        today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        active_today = await users_collection.count_documents({
+            "last_login": {"$gte": today_start}
+        })
+        
+        return {
+            "status": "success",
+            "stats": {
+                "total_users": total_users,
+                "premium_users": premium_users,
+                "free_users": free_users,
+                "total_listings": total_listings,
+                "active_today": active_today
+            }
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 # --- BULK UPLOAD (Kategori Destekli & Tarih Düzeltmeli) ---
 @app.post("/bulk-upload")
