@@ -253,7 +253,10 @@ async def ask_ai(data: ListingData):
     GÖREV: Fiyat/Performans analizi yap. HTML ile cevap ver.
     """
     
-    # 🟢 MODEL LİSTESİ VE HATA YÖNETİMİ 🟢
+    # 🟢 MODEL LİSTESİ VE HATA YÖNETİMİ (RETRY MEKANİZMASI İLE) 🟢
+    import time
+    import asyncio
+    
     models_to_try = [
         "gemini-2.0-flash",       # 2026'da standart
         "gemini-2.0-flash-lite",  # Hafif sürüm
@@ -261,17 +264,40 @@ async def ask_ai(data: ListingData):
         "gemini-pro"              # En eski yedek
     ]
     
+    max_retries = 3
     last_error = ""
+    
     for model_name in models_to_try:
-        try:
-            model = genai.GenerativeModel(model_name)
-            response = model.generate_content(prompt)
-            return {"status": "success", "ai_response": response.text}
-        except Exception as e:
-            print(f"❌ Model {model_name} Hatası: {e}") # Konsola hata bas
-            last_error = str(e)
-            continue
+        for retry in range(max_retries):
+            try:
+                model = genai.GenerativeModel(model_name)
+                response = model.generate_content(prompt)
+                return {"status": "success", "ai_response": response.text}
+            except Exception as e:
+                error_str = str(e).lower()
+                print(f"❌ Model {model_name} Hatası (Deneme {retry+1}/{max_retries}): {e}")
+                last_error = str(e)
+                
+                # Rate limit veya resource exhausted hatası mı kontrol et
+                if "resource" in error_str or "exhausted" in error_str or "429" in error_str or "quota" in error_str or "rate" in error_str:
+                    # Bu model için bekle ve tekrar dene
+                    if retry < max_retries - 1:
+                        wait_time = (retry + 1) * 2  # 2, 4, 6 saniye bekle
+                        print(f"⏳ AI meşgul, {wait_time} saniye bekleniyor...")
+                        await asyncio.sleep(wait_time)
+                        continue
+                    else:
+                        # Bu model için tüm denemeler tükendi, sonraki modele geç
+                        break
+                else:
+                    # Başka bir hata, sonraki modele geç
+                    break
 
+    # Tüm modeller başarısız olduysa
+    error_lower = last_error.lower()
+    if "resource" in error_lower or "exhausted" in error_lower or "429" in error_lower or "quota" in error_lower or "rate" in error_lower:
+        return {"status": "error", "message": "🔄 AI şu an yoğun. Lütfen birkaç saniye sonra tekrar deneyin."}
+    
     return {"status": "error", "message": f"AI Bağlantı Hatası: {last_error}"}
 
 @app.post("/analyze")
