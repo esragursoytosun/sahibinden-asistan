@@ -9,7 +9,6 @@ from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
-import google.generativeai as genai
 from dotenv import load_dotenv
 from pathlib import Path
 
@@ -32,9 +31,11 @@ GEMINI_KEY = os.environ.get("GEMINI_API_KEY")
 FREE_DAILY_LIMIT = 5
 ADMIN_EMAILS = ["cemerentosun@gmail.com", "esragursoytosun@gmail.com"]
 
-# --- GOOGLE AI AYARLARI ---
+# --- GOOGLE AI AYARLARI (YENİ SDK) ---
 if GEMINI_KEY:
-    genai.configure(api_key=GEMINI_KEY)
+    from google import genai
+    from google.genai import types
+    client = genai.Client(api_key=GEMINI_KEY)
 
 # --- VERİ MODELLERİ ---
 class ListingData(BaseModel):
@@ -286,14 +287,19 @@ async def ask_ai(data: ListingData):
     GÖREV: Fiyat/Performans analizi yap. HTML ile cevap ver.
     """
     
-    # 🟢 GÜNCEL MODEL LİSTESİ 🟢
+    # 🟢 YENİ GOOGLE AI SDK 🟢
     import asyncio
     
-    # Google AI Studio'dan alınan güncel model isimleri
+    if not GEMINI_KEY:
+        return {"status": "error", "message": "API Key eksik!"}
+    
+    print(f"🔑 API Key durumu: VAR")
+    
+    # Yeni SDK ile model isimleri
     models_to_try = [
-        "models/gemini-1.5-flash",      # Güncel flash model
-        "models/gemini-1.5-pro",        # Güncel pro model  
-        "models/gemini-pro",            # Eski pro model
+        "gemini-1.5-flash",
+        "gemini-1.5-pro",
+        "gemini-pro",
     ]
     
     last_error = ""
@@ -301,49 +307,29 @@ async def ask_ai(data: ListingData):
     for model_name in models_to_try:
         try:
             print(f"🤖 Deneniyor: {model_name}")
-            model = genai.GenerativeModel(model_name)
-            response = model.generate_content(prompt)
+            
+            # Yeni SDK formatı
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt
+            )
             
             if response and response.text:
                 print(f"✅ Başarılı: {model_name}")
                 return {"status": "success", "ai_response": response.text}
-            else:
-                print(f"⚠️ Boş yanıt: {model_name}")
-                continue
+            
+            print(f"⚠️ Boş yanıt: {model_name}")
+            continue
                 
         except Exception as e:
-            error_str = str(e).lower()
-            print(f"❌ Hata ({model_name}): {e}")
-            last_error = str(e)
-            
-            # 404 = model yok, hemen sonrakine geç
-            if "404" in error_str or "not found" in error_str:
-                continue
-            
-            # Rate limit = bekle ve tekrar dene
-            if "429" in error_str or "quota" in error_str or "resource" in error_str or "exhausted" in error_str:
-                try:
-                    print(f"⏳ Rate limit, 3 saniye bekleniyor...")
-                    await asyncio.sleep(3)
-                    model = genai.GenerativeModel(model_name)
-                    response = model.generate_content(prompt)
-                    if response and response.text:
-                        return {"status": "success", "ai_response": response.text}
-                except Exception as retry_error:
-                    print(f"❌ Retry hatası: {retry_error}")
-                    last_error = str(retry_error)
-            
+            error_str = str(e)
+            print(f"❌ Hata ({model_name}): {error_str}")
+            last_error = error_str
             continue
     
     # Hiçbir model çalışmadı
     print(f"❌ Tüm modeller başarısız. Son hata: {last_error}")
-    
-    if "404" in last_error.lower() or "not found" in last_error.lower():
-        return {"status": "error", "message": "AI modelleri şu an kullanılamıyor. Lütfen daha sonra tekrar deneyin."}
-    elif "quota" in last_error.lower() or "429" in last_error.lower():
-        return {"status": "error", "message": "🔄 AI şu an yoğun. Lütfen birkaç saniye sonra tekrar deneyin."}
-    else:
-        return {"status": "error", "message": f"AI Hatası: {last_error[:100]}"}
+    return {"status": "error", "message": f"AI Hatası: {last_error[:150]}"}
 
 @app.post("/analyze")
 async def analyze_listing(data: ListingData):
