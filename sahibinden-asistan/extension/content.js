@@ -1,8 +1,8 @@
-// content.js - BAI BİLMİŞ v2.8: MULTI-MODEL AI & HIZLI YORUM 🛡️⚡
+// content.js - BAI BİLMİŞ v3.1: KATEGORİ & LİSTE TARAMA MODU 🛡️⚡
 
 const API_URL = "https://sahiden.onrender.com"; 
 
-const CURRENT_VERSION = "2.8"; 
+const CURRENT_VERSION = "3.1"; 
 console.log(`BAI BILMIS: v${CURRENT_VERSION} Başlatıldı`); 
 
 function getUser() {
@@ -16,10 +16,37 @@ function getUser() {
 let userId = localStorage.getItem("sahibinden_userid");
 if (!userId) { userId = "uid_" + Math.random().toString(36).substr(2, 9); localStorage.setItem("sahibinden_userid", userId); }
 
+// 🟢 YENİ ÖZELLİK: Sayfanın Kategori Yolunu Okur
+// Örnek Çıktı: "Vasıta > Otomobil > Renault > Clio > 1.0 TCe > Touch"
+function getCategoryPath() {
+    try {
+        // Sahibinden breadcrumb yapısı: ul > li.bc-item > a > span
+        const items = document.querySelectorAll('li.bc-item > a > span');
+        if (items.length > 0) {
+            // Tüm parçaları alıp ">" ile birleştiriyoruz
+            return Array.from(items)
+                .map(item => item.innerText.trim())
+                .filter(text => text.length > 0) // Boş olanları at
+                .join(' > ');
+        }
+    } catch (e) { console.error("Kategori okuma hatası:", e); }
+    return null;
+}
+
+// 🟢 GÜNCELLENDİ: Hızlı Tarama Modu (Liste Sayfası İçin)
 async function runSweepMode() {
-    if (document.querySelector('table#searchResultsTable')) {
+    // Eğer bir arama sonuçları tablosu varsa çalışır
+    const searchTable = document.querySelector('table#searchResultsTable');
+    
+    if (searchTable) {
+        
+        // 1. Sayfanın genel kategorisini alıyoruz (Bu sayfadaki tüm araçlar bu kategoridedir)
+        const pageCategory = getCategoryPath(); 
+        console.log(`BAI BILMIS: Liste taraması başladı. Kategori: ${pageCategory}`);
+
         let rows = document.querySelectorAll('tr.searchResultsItem');
         let batchData = [];
+
         rows.forEach(row => {
             try {
                 let id = row.getAttribute('data-id');
@@ -29,12 +56,22 @@ async function runSweepMode() {
                 let attributes = row.querySelectorAll('.searchResultsAttributeValue');
                 let year = attributes.length > 0 ? attributes[0].innerText.trim() : null;
                 let km = attributes.length > 1 ? attributes[1].innerText.trim() : null;
+                
                 if (id && priceText) {
                     let price = parseInt(priceText.replace(/\D/g, ''));
-                    batchData.push({ id, price, title: title || "Liste İlanı", url: url || "", year, km });
+                    batchData.push({ 
+                        id, 
+                        price, 
+                        title: title || "Liste İlanı", 
+                        url: url || "", 
+                        year, 
+                        km,
+                        category_path: pageCategory // <-- Kategori bilgisini buraya ekledik!
+                    });
                 }
             } catch (e) {}
         });
+
         if (batchData.length > 0) {
             try { await fetch(`${API_URL}/bulk-upload`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(batchData) }); } catch (e) {}
         }
@@ -58,6 +95,7 @@ function handleTelegramClick() {
     window.open(`https://t.me/BAIBilmisBot?start=${user.id}`, '_blank');
 }
 
+// 🟢 GÜNCELLENDİ: Tekil İlan Verisi Toplama
 function getListingData() {
     try {
         let price = parseInt((document.querySelector('.classifiedInfo h3')?.innerText || document.querySelector('div.price-info')?.innerText || "0").replace(/\D/g, ''));
@@ -65,17 +103,32 @@ function getListingData() {
         const title = document.querySelector('.classifiedDetailTitle h1')?.innerText.trim() || document.title;
         const desc = document.querySelector('#classifiedDescription')?.innerText || "";
         let km="Bilinmiyor", year="Bilinmiyor";
+        
         document.querySelectorAll('.classifiedInfoList li').forEach(li => {
             const lbl=li.querySelector('strong')?.innerText, val=li.querySelector('span')?.innerText;
             if(lbl?.includes("KM")) km=val; if(lbl?.includes("Yıl")) year=val;
         });
+
+        // Detay sayfasındaki kategoriyi de al
+        const categoryPath = getCategoryPath(); // <-- BURASI EKLENDİ
+
         if (!price) return null;
-        return { id, price, title, description: desc, km, year, url: window.location.href };
+        
+        return { 
+            id, 
+            price, 
+            title, 
+            description: desc, 
+            km, 
+            year, 
+            url: window.location.href,
+            category_path: categoryPath // <-- Backend'e gönderilecek
+        };
     } catch (e) { return null; }
 }
 
 function createValuationBar(val) {
-    if (!val) return `<div style="font-size:11px; color:#999; text-align:center; margin-top:10px; background:#fff; padding:10px; border-radius:8px;">📉 <b>Yetersiz Güncel Veri</b><br>Son 30 günde yeterli benzer araç ilanı bulunamadı.</div>`;
+    if (!val) return `<div style="font-size:11px; color:#999; text-align:center; margin-top:10px; background:#fff; padding:10px; border-radius:8px;">📉 <b>Yetersiz Güncel Veri</b><br>Bu kategoride yeterli veri yok. Tarama yaparak öğretebilirsin.</div>`;
     let percent = ((val.ratio - 0.7) / (1.3 - 0.7)) * 100;
     if(percent < 0) percent = 5; if(percent > 100) percent = 95;
     return `
@@ -94,7 +147,7 @@ function createValuationBar(val) {
                 <div style="position:absolute; left:${percent}%; top:0; width:4px; height:100%; background:#333; transform:scale(1.5); border:1px solid white; box-shadow:0 0 2px rgba(0,0,0,0.5);"></div>
             </div>
             <div style="display:flex; align-items:center; gap:5px; margin-top:8px; font-size:9px; color:#777;">
-                <span>📅</span><span>${val.info_msg || "Son 30 gün analizi"}</span>
+                <span>📅</span><span>${val.info_msg || "Analiz"}</span>
             </div>
         </div>
     `;
