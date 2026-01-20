@@ -499,7 +499,7 @@ async def upgrade_user(email: str, key: str):
 
 # --- ADMIN PANEL API'LERİ ---
 
-ADMIN_KEY = "cem_baba"  # Admin şifresi
+ADMIN_KEY = "UmutDeniz*21092025"  # Admin şifresi
 
 class AdminAction(BaseModel):
     admin_email: str
