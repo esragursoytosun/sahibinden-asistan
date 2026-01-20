@@ -283,7 +283,7 @@ function showOverlay(data, result) {
                 ${valuationHtml} 
                 ${chartHtml}
                 <button id="askAiBtn" style="width:100%;background:linear-gradient(135deg,#293542,#1a2530);color:#FFD000;border:none;padding:14px;border-radius:8px;font-weight:bold;margin-top:15px;font-size:13px;cursor:pointer;">✨ DETAYLI AI ANALİZ</button>
-                <div id="aiResult" style="display:none;font-size:12px;margin-top:15px;background:#fff;padding:12px;border:1px solid #ddd;border-radius:6px;max-height:250px;overflow-y:auto;"></div>
+                <div id="aiResult" style="display:none;font-size:13px;margin-top:15px;background:#fff;padding:15px;border:1px solid #ddd;border-radius:8px;max-height:400px;overflow-y:auto;line-height:1.6;color:#333;box-shadow:inset 0 2px 4px rgba(0,0,0,0.05);"></div>
             </div>
             <div id="viewYorumlar" style="display:none;">
                 <div id="commentList" style="height:220px;overflow-y:auto;margin-bottom:10px;background:#fff;padding:8px;border-radius:6px;">${renderComments(result?.comments)}</div>
