@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BAI Bilmiş - Admin Panel</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <!-- Login Ekranı -->
+    <div id="loginScreen" class="login-screen">
+        <div class="login-card">
+            <div class="login-logo">🤖</div>
+            <h1>BAI BİLMİŞ</h1>
+            <p class="login-subtitle">Admin Panel</p>
+
+            <div class="login-form">
+                <div class="form-group">
+                    <label>Admin Email</label>
+                    <input type="email" id="adminEmail" placeholder="admin@email.com">
+                </div>
+                <div class="form-group">
+                    <label>Admin Şifre</label>
+                    <input type="password" id="adminKey" placeholder="••••••••">
+                </div>
+                <button id="loginBtn" class="login-btn">
+                    🔐 Giriş Yap
+                </button>
+            </div>
+
+            <p class="login-note">🔒 Sadece yetkili yöneticiler erişebilir</p>
+        </div>
+    </div>
+
+    <!-- Admin Panel -->
+    <div id="adminPanel" class="admin-panel" style="display: none;">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-left">
+                <span class="logo">🤖</span>
+                <h1>BAI BİLMİŞ <span class="badge">Admin</span></h1>
+            </div>
+            <div class="header-right">
+                <span id="adminName" class="admin-name"></span>
+                <button id="logoutBtn" class="logout-btn">Çıkış</button>
+            </div>
+        </header>
+
+        <!-- Stats Cards -->
+        <div class="stats-container">
+            <div class="stat-card">
+                <div class="stat-icon">👥</div>
+                <div class="stat-info">
+                    <span class="stat-value" id="totalUsers">-</span>
+                    <span class="stat-label">Toplam Kullanıcı</span>
+                </div>
+            </div>
+            <div class="stat-card premium">
+                <div class="stat-icon">⭐</div>
+                <div class="stat-info">
+                    <span class="stat-value" id="premiumUsers">-</span>
+                    <span class="stat-label">Premium Üye</span>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">📋</div>
+                <div class="stat-info">
+                    <span class="stat-value" id="totalListings">-</span>
+                    <span class="stat-label">Kayıtlı İlan</span>
+                </div>
+            </div>
+            <div class="stat-card active">
+                <div class="stat-icon">🟢</div>
+                <div class="stat-info">
+                    <span class="stat-value" id="activeToday">-</span>
+                    <span class="stat-label">Bugün Aktif</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Search & Actions -->
+        <div class="actions-bar">
+            <div class="search-box">
+                <input type="text" id="searchInput" placeholder="Kullanıcı ara (isim veya email)...">
+                <button id="searchBtn">🔍</button>
+            </div>
+            <button id="refreshBtn" class="refresh-btn">🔄 Yenile</button>
+        </div>
+
+        <!-- Users Table -->
+        <div class="table-container">
+            <table class="users-table">
+                <thead>
+                    <tr>
+                        <th>Kullanıcı</th>
+                        <th>Email</th>
+                        <th>Plan</th>
+                        <th>Günlük Kullanım</th>
+                        <th>Son Giriş</th>
+                        <th>İşlemler</th>
+                    </tr>
+                </thead>
+                <tbody id="usersTableBody">
+                    <tr>
+                        <td colspan="6" class="loading-row">Yükleniyor...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        <div class="pagination">
+            <button id="prevPage" disabled>← Önceki</button>
+            <span id="pageInfo">Sayfa 1</span>
+            <button id="nextPage">Sonraki →</button>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast"></div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
