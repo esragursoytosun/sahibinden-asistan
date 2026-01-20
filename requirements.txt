@@ -4,7 +4,7 @@ requests
 python-dotenv
 pymongo
 motor
-google-generativeai>=0.8.3
+google-genai
 google-auth
 google-auth-oauthlib
 apscheduler

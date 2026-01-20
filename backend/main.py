@@ -9,7 +9,6 @@ from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
-import google.generativeai as genai
 from dotenv import load_dotenv
 from pathlib import Path
 
@@ -32,9 +31,11 @@ GEMINI_KEY = os.environ.get("GEMINI_API_KEY")
 FREE_DAILY_LIMIT = 5
 ADMIN_EMAILS = ["cemerentosun@gmail.com", "esragursoytosun@gmail.com"]
 
-# --- GOOGLE AI AYARLARI ---
+# --- GOOGLE AI AYARLARI (YENİ SDK) ---
 if GEMINI_KEY:
-    genai.configure(api_key=GEMINI_KEY)
+    from google import genai
+    from google.genai import types
+    client = genai.Client(api_key=GEMINI_KEY)
 
 # --- VERİ MODELLERİ ---
 class ListingData(BaseModel):
@@ -286,15 +287,18 @@ async def ask_ai(data: ListingData):
     GÖREV: Fiyat/Performans analizi yap. HTML ile cevap ver.
     """
     
-    # 🟢 GÜNCEL MODEL LİSTESİ 🟢
+    # 🟢 YENİ GOOGLE AI SDK 🟢
     import asyncio
     
-    print(f"🔑 API Key durumu: {'VAR' if GEMINI_KEY else 'YOK'}")
+    if not GEMINI_KEY:
+        return {"status": "error", "message": "API Key eksik!"}
     
-    # Basit model isimleri
+    print(f"🔑 API Key durumu: VAR")
+    
+    # Yeni SDK ile model isimleri
     models_to_try = [
         "gemini-1.5-flash",
-        "gemini-1.5-pro", 
+        "gemini-1.5-pro",
         "gemini-pro",
     ]
     
@@ -303,17 +307,16 @@ async def ask_ai(data: ListingData):
     for model_name in models_to_try:
         try:
             print(f"🤖 Deneniyor: {model_name}")
-            model = genai.GenerativeModel(model_name)
-            response = model.generate_content(prompt)
             
-            if response and hasattr(response, 'text') and response.text:
+            # Yeni SDK formatı
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt
+            )
+            
+            if response and response.text:
                 print(f"✅ Başarılı: {model_name}")
                 return {"status": "success", "ai_response": response.text}
-            elif response and hasattr(response, 'parts') and response.parts:
-                text = "".join([part.text for part in response.parts if hasattr(part, 'text')])
-                if text:
-                    print(f"✅ Başarılı (parts): {model_name}")
-                    return {"status": "success", "ai_response": text}
             
             print(f"⚠️ Boş yanıt: {model_name}")
             continue
