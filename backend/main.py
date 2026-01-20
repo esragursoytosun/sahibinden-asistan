@@ -287,7 +287,7 @@ async def ask_ai(data: ListingData):
     GÖREV: Fiyat/Performans analizi yap. HTML ile cevap ver.
     """
     
-    # 🟢 YENİ GOOGLE AI SDK 🟢
+    # 🟢 YENİ GOOGLE AI SDK - V1 API 🟢
     import asyncio
     
     if not GEMINI_KEY:
@@ -295,10 +295,10 @@ async def ask_ai(data: ListingData):
     
     print(f"🔑 API Key durumu: VAR")
     
-    # Yeni SDK ile model isimleri
+    # V1 API için model isimleri (models/ prefix olmadan)
     models_to_try = [
-        "gemini-1.5-flash",
-        "gemini-1.5-pro",
+        "gemini-1.5-flash-001",
+        "gemini-1.5-pro-001",
         "gemini-pro",
     ]
     
@@ -308,17 +308,31 @@ async def ask_ai(data: ListingData):
         try:
             print(f"🤖 Deneniyor: {model_name}")
             
-            # Yeni SDK formatı
-            response = client.models.generate_content(
-                model=model_name,
-                contents=prompt
-            )
+            # REST API ile direkt çağrı
+            import requests
+            url = f"https://generativelanguage.googleapis.com/v1/models/{model_name}:generateContent?key={GEMINI_KEY}"
             
-            if response and response.text:
-                print(f"✅ Başarılı: {model_name}")
-                return {"status": "success", "ai_response": response.text}
+            payload = {
+                "contents": [{
+                    "parts": [{"text": prompt}]
+                }]
+            }
             
-            print(f"⚠️ Boş yanıt: {model_name}")
+            response = requests.post(url, json=payload, timeout=30)
+            
+            if response.status_code == 200:
+                result = response.json()
+                if "candidates" in result and len(result["candidates"]) > 0:
+                    candidate = result["candidates"][0]
+                    if "content" in candidate and "parts" in candidate["content"]:
+                        text = "".join([part.get("text", "") for part in candidate["content"]["parts"]])
+                        if text:
+                            print(f"✅ Başarılı: {model_name}")
+                            return {"status": "success", "ai_response": text}
+            
+            error_msg = response.json() if response.status_code != 200 else "Boş yanıt"
+            print(f"⚠️ Yanıt hatası ({model_name}): {error_msg}")
+            last_error = str(error_msg)
             continue
                 
         except Exception as e:
