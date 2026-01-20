@@ -289,11 +289,13 @@ async def ask_ai(data: ListingData):
     # 🟢 GÜNCEL MODEL LİSTESİ 🟢
     import asyncio
     
-    # Google AI Studio'dan alınan güncel model isimleri
+    print(f"🔑 API Key durumu: {'VAR' if GEMINI_KEY else 'YOK'}")
+    
+    # Basit model isimleri
     models_to_try = [
-        "models/gemini-1.5-flash",      # Güncel flash model
-        "models/gemini-1.5-pro",        # Güncel pro model  
-        "models/gemini-pro",            # Eski pro model
+        "gemini-1.5-flash",
+        "gemini-1.5-pro", 
+        "gemini-pro",
     ]
     
     last_error = ""
@@ -304,46 +306,27 @@ async def ask_ai(data: ListingData):
             model = genai.GenerativeModel(model_name)
             response = model.generate_content(prompt)
             
-            if response and response.text:
+            if response and hasattr(response, 'text') and response.text:
                 print(f"✅ Başarılı: {model_name}")
                 return {"status": "success", "ai_response": response.text}
-            else:
-                print(f"⚠️ Boş yanıt: {model_name}")
-                continue
+            elif response and hasattr(response, 'parts') and response.parts:
+                text = "".join([part.text for part in response.parts if hasattr(part, 'text')])
+                if text:
+                    print(f"✅ Başarılı (parts): {model_name}")
+                    return {"status": "success", "ai_response": text}
+            
+            print(f"⚠️ Boş yanıt: {model_name}")
+            continue
                 
         except Exception as e:
-            error_str = str(e).lower()
-            print(f"❌ Hata ({model_name}): {e}")
-            last_error = str(e)
-            
-            # 404 = model yok, hemen sonrakine geç
-            if "404" in error_str or "not found" in error_str:
-                continue
-            
-            # Rate limit = bekle ve tekrar dene
-            if "429" in error_str or "quota" in error_str or "resource" in error_str or "exhausted" in error_str:
-                try:
-                    print(f"⏳ Rate limit, 3 saniye bekleniyor...")
-                    await asyncio.sleep(3)
-                    model = genai.GenerativeModel(model_name)
-                    response = model.generate_content(prompt)
-                    if response and response.text:
-                        return {"status": "success", "ai_response": response.text}
-                except Exception as retry_error:
-                    print(f"❌ Retry hatası: {retry_error}")
-                    last_error = str(retry_error)
-            
+            error_str = str(e)
+            print(f"❌ Hata ({model_name}): {error_str}")
+            last_error = error_str
             continue
     
     # Hiçbir model çalışmadı
     print(f"❌ Tüm modeller başarısız. Son hata: {last_error}")
-    
-    if "404" in last_error.lower() or "not found" in last_error.lower():
-        return {"status": "error", "message": "AI modelleri şu an kullanılamıyor. Lütfen daha sonra tekrar deneyin."}
-    elif "quota" in last_error.lower() or "429" in last_error.lower():
-        return {"status": "error", "message": "🔄 AI şu an yoğun. Lütfen birkaç saniye sonra tekrar deneyin."}
-    else:
-        return {"status": "error", "message": f"AI Hatası: {last_error[:100]}"}
+    return {"status": "error", "message": f"AI Hatası: {last_error[:150]}"}
 
 @app.post("/analyze")
 async def analyze_listing(data: ListingData):
