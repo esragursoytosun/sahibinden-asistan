@@ -397,6 +397,10 @@ async def google_login(data: GoogleLoginData):
         
         google_id = idinfo['sub']
         email = idinfo.get('email')
+        
+        # Mevcut kullanıcıyı kontrol et
+        existing_user = await users_collection.find_one({"_id": google_id})
+        
         update_data = {
             "$set": {"email": email, "name": idinfo.get('name'), "picture": idinfo.get('picture'), "last_login": datetime.now()},
             "$setOnInsert": {"daily_usage": 0, "comment_progress": 0, "earned_credits_today": 0, "telegram_chat_id": None}
@@ -405,8 +409,52 @@ async def google_login(data: GoogleLoginData):
         else: update_data["$setOnInsert"]["plan"] = "free"
         
         await users_collection.update_one({"_id": google_id}, update_data, upsert=True)
-        return {"status": "success", "user": {"id": google_id, "name": idinfo.get('name'), "picture": idinfo.get('picture')}}
+        
+        # Güncel kullanıcı bilgilerini al
+        updated_user = await users_collection.find_one({"_id": google_id})
+        
+        return {
+            "status": "success", 
+            "user": {
+                "id": google_id, 
+                "name": idinfo.get('name'), 
+                "picture": idinfo.get('picture'),
+                "email": email,
+                "plan": updated_user.get("plan", "free"),
+                "daily_usage": updated_user.get("daily_usage", 0)
+            }
+        }
     except Exception as e: raise HTTPException(status_code=401, detail=str(e))
+
+# 🟢 KULLANICI PROFİL BİLGİLERİ (Güncel usage ve plan)
+@app.get("/user/profile/{user_id}")
+async def get_user_profile(user_id: str):
+    """Kullanıcının güncel profil bilgilerini döndürür"""
+    try:
+        user = await users_collection.find_one({"_id": user_id})
+        if not user:
+            return {"status": "error", "message": "Kullanıcı bulunamadı"}
+        
+        is_premium = user.get("plan") == "premium"
+        daily_limit = 999 if is_premium else FREE_DAILY_LIMIT
+        daily_usage = user.get("daily_usage", 0)
+        
+        return {
+            "status": "success",
+            "profile": {
+                "id": user_id,
+                "name": user.get("name", ""),
+                "email": user.get("email", ""),
+                "picture": user.get("picture", ""),
+                "plan": user.get("plan", "free"),
+                "daily_usage": daily_usage,
+                "daily_limit": daily_limit,
+                "remaining": max(0, daily_limit - daily_usage) if not is_premium else 999,
+                "comment_progress": user.get("comment_progress", 0)
+            }
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 @app.get("/admin/upgrade")
 async def upgrade_user(email: str, key: str):
