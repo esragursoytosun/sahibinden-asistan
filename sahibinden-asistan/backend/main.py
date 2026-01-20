@@ -86,7 +86,6 @@ async def calculate_valuation(title, current_price, current_id, current_year):
         keywords = [k.lower() for k in title.split() if len(k) > 2][:4]
         
         for item in all_listings:
-            # Kendisiyle kıyaslama
             if str(item.get("_id")) == str(current_id): continue
             
             # Tarih kontrolü
@@ -108,7 +107,7 @@ async def calculate_valuation(title, current_price, current_id, current_year):
             if match_count < 2: continue
 
             # 2. Yıl Kontrolü (Varsa, +/- 2 yıl aralığına bak)
-            # Eğer ilanın yılı yoksa, sadece başlığa göre kıyasla (mecburen)
+            # Eğer ilanın yılı yoksa veya hedef yıl yoksa, sadece başlığa göre kıyasla
             if target_year > 1900 and y > 1900:
                 if not (target_year - 2 <= y <= target_year + 2):
                     continue 
@@ -161,7 +160,7 @@ async def get_user_notes(listing_id):
 
 # --- ENDPOINTLER ---
 
-# 🟢 UptimeRobot Dostu Root Endpoint
+# 🟢 UptimeRobot Dostu Root Endpoint (GET ve HEAD destekli)
 @app.get("/")
 @app.head("/")
 async def root():
@@ -361,17 +360,32 @@ async def upgrade_user(email: str, key: str):
     await users_collection.update_one({"email": email},{"$set": {"plan": "premium", "daily_usage": 0}})
     return {"status": "success", "message": f"{email} artık PREMIUM!"}
 
-# --- BULK UPLOAD ---
+# --- BULK UPLOAD (GÜNCELLENDİ: $min ve $set) ---
 @app.post("/bulk-upload")
 async def bulk_upload(listings: List[ListingData]):
     if not listings: return {"status": "empty"}
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     for item in listings:
         if not item.id or not item.price: continue
-        # Basit update, geçmiş kaydı tutmaz (hız için)
+        
+        # $min OPERATÖRÜ İLE ZEKİ TARİH GÜNCELLEMESİ:
+        # 1. Kayıt YENİ ise -> first_seen_at = BUGÜN olur.
+        # 2. Kayıt ESKİ ama tarihi YOKSA -> first_seen_at = BUGÜN olur.
+        # 3. Kayıt ESKİ ve tarihi ESKİ ise -> Dokunmaz (Orijinal tarih korunur).
         await listings_collection.update_one(
             {"_id": item.id}, 
-            {"$set": {"current_price": item.price, "last_update": now, "url": item.url, "title": item.title, "year": item.year, "km": item.km}},
+            {
+                "$set": {
+                    "current_price": item.price, 
+                    "last_update": now, 
+                    "url": item.url, 
+                    "title": item.title, 
+                    "year": item.year, 
+                    "km": item.km
+                },
+                "$min": { "first_seen_at": now }, # Tarihi olmayanları bugünle doldurur!
+                "$setOnInsert": { "history": [], "comments": [] }
+            },
             upsert=True
         )
     return {"status": "success"}
