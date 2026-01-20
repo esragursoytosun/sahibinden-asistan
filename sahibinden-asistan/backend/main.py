@@ -107,7 +107,6 @@ async def calculate_valuation(title, current_price, current_id, current_year, ca
             
             if use_category_filter and item_cat:
                 # KATEGORİ MODU: Kategori yolları eşleşiyor mu?
-                # Örn: "Renault > Clio" hem aranan ilanda hem veritabanında geçmeli
                 if category_path not in item_cat and item_cat not in category_path:
                     continue # Eşleşmezse bu ilanı geç
             else:
@@ -115,9 +114,9 @@ async def calculate_valuation(title, current_price, current_id, current_year, ca
                 match_count = sum(1 for k in keywords if k in t)
                 if match_count < 2: continue
 
-            # Yıl Kontrolü (+/- 2 yıl)
+            # 🟢 TAM YIL EŞLEŞMESİ (STRICT YEAR MATCH) 🟢
             if target_year > 1900 and y > 1900:
-                if not (target_year - 2 <= y <= target_year + 2):
+                if y != target_year: 
                     continue 
 
             # Fiyat Mantık Kontrolü
@@ -138,7 +137,8 @@ async def calculate_valuation(title, current_price, current_id, current_year, ca
         if ratio <= 0.90: status = "🔥 Fırsat (Kelepir)"; color = "#2ecc71"
         elif ratio >= 1.10: status = "💸 Piyasa Üstü"; color = "#e74c3c"
         
-        info_msg = f"{len(valid_prices)} benzer ilan ({target_year-2}-{target_year+2})"
+        # Bilgi mesajı: Tam Yıl olduğunu belirtiyoruz
+        info_msg = f"{len(valid_prices)} benzer ilan ({target_year} Model)"
         if use_category_filter: info_msg += " [Kategori]"
             
         return {
@@ -386,6 +386,10 @@ async def bulk_upload(listings: List[ListingData]):
     for item in listings:
         if not item.id or not item.price: continue
         
+        # $min OPERATÖRÜ İLE ZEKİ TARİH GÜNCELLEMESİ:
+        # 1. Kayıt YENİ ise -> first_seen_at = BUGÜN olur.
+        # 2. Kayıt ESKİ ama tarihi YOKSA -> first_seen_at = BUGÜN olur.
+        # 3. Kayıt ESKİ ve tarihi ESKİ ise -> Dokunmaz (Orijinal tarih korunur).
         await listings_collection.update_one(
             {"_id": item.id}, 
             {
