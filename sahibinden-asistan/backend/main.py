@@ -152,19 +152,22 @@ async def calculate_valuation(title, current_price, current_id, current_year, ca
                 if not room_match:
                     continue
                 
-                # ÖNCELİK 2: Semt/İlçe eşleşmesi (ESNEK)
-                # Sadece il veya ilçe eşleşmesi yeterli
+                # ÖNCELİK 2: İLÇE/SEMT EŞLEŞMESİ (ZORUNLU)
+                # En az ilçe seviyesinde eşleşme olmalı
                 location_match = False
                 if location_parts and item_location:
-                    for part in location_parts[:2]:  # İl ve ilçe
+                    # İlçe veya mahalle eşleşmesi ara
+                    for part in location_parts:
                         if len(part) > 2 and part in item_location:
                             location_match = True
                             break
-                else:
-                    location_match = True  # Lokasyon yoksa geç
+                elif not location_parts:
+                    # Mevcut ilana lokasyon girilmemişse, tüm ilanları dahil et
+                    location_match = True
                 
-                # Lokasyon eşleşmiyorsa bile dahil et ama not düşelim
-                # (aşağıda info_msg'de gösterilecek)
+                # Lokasyon eşleşmiyorsa ATLA (sıkı filtre)
+                if not location_match:
+                    continue
                         
             # 🚗 ARAÇ İÇİN KATEGORİ/BAŞLIK FİLTRELEME 🚗
             else:

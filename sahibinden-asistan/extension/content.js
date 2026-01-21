@@ -335,9 +335,8 @@ function handleTelegramClick() {
     window.open(`https://t.me/BAIBilmisBot?start=${user.id}`, '_blank');
 }
 
-// 🟢 AI SONUÇ CAROUSEL FONKSİYONU 🟢
+// 🟢 AI SONUÇ ACCORDION FONKSİYONU (AÇILIR-KAPANIR BÖLÜMLER) 🟢
 function showAiCarousel(container, htmlContent) {
-    // HTML'i bölümlere ayır (h3 başlıklarına göre)
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = htmlContent;
 
@@ -347,7 +346,6 @@ function showAiCarousel(container, htmlContent) {
     const allElements = tempDiv.querySelectorAll('h3, p, ul, div');
     allElements.forEach(el => {
         if (el.tagName === 'H3') {
-            // Yeni bölüm başlat
             if (currentSection.content) {
                 sections.push({ ...currentSection });
             }
@@ -360,59 +358,59 @@ function showAiCarousel(container, htmlContent) {
         }
     });
 
-    // Son bölümü ekle
     if (currentSection.content) {
         sections.push(currentSection);
     }
 
-    // Eğer bölüm ayrılamadıysa, tüm içeriği göster
     if (sections.length === 0) {
         container.innerHTML = htmlContent;
         return;
     }
 
-    let currentIndex = 0;
+    // Accordion HTML oluştur
+    let accordionHTML = '<div style="font-family:sans-serif;">';
 
-    function renderCarousel() {
-        const section = sections[currentIndex];
-        const totalPages = sections.length;
-
-        container.innerHTML = `
-            <div style="font-family:sans-serif;">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;padding-bottom:8px;border-bottom:2px solid #eee;">
-                    <span style="font-weight:bold;font-size:13px;color:#293542;">${section.title}</span>
-                    <span style="font-size:11px;color:#999;background:#f0f0f0;padding:3px 8px;border-radius:10px;">${currentIndex + 1}/${totalPages}</span>
+    sections.forEach((section, index) => {
+        const isFirst = index === 0;
+        accordionHTML += `
+            <div style="margin-bottom:6px;border:1px solid #e0e0e0;border-radius:8px;overflow:hidden;background:#fff;">
+                <div class="ai-acc-hdr" data-idx="${index}" style="padding:10px 12px;background:${isFirst ? '#293542' : '#f8f9fa'};cursor:pointer;display:flex;justify-content:space-between;align-items:center;">
+                    <span style="font-weight:bold;font-size:12px;color:${isFirst ? '#FFD000' : '#333'};">${section.title}</span>
+                    <span class="ai-acc-arr" style="font-size:10px;color:${isFirst ? '#FFD000' : '#888'};">${isFirst ? '▼' : '▶'}</span>
                 </div>
-                <div style="font-size:12px;line-height:1.6;color:#333;min-height:120px;">
+                <div class="ai-acc-cnt" data-idx="${index}" style="padding:${isFirst ? '10px 12px' : '0 12px'};max-height:${isFirst ? '200px' : '0'};overflow-y:auto;font-size:11px;line-height:1.5;color:#444;transition:all 0.2s;">
                     ${section.content}
-                </div>
-                <div style="display:flex;gap:8px;margin-top:12px;padding-top:10px;border-top:1px solid #eee;">
-                    <button id="aiPrev" style="flex:1;padding:10px;border:1px solid #ddd;background:${currentIndex > 0 ? '#f8f9fa' : '#eee'};border-radius:6px;cursor:${currentIndex > 0 ? 'pointer' : 'not-allowed'};font-size:12px;font-weight:bold;color:${currentIndex > 0 ? '#333' : '#999'};">
-                        ◀ Önceki
-                    </button>
-                    <button id="aiNext" style="flex:1;padding:10px;border:none;background:${currentIndex < totalPages - 1 ? 'linear-gradient(135deg,#293542,#1a2530)' : '#eee'};color:${currentIndex < totalPages - 1 ? '#FFD000' : '#999'};border-radius:6px;cursor:${currentIndex < totalPages - 1 ? 'pointer' : 'not-allowed'};font-size:12px;font-weight:bold;">
-                        Sonraki ▶
-                    </button>
                 </div>
             </div>
         `;
+    });
 
-        // Buton eventleri
-        document.getElementById('aiPrev').onclick = () => {
-            if (currentIndex > 0) {
-                currentIndex--;
-                renderCarousel();
+    accordionHTML += '</div>';
+    container.innerHTML = accordionHTML;
+
+    // Accordion eventleri
+    container.querySelectorAll('.ai-acc-hdr').forEach(header => {
+        header.onclick = function () {
+            const idx = this.getAttribute('data-idx');
+            const content = container.querySelector(`.ai-acc-cnt[data-idx="${idx}"]`);
+            const arrow = this.querySelector('.ai-acc-arr');
+            const isOpen = content.style.maxHeight !== '0px' && content.style.maxHeight !== '';
+
+            if (isOpen) {
+                content.style.maxHeight = '0';
+                content.style.padding = '0 12px';
+                arrow.textContent = '▶';
+                this.style.background = '#f8f9fa';
+                this.querySelector('span').style.color = '#333';
+            } else {
+                content.style.maxHeight = '200px';
+                content.style.padding = '10px 12px';
+                arrow.textContent = '▼';
+                this.style.background = '#293542';
+                this.querySelector('span').style.color = '#FFD000';
             }
         };
-        document.getElementById('aiNext').onclick = () => {
-            if (currentIndex < totalPages - 1) {
-                currentIndex++;
-                renderCarousel();
-            }
-        };
-    }
-
-    renderCarousel();
+    });
 }
 
 function createValuationBar(val) {
@@ -668,7 +666,7 @@ function showOverlay(data, result) {
                 resBox.innerHTML = `<div style="text-align:center;">Analiz için giriş yapmalısınız.</div>`;
             }
             else if (j.status === "success") {
-                // Bölümlere ayır ve carousel göster
+                // Accordion formatında göster (tıkla aç/kapa)
                 showAiCarousel(resBox, j.ai_response);
                 btn.innerHTML = "✅ Analiz Tamamlandı";
             }
