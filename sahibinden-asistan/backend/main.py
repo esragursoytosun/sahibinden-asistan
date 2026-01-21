@@ -225,15 +225,12 @@ async def calculate_valuation(title, current_price, current_id, current_year, ca
             info_msg = f"{len(valid_prices)} benzer ilan ({target_year} Model)"
             if use_category_filter: info_msg += " [Kategori]"
         
-        # m² fiyatı hesapla (emlak için)
+        # m² fiyatı ve benzer ilanlar GİZLENSİN (Kullanıcı talebi)
         m2_price = None
         avg_m2_price = None
-        if is_real_estate and target_area > 0:
-            m2_price = int(current_price / target_area)
-            # Ortalama m² fiyatı da hesapla
-            if avg_price > 0:
-                avg_m2_price = int(avg_price / target_area)
-            
+        # Benzer ilanlar listesi boş dönecek
+        similar_listings = []
+
         return {
             "average_price": int(avg_price),
             "min_price": int(min_price),
@@ -244,9 +241,9 @@ async def calculate_valuation(title, current_price, current_id, current_year, ca
             "ratio": ratio,
             "info_msg": info_msg,
             "is_real_estate": is_real_estate,
-            "m2_price": m2_price,
-            "avg_m2_price": avg_m2_price,
-            "similar_listings": similar_listings[:3]  # En fazla 3 benzer ilan
+            "m2_price": None,
+            "avg_m2_price": None,
+            "similar_listings": [] 
         }
     except Exception as e:
         print(f"Valuation Hatası: {e}")

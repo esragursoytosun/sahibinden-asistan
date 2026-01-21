@@ -664,7 +664,7 @@ function showOverlay(data, result) {
                         <div id="usageBar" style="background:linear-gradient(90deg,#2ecc71,#27ae60);height:100%;width:${isPremium ? '100' : Math.min((currentUser.daily_usage || 0) / 5 * 100, 100)}%;transition:width 0.3s;"></div>
                     </div>
                     <div style="display:flex;justify-content:space-between;font-size:10px;color:#666;margin-top:5px;">
-                        <span>${isPremium ? '∞ Sınırsız' : `${currentUser.daily_usage || 0}/5 AI Analiz`}</span>
+                        <span id="userUsageText">${isPremium ? '∞ Sınırsız' : `${currentUser.daily_usage || 0}/5 AI Analiz`}</span>
                         <span>${isPremium ? 'Premium Aktif' : 'Ücretsiz Plan'}</span>
                     </div>
                 </div>
@@ -731,7 +731,23 @@ function showOverlay(data, result) {
                 resBox.innerHTML = `<div style="text-align:center;">Analiz için giriş yapmalısınız.</div>`;
             }
             else if (j.status === "success") {
-                // Yana açılan panelde göster
+                // 1. Kullanım hakkını yerel olarak güncelle ve kaydet
+                const currentUser = getUser();
+                if (currentUser && currentUser.plan !== 'premium') {
+                    currentUser.daily_usage = (currentUser.daily_usage || 0) + 1;
+                    localStorage.setItem("sahibinden_user_profile", JSON.stringify(currentUser));
+
+                    // UI Güncelleme (Eğer profil sekmesi o an açıksa veya sonra açılacaksa)
+                    const uBar = document.getElementById('usageBar');
+                    const uText = document.getElementById('userUsageText');
+                    if (uBar && uText) {
+                        const usage = currentUser.daily_usage;
+                        uBar.style.width = Math.min((usage / 5) * 100, 100) + '%';
+                        uText.innerText = `${usage}/5 AI Analiz`;
+                    }
+                }
+
+                // 2. Yana açılan panelde göster
                 showAiSidePanel(j.ai_response);
                 btn.innerHTML = "✅ Analiz Tamamlandı";
                 resBox.innerHTML = `<div style="text-align:center;padding:15px;background:#e8f5e9;border-radius:8px;">
