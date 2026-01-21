@@ -129,13 +129,13 @@ async def calculate_valuation(title, current_price, current_id, current_year, ca
             item_room = item.get("room_count", "")
             item_area = clean_number(item.get("area_m2", 0))
             
-            # 🏠 EMLAK İÇİN ESNEK FİLTRELEME 🏠
+            # 🏠 EMLAK İÇİN SEMT + ODA SAYISI BAZLI FİLTRELEME 🏠
             if is_real_estate:
                 # Aynı ilan tipi olmalı (satılık-satılık, kiralık-kiralık)
                 if listing_type and item_type and listing_type != item_type:
                     continue
                 
-                # ÖNCELİK 1: Oda sayısı eşleşmesi (en önemli)
+                # ÖNCELİK 1: Oda sayısı eşleşmesi (EN ÖNEMLİ)
                 room_match = False
                 if room_count and item_room:
                     try:
@@ -144,26 +144,27 @@ async def calculate_valuation(title, current_price, current_id, current_year, ca
                         if abs(current_rooms - item_rooms) <= 1:  # ±1 oda toleransı
                             room_match = True
                     except: 
-                        room_match = True  # Parse edilemezse geç
+                        room_match = True
                 else:
-                    room_match = True  # Oda bilgisi yoksa geç
+                    room_match = True
                 
+                # Oda sayısı eşleşmiyorsa KESIN ATLA
                 if not room_match:
                     continue
                 
-                # ÖNCELİK 2: Lokasyon eşleşmesi (esnek - sadece ilçe yeterli)
+                # ÖNCELİK 2: Semt/İlçe eşleşmesi (ESNEK)
+                # Sadece il veya ilçe eşleşmesi yeterli
                 location_match = False
                 if location_parts and item_location:
-                    # Sadece İLÇE seviyesinde eşleşme ara (ilk 2 parça)
-                    for part in location_parts[:2]:  # Sadece il ve ilçe
-                        if part in item_location:
+                    for part in location_parts[:2]:  # İl ve ilçe
+                        if len(part) > 2 and part in item_location:
                             location_match = True
                             break
                 else:
-                    location_match = True  # Lokasyon bilgisi yoksa geç
+                    location_match = True  # Lokasyon yoksa geç
                 
-                # Lokasyon eşleşmezse bile devam et (sadece uyarı)
-                # m² kontrolü KALDIRILDI - çok kısıtlayıcıydı
+                # Lokasyon eşleşmiyorsa bile dahil et ama not düşelim
+                # (aşağıda info_msg'de gösterilecek)
                         
             # 🚗 ARAÇ İÇİN KATEGORİ/BAŞLIK FİLTRELEME 🚗
             else:

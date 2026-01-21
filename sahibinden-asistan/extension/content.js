@@ -335,6 +335,86 @@ function handleTelegramClick() {
     window.open(`https://t.me/BAIBilmisBot?start=${user.id}`, '_blank');
 }
 
+// 🟢 AI SONUÇ CAROUSEL FONKSİYONU 🟢
+function showAiCarousel(container, htmlContent) {
+    // HTML'i bölümlere ayır (h3 başlıklarına göre)
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = htmlContent;
+
+    const sections = [];
+    let currentSection = { title: '📊 Özet', content: '' };
+
+    const allElements = tempDiv.querySelectorAll('h3, p, ul, div');
+    allElements.forEach(el => {
+        if (el.tagName === 'H3') {
+            // Yeni bölüm başlat
+            if (currentSection.content) {
+                sections.push({ ...currentSection });
+            }
+            currentSection = {
+                title: el.innerText.trim(),
+                content: ''
+            };
+        } else {
+            currentSection.content += el.outerHTML;
+        }
+    });
+
+    // Son bölümü ekle
+    if (currentSection.content) {
+        sections.push(currentSection);
+    }
+
+    // Eğer bölüm ayrılamadıysa, tüm içeriği göster
+    if (sections.length === 0) {
+        container.innerHTML = htmlContent;
+        return;
+    }
+
+    let currentIndex = 0;
+
+    function renderCarousel() {
+        const section = sections[currentIndex];
+        const totalPages = sections.length;
+
+        container.innerHTML = `
+            <div style="font-family:sans-serif;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;padding-bottom:8px;border-bottom:2px solid #eee;">
+                    <span style="font-weight:bold;font-size:13px;color:#293542;">${section.title}</span>
+                    <span style="font-size:11px;color:#999;background:#f0f0f0;padding:3px 8px;border-radius:10px;">${currentIndex + 1}/${totalPages}</span>
+                </div>
+                <div style="font-size:12px;line-height:1.6;color:#333;min-height:120px;">
+                    ${section.content}
+                </div>
+                <div style="display:flex;gap:8px;margin-top:12px;padding-top:10px;border-top:1px solid #eee;">
+                    <button id="aiPrev" style="flex:1;padding:10px;border:1px solid #ddd;background:${currentIndex > 0 ? '#f8f9fa' : '#eee'};border-radius:6px;cursor:${currentIndex > 0 ? 'pointer' : 'not-allowed'};font-size:12px;font-weight:bold;color:${currentIndex > 0 ? '#333' : '#999'};">
+                        ◀ Önceki
+                    </button>
+                    <button id="aiNext" style="flex:1;padding:10px;border:none;background:${currentIndex < totalPages - 1 ? 'linear-gradient(135deg,#293542,#1a2530)' : '#eee'};color:${currentIndex < totalPages - 1 ? '#FFD000' : '#999'};border-radius:6px;cursor:${currentIndex < totalPages - 1 ? 'pointer' : 'not-allowed'};font-size:12px;font-weight:bold;">
+                        Sonraki ▶
+                    </button>
+                </div>
+            </div>
+        `;
+
+        // Buton eventleri
+        document.getElementById('aiPrev').onclick = () => {
+            if (currentIndex > 0) {
+                currentIndex--;
+                renderCarousel();
+            }
+        };
+        document.getElementById('aiNext').onclick = () => {
+            if (currentIndex < totalPages - 1) {
+                currentIndex++;
+                renderCarousel();
+            }
+        };
+    }
+
+    renderCarousel();
+}
+
 function createValuationBar(val) {
     if (!val) return `<div style="font-size:11px; color:#999; text-align:center; margin-top:10px; background:#fff; padding:10px; border-radius:8px;">📉 <b>Yetersiz Veri</b><br>Bu kategoride yeterli veri yok. Listelerde gezerek sistemi eğitebilirsin.</div>`;
     let percent = ((val.ratio - 0.7) / (1.3 - 0.7)) * 100;
@@ -588,7 +668,8 @@ function showOverlay(data, result) {
                 resBox.innerHTML = `<div style="text-align:center;">Analiz için giriş yapmalısınız.</div>`;
             }
             else if (j.status === "success") {
-                resBox.innerHTML = j.ai_response;
+                // Bölümlere ayır ve carousel göster
+                showAiCarousel(resBox, j.ai_response);
                 btn.innerHTML = "✅ Analiz Tamamlandı";
             }
             else {
