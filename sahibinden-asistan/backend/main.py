@@ -316,84 +316,94 @@ async def search_area_news(location: str) -> str:
 def create_car_prompt(data, market_context: str, user_notes: str) -> str:
     """Araç ilanları için AI prompt oluşturur"""
     transmission_info = data.transmission or "Belirtilmemiş"
-    desc = (data.description or "")[:600]
+    desc = (data.description or "")[:500]
     
-    return f"""
-Sen uzman bir araç alım-satım danışmanısın (BAI Bilmiş). Türkiye'deki ikinci el araç piyasasını çok iyi biliyorsun.
+    return f"""Sen BAI Bilmiş - akıllı araç danışmanısın.
 
-🚗 ARAÇ BİLGİLERİ:
-- Başlık: {data.title}
-- Fiyat: {data.price:,} TL
-- Yıl: {data.year}
-- Kilometre: {data.km}
-- Vites Tipi: {transmission_info}
-- Kategori: {data.category_path}
+ARAÇ: {data.title}
+FİYAT: {data.price:,} TL | YIL: {data.year} | KM: {data.km} | VİTES: {transmission_info}
+AÇIKLAMA: {desc}
 
-📝 İLAN AÇIKLAMASI:
-{desc}...
+{market_context}
 
-📊 {market_context}
+KULLANICI YORUMLARI: {user_notes or 'Yok'}
 
-💬 KULLANICI YORUMLARI:
-{user_notes or 'Henüz yorum yok'}
+CEVABINI TAMAMEN AŞAĞIDAKİ HTML ŞABLONUNDA VER (sadece HTML, başka bir şey yazma):
 
-🎯 GÖREV:
-1. Bu aracın fiyatını piyasa ile karşılaştır
-2. Vites tipine göre analiz yap ({transmission_info} arabalar için fiyat değerlendirmesi)
-3. Manuel vs Otomatik farkını değerlendir (varsa)
-4. Aracın artı ve eksi yönlerini listele
-5. Alıcıya önerilerde bulun
+<div style="font-family:sans-serif;font-size:13px;line-height:1.6;">
+<h3 style="color:#2c3e50;margin:0 0 10px;font-size:15px;">🎯 GENEL DEĞERLENDİRME</h3>
+<p style="background:#f8f9fa;padding:10px;border-radius:6px;margin:0 0 12px;">[2-3 cümle genel değerlendirme]</p>
 
-⚠️ HTML formatında, okunabilir ve düzenli cevap ver. Emoji kullan.
+<h3 style="color:#27ae60;margin:0 0 8px;font-size:14px;">✅ ARTILARI</h3>
+<ul style="margin:0 0 12px;padding-left:20px;">
+<li>[Artı 1]</li>
+<li>[Artı 2]</li>
+</ul>
+
+<h3 style="color:#e74c3c;margin:0 0 8px;font-size:14px;">⚠️ EKSİLERİ</h3>
+<ul style="margin:0 0 12px;padding-left:20px;">
+<li>[Eksi 1]</li>
+<li>[Eksi 2]</li>
+</ul>
+
+<h3 style="color:#3498db;margin:0 0 8px;font-size:14px;">💡 ÖNERİLER</h3>
+<p style="background:#e8f4f8;padding:10px;border-radius:6px;border-left:3px solid #3498db;">[Alıcıya öneriler]</p>
+</div>
 """
 
 # 🟢 KİRALIK KONUT PROMPT OLUŞTURUCU 🟢
 def create_rental_prompt(data, market_context: str, user_notes: str) -> str:
     """Kiralık konut ilanları için AI prompt oluşturur"""
-    desc = (data.description or "")[:600]
+    desc = (data.description or "")[:400]
     location = data.location or "Belirtilmemiş"
-    room_count = data.room_count or "Belirtilmemiş"
-    area_m2 = data.area_m2 or "Belirtilmemiş"
-    building_age = data.building_age or "Belirtilmemiş"
+    room_count = data.room_count or "?"
+    area_m2 = data.area_m2 or "?"
+    building_age = data.building_age or "?"
     
-    return f"""
-Sen uzman bir emlak danışmanısın (BAI Bilmiş). Türkiye'deki kira piyasasını çok iyi biliyorsun.
+    return f"""Sen BAI Bilmiş - akıllı emlak danışmanısın.
 
-🏠 KİRALIK KONUT BİLGİLERİ:
-- Başlık: {data.title}
-- Kira: {data.price:,} TL/ay
-- Lokasyon: {location}
-- Oda Sayısı: {room_count}
-- Alan: {area_m2} m²
-- Bina Yaşı: {building_age}
-- Kategori: {data.category_path}
+KİRALIK: {data.title}
+KİRA: {data.price:,} TL/ay | LOKASYON: {location} | ODA: {room_count} | m²: {area_m2} | BİNA YAŞI: {building_age}
+AÇIKLAMA: {desc}
 
-📝 İLAN AÇIKLAMASI:
-{desc}...
+{market_context}
 
-📊 {market_context}
+KULLANICI YORUMLARI: {user_notes or 'Yok'}
 
-💬 KULLANICI YORUMLARI (Mahalle hakkında):
-{user_notes or 'Henüz yorum yok'}
+CEVABINI TAMAMEN AŞAĞIDAKİ HTML ŞABLONUNDA VER (sadece HTML, başka bir şey yazma):
 
-🎯 GÖREV:
-1. Bu kiranın bölge ortalamasına göre durumunu analiz et
-2. m² başına kira hesapla ve değerlendir
-3. Lokasyonun avantajlarını ve dezavantajlarını listele
-4. Ulaşım, market, okul gibi çevre olanaklarını değerlendir
-5. Kiracıya önerilerde bulun (pazarlık, dikkat edilecekler)
+<div style="font-family:sans-serif;font-size:13px;line-height:1.6;">
+<h3 style="color:#2c3e50;margin:0 0 10px;font-size:15px;">🏠 KİRA DEĞERLENDİRMESİ</h3>
+<p style="background:#f8f9fa;padding:10px;border-radius:6px;margin:0 0 12px;">[Bu kira bölge ortalamasına göre nasıl? 2-3 cümle]</p>
 
-⚠️ HTML formatında, okunabilir ve düzenli cevap ver. Emoji kullan.
+<h3 style="color:#27ae60;margin:0 0 8px;font-size:14px;">✅ AVANTAJLARI</h3>
+<ul style="margin:0 0 12px;padding-left:20px;">
+<li>[Lokasyon avantajı]</li>
+<li>[Ev özelliği avantajı]</li>
+</ul>
+
+<h3 style="color:#e74c3c;margin:0 0 8px;font-size:14px;">⚠️ DİKKAT EDİLECEKLER</h3>
+<ul style="margin:0 0 12px;padding-left:20px;">
+<li>[Dikkat 1]</li>
+<li>[Dikkat 2]</li>
+</ul>
+
+<h3 style="color:#9b59b6;margin:0 0 8px;font-size:14px;">📍 MAHALLE HAKKINDA</h3>
+<p style="background:#f5f0ff;padding:10px;border-radius:6px;margin:0 0 12px;">[Ulaşım, market, okul vb. bilgiler]</p>
+
+<h3 style="color:#3498db;margin:0 0 8px;font-size:14px;">💡 ÖNERİM</h3>
+<p style="background:#e8f4f8;padding:10px;border-radius:6px;border-left:3px solid #3498db;">[Pazarlık ve karar önerisi]</p>
+</div>
 """
 
 # 🟢 SATILIK KONUT PROMPT OLUŞTURUCU 🟢
 def create_home_sale_prompt(data, market_context: str, user_notes: str) -> str:
     """Satılık konut ilanları için AI prompt oluşturur"""
-    desc = (data.description or "")[:600]
+    desc = (data.description or "")[:400]
     location = data.location or "Belirtilmemiş"
-    room_count = data.room_count or "Belirtilmemiş"
-    area_m2 = data.area_m2 or "Belirtilmemiş"
-    building_age = data.building_age or "Belirtilmemiş"
+    room_count = data.room_count or "?"
+    area_m2 = data.area_m2 or "?"
+    building_age = data.building_age or "?"
     
     # m² fiyatı hesapla
     m2_price = ""
@@ -404,36 +414,40 @@ def create_home_sale_prompt(data, market_context: str, user_notes: str) -> str:
                 m2_price = f"{int(data.price / area_num):,} TL/m²"
     except: pass
     
-    return f"""
-Sen uzman bir emlak yatırım danışmanısın (BAI Bilmiş). Türkiye'deki konut piyasasını çok iyi biliyorsun.
+    return f"""Sen BAI Bilmiş - akıllı emlak danışmanısın.
 
-🏡 SATILIK KONUT BİLGİLERİ:
-- Başlık: {data.title}
-- Fiyat: {data.price:,} TL
-- m² Fiyatı: {m2_price or 'Hesaplanamadı'}
-- Lokasyon: {location}
-- Oda Sayısı: {room_count}
-- Alan: {area_m2} m²
-- Bina Yaşı: {building_age}
-- Kategori: {data.category_path}
+SATILIK: {data.title}
+FİYAT: {data.price:,} TL | m² FİYATI: {m2_price or '?'} | LOKASYON: {location} | ODA: {room_count} | m²: {area_m2} | BİNA: {building_age}
+AÇIKLAMA: {desc}
 
-📝 İLAN AÇIKLAMASI:
-{desc}...
+{market_context}
 
-📊 {market_context}
+KULLANICI YORUMLARI: {user_notes or 'Yok'}
 
-💬 KULLANICI YORUMLARI (Mahalle hakkında):
-{user_notes or 'Henüz yorum yok'}
+CEVABINI TAMAMEN AŞAĞIDAKİ HTML ŞABLONUNDA VER (sadece HTML, başka bir şey yazma):
 
-🎯 GÖREV:
-1. Bu fiyatın bölge ortalamasına göre durumunu analiz et
-2. m² başına fiyatı değerlendir
-3. Lokasyonun avantajlarını ve dezavantajlarını listele
-4. Yatırım potansiyelini değerlendir (kira getirisi, değer artışı)
-5. Bina yaşına göre olası sorunları belirt
-6. Alıcıya önerilerde bulun (pazarlık, dikkat edilecekler, ekspertiz)
+<div style="font-family:sans-serif;font-size:13px;line-height:1.6;">
+<h3 style="color:#2c3e50;margin:0 0 10px;font-size:15px;">🏡 FİYAT DEĞERLENDİRMESİ</h3>
+<p style="background:#f8f9fa;padding:10px;border-radius:6px;margin:0 0 12px;">[Bu fiyat bölge ortalamasına göre nasıl? m² fiyatı değerlendirmesi. 2-3 cümle]</p>
 
-⚠️ HTML formatında, okunabilir ve düzenli cevap ver. Emoji kullan.
+<h3 style="color:#27ae60;margin:0 0 8px;font-size:14px;">✅ AVANTAJLARI</h3>
+<ul style="margin:0 0 12px;padding-left:20px;">
+<li>[Lokasyon avantajı]</li>
+<li>[Ev özelliği avantajı]</li>
+</ul>
+
+<h3 style="color:#e74c3c;margin:0 0 8px;font-size:14px;">⚠️ RİSKLER</h3>
+<ul style="margin:0 0 12px;padding-left:20px;">
+<li>[Bina yaşı riski varsa]</li>
+<li>[Diğer riskler]</li>
+</ul>
+
+<h3 style="color:#f39c12;margin:0 0 8px;font-size:14px;">📈 YATIRIM POTANSİYELİ</h3>
+<p style="background:#fef9e7;padding:10px;border-radius:6px;margin:0 0 12px;">[Kira getirisi, değer artış potansiyeli]</p>
+
+<h3 style="color:#3498db;margin:0 0 8px;font-size:14px;">💡 ÖNERİM</h3>
+<p style="background:#e8f4f8;padding:10px;border-radius:6px;border-left:3px solid #3498db;">[Pazarlık ve karar önerisi, ekspertiz uyarısı]</p>
+</div>
 """
 
 # --- ENDPOINTLER ---
