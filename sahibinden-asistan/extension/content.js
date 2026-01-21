@@ -37,14 +37,19 @@ function getCategoryPath() {
     return null;
 }
 
-// 🟢 2. HIZLI TARAMA MODU (Liste Sayfası - Genişletilmiş)
+// 🟢 2. HIZLI TARAMA MODU (Liste Sayfası - GELİŞMİŞ)
 async function runSweepMode() {
     const searchTable = document.querySelector('table#searchResultsTable');
 
     if (searchTable) {
-        // 1. Sayfanın genel kategorisini TEPEDEN al
+        // 1. Sayfanın genel kategorisini ve lokasyonunu TEPEDEN al
         const pageCategory = getCategoryPath();
         const listingType = detectListingType(pageCategory);
+
+        // 🏠 LOKASYON: Breadcrumb'dan sayfa lokasyonunu al
+        const pageLocation = getPageLocation();
+
+        console.log(`BAI BILMIS: Tarama başlıyor - Kategori: ${listingType}, Lokasyon: ${pageLocation}`);
 
         let rows = document.querySelectorAll('tr.searchResultsItem');
         let batchData = [];
@@ -58,20 +63,30 @@ async function runSweepMode() {
                 let title = titleElement?.innerText || "Liste İlanı";
                 let url = titleElement?.href || "";
 
-                // --- SÜTUN AYRIŞTIRMA ---
+                // --- SÜTUN AYRIŞTIRMA (GELİŞMİŞ) ---
                 let attributes = row.querySelectorAll('.searchResultsAttributeValue');
-                let year = null, km = null, roomCount = null, areaM2 = null;
+                let year = null, km = null, roomCount = null, areaM2 = null, buildingAge = null, transmission = null;
+                let rowLocation = pageLocation; // Varsayılan olarak sayfa lokasyonunu kullan
 
-                // Araç kategorisi için
-                if (listingType === "araba" && attributes.length >= 2) {
-                    year = attributes[0].innerText.trim();
-                    km = attributes[1].innerText.trim();
+                // Araç kategorisi için [Yıl, KM, Renk, ...]
+                if (listingType === "araba") {
+                    if (attributes.length >= 1) year = attributes[0]?.innerText?.trim();
+                    if (attributes.length >= 2) km = attributes[1]?.innerText?.trim();
+                    // Bazı listelerde vites bilgisi de olabilir
+                    if (attributes.length >= 4) transmission = attributes[3]?.innerText?.trim();
                 }
 
-                // Emlak kategorisi için
-                if (listingType.includes("konut") && attributes.length >= 2) {
-                    roomCount = attributes[0].innerText.trim();  // Oda sayısı
-                    areaM2 = attributes[1].innerText.trim();     // m²
+                // Emlak kategorisi için [Oda, m², Bina Yaşı, ...]
+                if (listingType.includes("konut") || listingType.includes("isyeri")) {
+                    if (attributes.length >= 1) roomCount = attributes[0]?.innerText?.trim();
+                    if (attributes.length >= 2) areaM2 = attributes[1]?.innerText?.trim();
+                    if (attributes.length >= 3) buildingAge = attributes[2]?.innerText?.trim();
+
+                    // Satırda lokasyon bilgisi varsa al (bazı listelerde görünür)
+                    const locationCell = row.querySelector('.searchResultsLocationValue');
+                    if (locationCell) {
+                        rowLocation = locationCell.innerText.trim();
+                    }
                 }
 
                 if (id && priceText) {
@@ -84,28 +99,53 @@ async function runSweepMode() {
                             url,
                             year,
                             km,
+                            transmission,
                             category_path: pageCategory,
                             listing_type: listingType,
+                            location: rowLocation,  // 🔑 LOKASYON EKLENDİ
                             room_count: roomCount,
-                            area_m2: areaM2
+                            area_m2: areaM2,
+                            building_age: buildingAge
                         });
                     }
                 }
-            } catch (e) { }
+            } catch (e) { console.log("Satır okuma hatası:", e); }
         });
 
         // Toplanan verileri backend'e gönder
         if (batchData.length > 0) {
             try {
-                await fetch(`${API_URL}/bulk-upload`, {
+                const response = await fetch(`${API_URL}/bulk-upload`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(batchData)
                 });
-                console.log(`BAI BILMIS: ${batchData.length} ilan (${listingType}) başarıyla işlendi.`);
-            } catch (e) { }
+                const result = await response.json();
+                console.log(`✅ BAI BILMIS: ${batchData.length} ${listingType} ilanı kaydedildi. Lokasyon: ${pageLocation}`);
+            } catch (e) { console.log("Bulk upload hatası:", e); }
         }
     }
+}
+
+// 🟢 2.1. SAYFA LOKASYONUNU AL (Breadcrumb'dan)
+function getPageLocation() {
+    try {
+        const bcItems = document.querySelectorAll('li.bc-item > a > span');
+        const allItems = Array.from(bcItems).map(s => s.innerText.trim());
+
+        // Kategori kelimelerini filtrele, sadece lokasyon kalsın
+        const categoryWords = ['Satılık', 'Kiralık', 'Konut', 'Vasıta', 'Emlak', 'Daire', 'Araba', 'Otomobil', 'İlan', 'Sahibinden'];
+        const locationParts = allItems.filter(item => {
+            if (item.length < 2) return false;
+            return !categoryWords.some(cat => item.toLowerCase().includes(cat.toLowerCase()));
+        });
+
+        // Son 3 parçayı al (genelde İl > İlçe > Mahalle)
+        if (locationParts.length > 0) {
+            return locationParts.slice(-3).join(" > ");
+        }
+    } catch (e) { console.log("Lokasyon okuma hatası:", e); }
+    return "";
 }
 
 // 🟢 3. TEKİL İLAN VERİSİ (GENİŞLETİLMİŞ)
