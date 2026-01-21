@@ -239,12 +239,45 @@ function createValuationBar(val) {
     if (!val) return `<div style="font-size:11px; color:#999; text-align:center; margin-top:10px; background:#fff; padding:10px; border-radius:8px;">📉 <b>Yetersiz Veri</b><br>Bu kategoride yeterli veri yok. Listelerde gezerek sistemi eğitebilirsin.</div>`;
     let percent = ((val.ratio - 0.7) / (1.3 - 0.7)) * 100;
     if (percent < 0) percent = 5; if (percent > 100) percent = 95;
+
+    // Emlak için m² fiyatı gösterimi
+    let m2PriceHtml = '';
+    if (val.is_real_estate && val.m2_price) {
+        const m2Comparison = val.avg_m2_price ?
+            `<span style="color:#666;"> (Bölge Ort: ${val.avg_m2_price.toLocaleString('tr-TR')} TL/m²)</span>` : '';
+        m2PriceHtml = `
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; padding-top:8px; border-top:1px dashed #eee;">
+                <span style="font-size:10px; color:#666;">📐 m² Fiyatı:</span>
+                <span style="font-size:11px; font-weight:bold; color:#333;">${val.m2_price.toLocaleString('tr-TR')} TL/m²${m2Comparison}</span>
+            </div>
+        `;
+    }
+
+    // Benzer ilanlar gösterimi (emlak için)
+    let similarHtml = '';
+    if (val.is_real_estate && val.similar_listings && val.similar_listings.length > 0) {
+        const similarItems = val.similar_listings.slice(0, 2).map(s =>
+            `<div style="font-size:9px; color:#555; padding:3px 0; border-bottom:1px dotted #eee;">
+                🏠 ${s.title.substring(0, 35)}... - <b>${s.price.toLocaleString('tr-TR')} TL</b>
+            </div>`
+        ).join('');
+        similarHtml = `
+            <div style="margin-top:8px; padding-top:8px; border-top:1px dashed #eee;">
+                <div style="font-size:9px; color:#888; margin-bottom:4px;">📋 Bölgedeki Benzer İlanlar:</div>
+                ${similarItems}
+            </div>
+        `;
+    }
+
+    // Ana gösterim
+    const priceLabel = val.is_real_estate ? 'Bölge Ortalaması' : 'Piyasa Ortalaması';
+
     return `
         <div style="margin-top:15px; padding:12px; background:white; border-radius:8px; border:1px solid #e0e0e0; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
                 <span style="font-size:13px; font-weight:800; color:${val.color};">${val.status}</span>
                 <div style="text-align:right;">
-                    <div style="font-size:10px; color:#999;">Piyasa Ortalaması</div>
+                    <div style="font-size:10px; color:#999;">${priceLabel}</div>
                     <div style="font-size:12px; font-weight:bold; color:#333;">${val.average_price.toLocaleString('tr-TR')} TL</div>
                 </div>
             </div>
@@ -257,6 +290,8 @@ function createValuationBar(val) {
             <div style="display:flex; align-items:center; gap:5px; margin-top:8px; font-size:9px; color:#777;">
                 <span>📊</span><span>${val.info_msg}</span>
             </div>
+            ${m2PriceHtml}
+            ${similarHtml}
         </div>
     `;
 }

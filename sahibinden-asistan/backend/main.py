@@ -80,20 +80,31 @@ def clean_number(value):
     clean_val = re.sub(r'[^\d]', '', str(value))
     return int(clean_val) if clean_val else 0
 
-async def calculate_valuation(title, current_price, current_id, current_year, category_path=None):
+async def calculate_valuation(title, current_price, current_id, current_year, category_path=None, listing_type=None, location=None, room_count=None, area_m2=None):
+    """Araç ve emlak ilanları için piyasa değerlemesi yapar"""
     if not title or not current_price: return None
     try:
-        # Daha geniş havuzdan (1000 ilan) tarama yap
-        cursor = listings_collection.find().sort("first_seen_at", -1).limit(1000)
-        all_listings = await cursor.to_list(length=1000)
+        # Daha geniş havuzdan (1500 ilan) tarama yap
+        cursor = listings_collection.find().sort("first_seen_at", -1).limit(1500)
+        all_listings = await cursor.to_list(length=1500)
         
         valid_prices = []
+        similar_listings = []  # Benzer ilanları sakla
         cutoff_date = datetime.now() - timedelta(days=60)
         
         target_year = clean_number(current_year)
+        target_area = clean_number(area_m2)
         
-        # Kategori filtresi kullanılacak mı? (En az 5 karakterse geçerli say)
+        # Kategori filtresi kullanılacak mı?
         use_category_filter = category_path and len(category_path) > 5
+        
+        # Emlak mı kontrol et
+        is_real_estate = listing_type and ("konut" in listing_type or "isyeri" in listing_type or "arsa" in listing_type)
+        
+        # Lokasyon parçalama (İstanbul > Kadıköy > Fenerbahçe gibi)
+        location_parts = []
+        if location and is_real_estate:
+            location_parts = [p.strip().lower() for p in location.replace(">", ",").split(",") if len(p.strip()) > 2]
         
         # Yedek plan için başlık kelimeleri
         keywords = [k.lower() for k in title.split() if len(k) > 2][:4]
@@ -113,29 +124,71 @@ async def calculate_valuation(title, current_price, current_id, current_year, ca
             t = item.get("title", "").lower()
             y = clean_number(item.get("year", 0))
             item_cat = item.get("category_path", "")
+            item_location = (item.get("location", "") or "").lower()
+            item_type = item.get("listing_type", "")
+            item_room = item.get("room_count", "")
+            item_area = clean_number(item.get("area_m2", 0))
             
-            # --- GELİŞMİŞ FİLTRELEME ---
-            
-            if use_category_filter and item_cat:
-                # KATEGORİ MODU: Kategori yolları eşleşiyor mu?
-                if category_path not in item_cat and item_cat not in category_path:
-                    continue # Eşleşmezse bu ilanı geç
+            # 🏠 EMLAK İÇİN LOKASYON BAZLI FİLTRELEME 🏠
+            if is_real_estate:
+                # Aynı ilan tipi olmalı (satılık-satılık, kiralık-kiralık)
+                if listing_type and item_type and listing_type != item_type:
+                    continue
+                
+                # Lokasyon eşleşmesi (en az 1 parça eşleşmeli)
+                location_match_level = 0
+                if location_parts and item_location:
+                    for part in location_parts:
+                        if part in item_location:
+                            location_match_level += 1
+                
+                # En az ilçe seviyesinde eşleşme olmalı (1 parça)
+                if location_parts and location_match_level == 0:
+                    continue
+                
+                # Oda sayısı benzer olmalı (varsa)
+                if room_count and item_room:
+                    try:
+                        current_rooms = int(re.sub(r'[^\d]', '', room_count.split("+")[0]))
+                        item_rooms = int(re.sub(r'[^\d]', '', item_room.split("+")[0]))
+                        if abs(current_rooms - item_rooms) > 1:  # ±1 oda toleransı
+                            continue
+                    except: pass
+                
+                # m² benzer olmalı (±%30 tolerans)
+                if target_area > 0 and item_area > 0:
+                    area_ratio = item_area / target_area
+                    if area_ratio < 0.7 or area_ratio > 1.3:
+                        continue
+                        
+            # 🚗 ARAÇ İÇİN KATEGORİ/BAŞLIK FİLTRELEME 🚗
             else:
-                # BAŞLIK MODU (Eski Sistem): Başlık Benzerliği
-                match_count = sum(1 for k in keywords if k in t)
-                if match_count < 2: continue
+                if use_category_filter and item_cat:
+                    if category_path not in item_cat and item_cat not in category_path:
+                        continue
+                else:
+                    match_count = sum(1 for k in keywords if k in t)
+                    if match_count < 2: continue
 
-            # 🟢 TAM YIL EŞLEŞMESİ (Strict Year Match) 🟢
-            # Hedef yıl varsa, SADECE o yılın araçlarını al. (±0 Yıl)
-            if target_year > 1900 and y > 1900:
-                if y != target_year: 
-                    continue 
+                # TAM YIL EŞLEŞMESİ (Araçlar için)
+                if target_year > 1900 and y > 1900:
+                    if y != target_year: 
+                        continue 
 
             # Fiyat Mantık Kontrolü
             if p > 0:
-                if p < (current_price * 0.5) or p > (current_price * 3):
+                if p < (current_price * 0.3) or p > (current_price * 4):
                     continue
                 valid_prices.append(p)
+                
+                # Benzer ilanları sakla (en fazla 5 tane)
+                if len(similar_listings) < 5:
+                    similar_listings.append({
+                        "title": item.get("title", "")[:50],
+                        "price": p,
+                        "location": item.get("location", ""),
+                        "url": item.get("url", "")
+                    })
         
         if len(valid_prices) < 2: return None
         
@@ -146,12 +199,29 @@ async def calculate_valuation(title, current_price, current_id, current_year, ca
         
         status = "Piyasa Normali"
         color = "#f1c40f"
-        if ratio <= 0.90: status = "🔥 Fırsat (Kelepir)"; color = "#2ecc71"
-        elif ratio >= 1.10: status = "💸 Piyasa Üstü"; color = "#e74c3c"
+        if ratio <= 0.85: status = "🔥 Fırsat (Kelepir)"; color = "#2ecc71"
+        elif ratio <= 0.95: status = "✅ Uygun Fiyat"; color = "#27ae60"
+        elif ratio >= 1.15: status = "💸 Piyasa Üstü"; color = "#e74c3c"
+        elif ratio >= 1.05: status = "⚠️ Biraz Yüksek"; color = "#e67e22"
         
-        # Bilgi mesajı: Tam Yıl olduğunu belirtiyoruz
-        info_msg = f"{len(valid_prices)} benzer ilan ({target_year} Model)"
-        if use_category_filter: info_msg += " [Kategori]"
+        # Bilgi mesajı oluştur
+        if is_real_estate:
+            location_info = location_parts[0] if location_parts else "Bölge"
+            info_msg = f"{len(valid_prices)} benzer ilan ({location_info.title()})"
+            if room_count:
+                info_msg += f" [{room_count}]"
+        else:
+            info_msg = f"{len(valid_prices)} benzer ilan ({target_year} Model)"
+            if use_category_filter: info_msg += " [Kategori]"
+        
+        # m² fiyatı hesapla (emlak için)
+        m2_price = None
+        avg_m2_price = None
+        if is_real_estate and target_area > 0:
+            m2_price = int(current_price / target_area)
+            # Ortalama m² fiyatı da hesapla
+            if avg_price > 0:
+                avg_m2_price = int(avg_price / target_area)
             
         return {
             "average_price": int(avg_price),
@@ -161,7 +231,11 @@ async def calculate_valuation(title, current_price, current_id, current_year, ca
             "status": status,
             "color": color,
             "ratio": ratio,
-            "info_msg": info_msg
+            "info_msg": info_msg,
+            "is_real_estate": is_real_estate,
+            "m2_price": m2_price,
+            "avg_m2_price": avg_m2_price,
+            "similar_listings": similar_listings[:3]  # En fazla 3 benzer ilan
         }
     except Exception as e:
         print(f"Valuation Hatası: {e}")
@@ -458,23 +532,58 @@ async def ask_ai(data: ListingData):
             return {"status": "limit_reached", "message": "Günlük limit doldu."}
         await users_collection.update_one({"_id": data.user_id}, {"$inc": {"daily_usage": 1}})
 
-    # Valuation'a kategori yolunu da gönder
-    valuation = await calculate_valuation(data.title, data.price, data.id, data.year, data.category_path)
+    # 🟢 KATEGORİ ALGILAMA 🟢
+    listing_type = detect_listing_type(data.category_path, data.listing_type)
+
+    # Valuation'a tüm parametreleri gönder (emlak için lokasyon bazlı karşılaştırma)
+    valuation = await calculate_valuation(
+        title=data.title, 
+        current_price=data.price, 
+        current_id=data.id, 
+        current_year=data.year, 
+        category_path=data.category_path,
+        listing_type=listing_type,
+        location=data.location,
+        room_count=data.room_count,
+        area_m2=data.area_m2
+    )
     user_notes = await get_user_notes(data.id)
     
     market_context = "Veri yok"
     if valuation:
-        market_context = (
-            f"VERİTABANI ANALİZİ:\n"
-            f"- Kategori: {data.category_path or 'Genel'}\n"
-            f"- Benzer İlan: {valuation['listing_count']} adet\n"
-            f"- Ort: {valuation['average_price']} TL | Min: {valuation['min_price']} TL | Max: {valuation['max_price']} TL\n"
-            f"- Durum: {valuation['status']}"
-        )
+        # Emlak için özel market context
+        if valuation.get("is_real_estate"):
+            m2_info = ""
+            if valuation.get("m2_price"):
+                m2_info = f"\n- Bu İlan m² Fiyatı: {valuation['m2_price']:,} TL/m²"
+                if valuation.get("avg_m2_price"):
+                    m2_info += f" | Bölge Ort: {valuation['avg_m2_price']:,} TL/m²"
+            
+            similar_info = ""
+            if valuation.get("similar_listings"):
+                similar_info = "\n- Benzer İlanlar: " + ", ".join([
+                    f"{s['title'][:30]}... ({s['price']:,} TL)" 
+                    for s in valuation['similar_listings'][:2]
+                ])
+            
+            market_context = (
+                f"VERİTABANI ANALİZİ (EMLAK):\n"
+                f"- Lokasyon: {data.location or 'Belirtilmemiş'}\n"
+                f"- Benzer İlan: {valuation['listing_count']} adet (aynı bölge, benzer m²)\n"
+                f"- Ort: {valuation['average_price']:,} TL | Min: {valuation['min_price']:,} TL | Max: {valuation['max_price']:,} TL\n"
+                f"- Durum: {valuation['status']}"
+                f"{m2_info}{similar_info}"
+            )
+        else:
+            # Araç için mevcut format
+            market_context = (
+                f"VERİTABANI ANALİZİ:\n"
+                f"- Kategori: {data.category_path or 'Genel'}\n"
+                f"- Benzer İlan: {valuation['listing_count']} adet\n"
+                f"- Ort: {valuation['average_price']:,} TL | Min: {valuation['min_price']:,} TL | Max: {valuation['max_price']:,} TL\n"
+                f"- Durum: {valuation['status']}"
+            )
 
-    # 🟢 KATEGORİ ALGILAMA 🟢
-    listing_type = detect_listing_type(data.category_path, data.listing_type)
-    
     # 🟢 KATEGORİYE GÖRE PROMPT OLUŞTUR 🟢
     if listing_type == "konut_kiralik":
         prompt = create_rental_prompt(data, market_context, user_notes)
@@ -581,7 +690,22 @@ async def analyze_listing(data: ListingData):
             await listings_collection.update_one({"_id": data.id}, {"$set": update_doc}, upsert=True)
             
         doc = await listings_collection.find_one({"_id": data.id})
-        valuation = await calculate_valuation(data.title, data.price, data.id, data.year, data.category_path)
+        
+        # Kategori tipini algıla
+        listing_type = detect_listing_type(data.category_path, data.listing_type)
+        
+        # Valuation hesapla (emlak için lokasyon bazlı karşılaştırma)
+        valuation = await calculate_valuation(
+            title=data.title, 
+            current_price=data.price, 
+            current_id=data.id, 
+            current_year=data.year, 
+            category_path=data.category_path,
+            listing_type=listing_type,
+            location=data.location,
+            room_count=data.room_count,
+            area_m2=data.area_m2
+        )
         
         return {"status": "success", "valuation": valuation, "history": doc.get("history", []), "comments": doc.get("comments", [])}
     except Exception as e:
