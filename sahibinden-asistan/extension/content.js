@@ -37,13 +37,14 @@ function getCategoryPath() {
     return null;
 }
 
-// 🟢 2. HIZLI TARAMA MODU (Liste Sayfası)
+// 🟢 2. HIZLI TARAMA MODU (Liste Sayfası - Genişletilmiş)
 async function runSweepMode() {
     const searchTable = document.querySelector('table#searchResultsTable');
 
     if (searchTable) {
-        // 1. Sayfanın genel kategorisini TEPEDEN al (Her satır için tekrar arama, tek seferde al)
+        // 1. Sayfanın genel kategorisini TEPEDEN al
         const pageCategory = getCategoryPath();
+        const listingType = detectListingType(pageCategory);
 
         let rows = document.querySelectorAll('tr.searchResultsItem');
         let batchData = [];
@@ -57,16 +58,20 @@ async function runSweepMode() {
                 let title = titleElement?.innerText || "Liste İlanı";
                 let url = titleElement?.href || "";
 
-                // --- SÜTUN AYRIŞTIRMA (RENK HARİÇ) ---
-                // Tabloda AttributeValue sınıfına sahip sütunlar sırasıyla: [0]=Yıl, [1]=KM, [2]=Renk
+                // --- SÜTUN AYRIŞTIRMA ---
                 let attributes = row.querySelectorAll('.searchResultsAttributeValue');
-                let year = null;
-                let km = null;
+                let year = null, km = null, roomCount = null, areaM2 = null;
 
-                if (attributes.length >= 2) {
-                    year = attributes[0].innerText.trim(); // İlk sütun: Yıl
-                    km = attributes[1].innerText.trim();   // İkinci sütun: KM
-                    // attributes[2] Renk sütunudur, onu bilerek almıyoruz ki kategoriye karışmasın.
+                // Araç kategorisi için
+                if (listingType === "araba" && attributes.length >= 2) {
+                    year = attributes[0].innerText.trim();
+                    km = attributes[1].innerText.trim();
+                }
+
+                // Emlak kategorisi için
+                if (listingType.includes("konut") && attributes.length >= 2) {
+                    roomCount = attributes[0].innerText.trim();  // Oda sayısı
+                    areaM2 = attributes[1].innerText.trim();     // m²
                 }
 
                 if (id && priceText) {
@@ -79,7 +84,10 @@ async function runSweepMode() {
                             url,
                             year,
                             km,
-                            category_path: pageCategory // Sayfanın tepesinden aldığımız net kategori
+                            category_path: pageCategory,
+                            listing_type: listingType,
+                            room_count: roomCount,
+                            area_m2: areaM2
                         });
                     }
                 }
@@ -94,13 +102,13 @@ async function runSweepMode() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(batchData)
                 });
-                console.log(`BAI BILMIS: ${batchData.length} ilan başarıyla işlendi.`);
+                console.log(`BAI BILMIS: ${batchData.length} ilan (${listingType}) başarıyla işlendi.`);
             } catch (e) { }
         }
     }
 }
 
-// 🟢 3. TEKİL İLAN VERİSİ
+// 🟢 3. TEKİL İLAN VERİSİ (GENİŞLETİLMİŞ)
 function getListingData() {
     try {
         let priceElem = document.querySelector('.classifiedInfo h3') || document.querySelector('div.price-info');
@@ -111,16 +119,58 @@ function getListingData() {
         const title = document.querySelector('.classifiedDetailTitle h1')?.innerText.trim() || document.title;
         const desc = document.querySelector('#classifiedDescription')?.innerText || "";
 
-        let km = "Bilinmiyor", year = "Bilinmiyor";
-        document.querySelectorAll('.classifiedInfoList li').forEach(li => {
-            const lbl = li.querySelector('strong')?.innerText;
-            const val = li.querySelector('span')?.innerText;
-            if (lbl?.includes("KM")) km = val;
-            if (lbl?.includes("Yıl")) year = val;
-        });
-
         // Detay sayfasında da aynı kategori yolunu alıyoruz
         const categoryPath = getCategoryPath();
+
+        // 🟢 KATEGORİ TİPİNİ ALGILAMA 🟢
+        const listingType = detectListingType(categoryPath);
+
+        // 🟢 ORTAK BİLGİLER 🟢
+        let km = "Bilinmiyor", year = "Bilinmiyor", transmission = "Bilinmiyor";
+        let roomCount = "Bilinmiyor", areaM2 = "Bilinmiyor", buildingAge = "Bilinmiyor";
+        let location = "";
+
+        // Tüm bilgi listelerini tara
+        document.querySelectorAll('.classifiedInfoList li').forEach(li => {
+            const lbl = li.querySelector('strong')?.innerText?.toLowerCase() || "";
+            const val = li.querySelector('span')?.innerText?.trim() || "";
+
+            // Araç bilgileri
+            if (lbl.includes("km")) km = val;
+            if (lbl.includes("yıl") || lbl.includes("model yılı")) year = val;
+            if (lbl.includes("vites")) transmission = val;
+
+            // Emlak bilgileri
+            if (lbl.includes("oda sayısı") || lbl.includes("oda")) roomCount = val;
+            if (lbl.includes("m²") || lbl.includes("brüt") || lbl.includes("net m")) areaM2 = val;
+            if (lbl.includes("bina yaşı") || lbl.includes("yaş")) buildingAge = val;
+        });
+
+        // 🟢 LOKASYON BİLGİSİ 🟢
+        // Sahibinden'de lokasyon genelde breadcrumb veya info bölümünde
+        try {
+            // Lokasyon bilgisini al (İl > İlçe > Mahalle formatında)
+            const locationEl = document.querySelector('.classifiedInfo h2') ||
+                document.querySelector('[class*="location"]') ||
+                document.querySelector('.classifiedInfoList li:last-child span');
+            if (locationEl) {
+                location = locationEl.innerText.trim();
+            }
+
+            // Alternatif: Breadcrumb'dan lokasyon
+            if (!location || location.length < 3) {
+                const bcItems = document.querySelectorAll('li.bc-item > a > span');
+                const allItems = Array.from(bcItems).map(s => s.innerText.trim());
+                // Son 2-3 eleman genelde lokasyon (İstanbul > Kadıköy gibi)
+                const locationParts = allItems.slice(-3).filter(t =>
+                    !t.includes("Satılık") && !t.includes("Kiralık") &&
+                    !t.includes("Konut") && !t.includes("Vasıta") && t.length > 2
+                );
+                if (locationParts.length > 0) {
+                    location = locationParts.join(" > ");
+                }
+            }
+        } catch (e) { console.log("Lokasyon okuma hatası:", e); }
 
         return {
             id,
@@ -130,9 +180,40 @@ function getListingData() {
             km,
             year,
             url: window.location.href,
-            category_path: categoryPath // Kategoriyi ekle
+            category_path: categoryPath,
+            // Yeni alanlar
+            transmission,
+            listing_type: listingType,
+            location,
+            room_count: roomCount,
+            area_m2: areaM2,
+            building_age: buildingAge
         };
     } catch (e) { return null; }
+}
+
+// 🟢 4. KATEGORİ TİPİ ALGILAMA 🟢
+function detectListingType(categoryPath) {
+    if (!categoryPath) return "araba";
+
+    const path = categoryPath.toLowerCase();
+
+    if (path.includes("konut") || path.includes("daire") || path.includes("ev") || path.includes("residence")) {
+        if (path.includes("kiralık")) return "konut_kiralik";
+        if (path.includes("satılık")) return "konut_satilik";
+        return "konut_satilik";
+    }
+
+    if (path.includes("işyeri") || path.includes("ofis") || path.includes("dükkan")) {
+        if (path.includes("kiralık")) return "isyeri_kiralik";
+        return "isyeri_satilik";
+    }
+
+    if (path.includes("arsa") || path.includes("tarla") || path.includes("arazi")) {
+        return "arsa";
+    }
+
+    return "araba";
 }
 
 // --- STANDART FONKSİYONLAR (Arayüz vb.) ---

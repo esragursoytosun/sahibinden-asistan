@@ -47,7 +47,14 @@ class ListingData(BaseModel):
     km: str | None = None
     year: str | None = None
     user_id: str | None = None
-    category_path: str | None = None # <-- YENİ: Kategori Yolu
+    category_path: str | None = None
+    # --- YENİ ALANLAR ---
+    transmission: str | None = None      # Manuel/Otomatik (Araçlar için)
+    listing_type: str | None = None      # araba/konut_satilik/konut_kiralik
+    location: str | None = None          # İl/İlçe/Mahalle
+    room_count: str | None = None        # Oda sayısı (Konutlar için)
+    area_m2: str | None = None           # Metrekare (Konutlar için)
+    building_age: str | None = None      # Bina yaşı
 
 class CommentData(BaseModel):
     listing_id: str
@@ -167,6 +174,194 @@ async def get_user_notes(listing_id):
         return "\n".join([f"- {c.get('user')}: {c.get('text')}" for c in doc["comments"]])
     except: return ""
 
+# 🟢 KATEGORİ ALGILAMA FONKSİYONU 🟢
+def detect_listing_type(category_path: str, listing_type: str = None) -> str:
+    """Kategori yolundan ilan tipini algılar"""
+    if listing_type:
+        return listing_type
+    
+    if not category_path:
+        return "araba"  # Varsayılan
+    
+    path_lower = category_path.lower()
+    
+    # Emlak kategorileri
+    if "konut" in path_lower or "daire" in path_lower or "ev" in path_lower:
+        if "kiralık" in path_lower:
+            return "konut_kiralik"
+        elif "satılık" in path_lower:
+            return "konut_satilik"
+        return "konut_satilik"  # Varsayılan emlak
+    
+    # İşyeri kategorileri
+    if "işyeri" in path_lower or "ofis" in path_lower:
+        if "kiralık" in path_lower:
+            return "isyeri_kiralik"
+        return "isyeri_satilik"
+    
+    # Arsa
+    if "arsa" in path_lower or "tarla" in path_lower:
+        return "arsa"
+    
+    # Vasıta (varsayılan)
+    return "araba"
+
+# 🟢 BÖLGE GÜVENLİK ANALİZİ (HABER ARAMA) 🟢
+async def search_area_news(location: str) -> str:
+    """Belirtilen lokasyonda güvenlik ile ilgili haberleri özetler"""
+    if not location or len(location) < 3:
+        return ""
+    
+    try:
+        # Basit haber arama - Google ile
+        search_query = f"{location} olay haber suç asayiş"
+        search_url = f"https://www.google.com/search?q={requests.utils.quote(search_query)}&tbm=nws"
+        
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        response = requests.get(search_url, headers=headers, timeout=5)
+        
+        if response.status_code == 200:
+            # Basit analiz: Haber başlıkları var mı?
+            text = response.text.lower()
+            negative_keywords = ["cinayet", "hırsızlık", "gasp", "uyuşturucu", "kavga", "yaralama", "bıçaklı", "silahlı"]
+            found_issues = [kw for kw in negative_keywords if kw in text]
+            
+            if len(found_issues) >= 3:
+                return f"⚠️ DİKKAT: Bu bölgede son dönemde bazı güvenlik olayları haberlere yansımış ({', '.join(found_issues[:3])}). Detaylı araştırma önerilir."
+            elif len(found_issues) >= 1:
+                return f"ℹ️ Bu bölgede nadiren güvenlik haberleri görülmüş. Genel olarak sakin."
+            else:
+                return "✅ Bu bölgede ciddi güvenlik sorunu tespit edilmedi."
+        
+        return ""
+    except Exception as e:
+        print(f"Haber arama hatası: {e}")
+        return ""
+
+# 🟢 ARAÇ PROMPT OLUŞTURUCU 🟢
+def create_car_prompt(data, market_context: str, user_notes: str) -> str:
+    """Araç ilanları için AI prompt oluşturur"""
+    transmission_info = data.transmission or "Belirtilmemiş"
+    desc = (data.description or "")[:600]
+    
+    return f"""
+Sen uzman bir araç alım-satım danışmanısın (BAI Bilmiş). Türkiye'deki ikinci el araç piyasasını çok iyi biliyorsun.
+
+🚗 ARAÇ BİLGİLERİ:
+- Başlık: {data.title}
+- Fiyat: {data.price:,} TL
+- Yıl: {data.year}
+- Kilometre: {data.km}
+- Vites Tipi: {transmission_info}
+- Kategori: {data.category_path}
+
+📝 İLAN AÇIKLAMASI:
+{desc}...
+
+📊 {market_context}
+
+💬 KULLANICI YORUMLARI:
+{user_notes or 'Henüz yorum yok'}
+
+🎯 GÖREV:
+1. Bu aracın fiyatını piyasa ile karşılaştır
+2. Vites tipine göre analiz yap ({transmission_info} arabalar için fiyat değerlendirmesi)
+3. Manuel vs Otomatik farkını değerlendir (varsa)
+4. Aracın artı ve eksi yönlerini listele
+5. Alıcıya önerilerde bulun
+
+⚠️ HTML formatında, okunabilir ve düzenli cevap ver. Emoji kullan.
+"""
+
+# 🟢 KİRALIK KONUT PROMPT OLUŞTURUCU 🟢
+def create_rental_prompt(data, market_context: str, user_notes: str) -> str:
+    """Kiralık konut ilanları için AI prompt oluşturur"""
+    desc = (data.description or "")[:600]
+    location = data.location or "Belirtilmemiş"
+    room_count = data.room_count or "Belirtilmemiş"
+    area_m2 = data.area_m2 or "Belirtilmemiş"
+    building_age = data.building_age or "Belirtilmemiş"
+    
+    return f"""
+Sen uzman bir emlak danışmanısın (BAI Bilmiş). Türkiye'deki kira piyasasını çok iyi biliyorsun.
+
+🏠 KİRALIK KONUT BİLGİLERİ:
+- Başlık: {data.title}
+- Kira: {data.price:,} TL/ay
+- Lokasyon: {location}
+- Oda Sayısı: {room_count}
+- Alan: {area_m2} m²
+- Bina Yaşı: {building_age}
+- Kategori: {data.category_path}
+
+📝 İLAN AÇIKLAMASI:
+{desc}...
+
+📊 {market_context}
+
+💬 KULLANICI YORUMLARI (Mahalle hakkında):
+{user_notes or 'Henüz yorum yok'}
+
+🎯 GÖREV:
+1. Bu kiranın bölge ortalamasına göre durumunu analiz et
+2. m² başına kira hesapla ve değerlendir
+3. Lokasyonun avantajlarını ve dezavantajlarını listele
+4. Ulaşım, market, okul gibi çevre olanaklarını değerlendir
+5. Kiracıya önerilerde bulun (pazarlık, dikkat edilecekler)
+
+⚠️ HTML formatında, okunabilir ve düzenli cevap ver. Emoji kullan.
+"""
+
+# 🟢 SATILIK KONUT PROMPT OLUŞTURUCU 🟢
+def create_home_sale_prompt(data, market_context: str, user_notes: str) -> str:
+    """Satılık konut ilanları için AI prompt oluşturur"""
+    desc = (data.description or "")[:600]
+    location = data.location or "Belirtilmemiş"
+    room_count = data.room_count or "Belirtilmemiş"
+    area_m2 = data.area_m2 or "Belirtilmemiş"
+    building_age = data.building_age or "Belirtilmemiş"
+    
+    # m² fiyatı hesapla
+    m2_price = ""
+    try:
+        if data.area_m2 and data.price:
+            area_num = int(re.sub(r'[^\d]', '', str(data.area_m2)))
+            if area_num > 0:
+                m2_price = f"{int(data.price / area_num):,} TL/m²"
+    except: pass
+    
+    return f"""
+Sen uzman bir emlak yatırım danışmanısın (BAI Bilmiş). Türkiye'deki konut piyasasını çok iyi biliyorsun.
+
+🏡 SATILIK KONUT BİLGİLERİ:
+- Başlık: {data.title}
+- Fiyat: {data.price:,} TL
+- m² Fiyatı: {m2_price or 'Hesaplanamadı'}
+- Lokasyon: {location}
+- Oda Sayısı: {room_count}
+- Alan: {area_m2} m²
+- Bina Yaşı: {building_age}
+- Kategori: {data.category_path}
+
+📝 İLAN AÇIKLAMASI:
+{desc}...
+
+📊 {market_context}
+
+💬 KULLANICI YORUMLARI (Mahalle hakkında):
+{user_notes or 'Henüz yorum yok'}
+
+🎯 GÖREV:
+1. Bu fiyatın bölge ortalamasına göre durumunu analiz et
+2. m² başına fiyatı değerlendir
+3. Lokasyonun avantajlarını ve dezavantajlarını listele
+4. Yatırım potansiyelini değerlendir (kira getirisi, değer artışı)
+5. Bina yaşına göre olası sorunları belirt
+6. Alıcıya önerilerde bulun (pazarlık, dikkat edilecekler, ekspertiz)
+
+⚠️ HTML formatında, okunabilir ve düzenli cevap ver. Emoji kullan.
+"""
+
 # --- ENDPOINTLER ---
 
 # 🟢 UptimeRobot Dostu
@@ -277,15 +472,17 @@ async def ask_ai(data: ListingData):
             f"- Durum: {valuation['status']}"
         )
 
-    prompt = f"""
-    Sen uzman bir araç alım-satım danışmanısın (BAI Bilmiş).
-    ARAÇ: {data.title}, {data.price} TL, {data.year}, {data.km}
-    KATEGORİ: {data.category_path}
-    AÇIKLAMA: {data.description[:600]}...
-    {market_context}
-    NOTLAR: {user_notes}
-    GÖREV: Fiyat/Performans analizi yap. HTML ile cevap ver.
-    """
+    # 🟢 KATEGORİ ALGILAMA 🟢
+    listing_type = detect_listing_type(data.category_path, data.listing_type)
+    
+    # 🟢 KATEGORİYE GÖRE PROMPT OLUŞTUR 🟢
+    if listing_type == "konut_kiralik":
+        prompt = create_rental_prompt(data, market_context, user_notes)
+    elif listing_type == "konut_satilik":
+        prompt = create_home_sale_prompt(data, market_context, user_notes)
+    else:
+        # Varsayılan: Araç
+        prompt = create_car_prompt(data, market_context, user_notes)
     
     # 🟢 GOOGLE AI REST API (v1beta) 🟢
     import asyncio
@@ -366,7 +563,14 @@ async def analyze_listing(data: ListingData):
             "url": data.url,
             "year": data.year,
             "km": data.km,
-            "category_path": data.category_path # <-- Kategori Kaydı
+            "category_path": data.category_path,
+            # Yeni alanlar
+            "transmission": data.transmission,
+            "listing_type": data.listing_type,
+            "location": data.location,
+            "room_count": data.room_count,
+            "area_m2": data.area_m2,
+            "building_age": data.building_age
         }
         
         existing = await listings_collection.find_one({"_id": data.id})
@@ -684,7 +888,7 @@ async def admin_get_stats(admin_email: str):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
-# --- BULK UPLOAD (Kategori Destekli & Tarih Düzeltmeli) ---
+# --- BULK UPLOAD (Kategori Destekli & Tüm Alanlar) ---
 @app.post("/bulk-upload")
 async def bulk_upload(listings: List[ListingData]):
     if not listings: return {"status": "empty"}
@@ -703,9 +907,16 @@ async def bulk_upload(listings: List[ListingData]):
                     "title": item.title, 
                     "year": item.year, 
                     "km": item.km,
-                    "category_path": item.category_path # <-- Kategori Kaydı
+                    "category_path": item.category_path,
+                    # Yeni alanlar
+                    "transmission": item.transmission,
+                    "listing_type": item.listing_type,
+                    "location": item.location,
+                    "room_count": item.room_count,
+                    "area_m2": item.area_m2,
+                    "building_age": item.building_age
                 },
-                "$min": { "first_seen_at": now }, # Eksik tarihleri düzeltir
+                "$min": { "first_seen_at": now },
                 "$setOnInsert": { "history": [], "comments": [] }
             },
             upsert=True
