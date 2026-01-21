@@ -129,41 +129,42 @@ async def calculate_valuation(title, current_price, current_id, current_year, ca
             item_room = item.get("room_count", "")
             item_area = clean_number(item.get("area_m2", 0))
             
-            # 🏠 EMLAK İÇİN SEMT + ODA SAYISI BAZLI FİLTRELEME 🏠
+            # 🏠 EMLAK İÇİN SIKI FİLTRELEME (MAHALLE + ODA + m²) 🏠
             if is_real_estate:
-                # Aynı ilan tipi olmalı (satılık-satılık, kiralık-kiralık)
+                # 1. TİP KONTROLÜ
                 if listing_type and item_type and listing_type != item_type:
                     continue
                 
-                # ÖNCELİK 1: Oda sayısı eşleşmesi (EN ÖNEMLİ)
+                # 2. ODA SAYISI KONTROLÜ (TAM EŞLEŞME İSTENDİ)
+                # İstisna: Eğer odasız (stüdyo) ise veya parse edilemiyorsa esnek davran
                 room_match = False
                 if room_count and item_room:
-                    try:
-                        current_rooms = int(re.sub(r'[^\d]', '', room_count.split("+")[0]))
-                        item_rooms = int(re.sub(r'[^\d]', '', item_room.split("+")[0]))
-                        if abs(current_rooms - item_rooms) <= 1:  # ±1 oda toleransı
-                            room_match = True
-                    except: 
+                    # Rakamları al (2+1 -> 2, 3+1 -> 3)
+                    c_r = re.sub(r'[^\d]', '', room_count.split("+")[0])
+                    i_r = re.sub(r'[^\d]', '', item_room.split("+")[0])
+                    if c_r and i_r and c_r == i_r: # TAM EŞLEŞME
                         room_match = True
                 else:
-                    room_match = True
+                    room_match = True # Veri yoksa eleme
                 
-                # Oda sayısı eşleşmiyorsa KESIN ATLA
-                if not room_match:
-                    continue
+                if not room_match: continue
+
+                # 3. LOKASYON KONTROLÜ (MAHALLE SEVİYESİNDE)
+                # location stringi genelde: İstanbul / Üsküdar / Küçüksu Mh.
+                location_match = False
                 
-                # ÖNCELİK 2: İLÇE/SEMT EŞLEŞMESİ (ESNEK)
-                # Lokasyon varsa eşleşmeli, yoksa kabul et
-                location_match = True  # Varsayılan: kabul
                 if location_parts and item_location:
-                    # İkisi de varsa eşleşme ara
-                    location_match = False
-                    for part in location_parts:
-                        if len(part) > 2 and part in item_location:
-                            location_match = True
-                            break
-                # Mevcut ilan veya db ilanı lokasyon içermiyorsa kabul et
-                # (eski veriler lokasyon içermiyor olabilir)
+                    # En detaylı lokasyon (Mahalle) eşleşmeli
+                    # location_parts[-1] genelde mahalleyi verir
+                    target_spot = location_parts[-1] 
+                    if len(target_spot) > 2 and target_spot in item_location:
+                        location_match = True
+                
+                # Lokasyon yoksa (eski veri) yine de dahil et (veri yetersizliğini önlemek için)
+                if not location_parts or not item_location:
+                    location_match = True
+                    
+                if not location_match: continue
                         
             # 🚗 ARAÇ İÇİN KATEGORİ/BAŞLIK FİLTRELEME 🚗
             else:
@@ -663,7 +664,7 @@ async def ask_ai(data: ListingData):
     # 🟢 BÖLGE HABERLERİNİ GETİR (Emlak için) 🟢
     area_info = {}
     if listing_type in ["konut_kiralik", "konut_satilik"]:
-        area_info = await search_area_news(data.location)
+        area_info = await search_area_news_persistent(data.location)
 
     # 🟢 KATEGORİYE GÖRE PROMPT OLUŞTUR 🟢
     if listing_type == "konut_kiralik":
@@ -1136,3 +1137,117 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run("backend.main:app", host="0.0.0.0", port=port)
+
+# 🟢 BÖLGE ANALİZİ (PERSISTENT - YENİ) 🟢
+async def search_area_news_persistent(location: str) -> dict:
+    """Belirtilen lokasyon hakkında kapsamlı bilgi toplar ve veritabanına kaydeder"""
+    if not location or len(location) < 3:
+        return {}
+    
+    # Lokasyon temizleme
+    loc_parts = [p.strip() for p in location.replace(">", ",").split(",") if len(p.strip()) > 2]
+    # En detaylı kısmı al
+    if len(loc_parts) >= 2:
+        search_loc_full = " ".join(loc_parts[-2:])
+    elif len(loc_parts) == 1:
+        search_loc_full = loc_parts[0]
+    else:
+        search_loc_full = location
+        
+    search_loc_slug = search_loc_full.lower().replace(" ", "-").replace("ı", "i").replace("ü", "u").replace("ö", "o").replace("ş", "s").replace("ç", "c").replace("ğ", "g")
+    
+    # 1. ÖNCE DB KONTROL ET (Son 30 gün)
+    try:
+        from backend.database import area_insights_collection
+        existing_data = await area_insights_collection.find_one({"_id": search_loc_slug})
+        
+        if existing_data:
+            last_date = existing_data.get("updated_at")
+            if last_date:
+                # 30 gün geçti mi?
+                last_dt = datetime.strptime(last_date, "%Y-%m-%d %H:%M:%S")
+                if (datetime.now() - last_dt).days < 30:
+                    return existing_data.get("data", {})
+    except Exception as e:
+        print(f"DB Read Error: {e}")
+    
+    # 2. YENİ ARAMA YAP (Detaylı)
+    result = {
+        "safety": "",
+        "development": "",
+        "transport": "",
+        "general": ""
+    }
+    
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    
+    try:
+        # 1. GÜVENLİK ANALİZİ
+        safety_query = f"{search_loc_full} asayiş olay suç haber"
+        safety_url = f"https://www.google.com/search?q={requests.utils.quote(safety_query)}&tbm=nws"
+        resp = requests.get(safety_url, headers=headers, timeout=5)
+        if resp.status_code == 200:
+            text = resp.text.lower()
+            negative = ["cinayet", "hırsızlık", "gasp", "uyuşturucu", "kavga", "silahlı", "bıçaklı", "taciz", "çete"]
+            found = [kw for kw in negative if kw in text]
+            unique_found = list(set(found))
+            
+            if len(unique_found) >= 3:
+                result["safety"] = f"⚠️ GÜVENLİK: Bu bölgede son dönemde bazı güvenlik olayları ({', '.join(unique_found[:3])}) haberlere yansımış. Detaylı araştırma önerilir."
+            elif len(unique_found) >= 1:
+                result["safety"] = f"ℹ️ GÜVENLİK: Nadiren asayiş haberi görülüyor ({unique_found[0]}). Genel olarak sakin bir bölge."
+            else:
+                result["safety"] = "✅ GÜVENLİK: Bölge ile ilgili ciddi bir asayiş sorunu haberi tespit edilmedi."
+        
+        # 2. GELİŞİM / YATIRIM ANALİZİ
+        dev_query = f"{search_loc_full} yeni konut projesi metro avm hastane yatırım"
+        dev_url = f"https://www.google.com/search?q={requests.utils.quote(dev_query)}&tbm=nws"
+        resp = requests.get(dev_url, headers=headers, timeout=5)
+        if resp.status_code == 200:
+            text = resp.text.lower()
+            positive = ["metro", "tramvay", "hastane", "avm", "üniversite", "park", "millet bahçesi", "kentsel dönüşüm"]
+            found = [kw for kw in positive if kw in text]
+            unique_found = list(set(found))
+            
+            if len(unique_found) >= 2:
+                result["development"] = f"📈 GELİŞİM: Bölge değerleniyor. Yakın zamanda {', '.join(unique_found[:3])} gibi projeler haberlere konu olmuş."
+            else:
+                result["development"] = "📊 GELİŞİM: Bölgede büyük bir kamu yatırımı veya mega proje haberi öne çıkmıyor. İstikrarlı bir bölge."
+        
+        # 3. ULAŞIM ANALİZİ
+        transport_query = f"{search_loc_full} ulaşım otobüs metro durak"
+        transport_url = f"https://www.google.com/search?q={requests.utils.quote(transport_query)}"
+        resp = requests.get(transport_url, headers=headers, timeout=5)
+        
+        transport_modes = []
+        if resp.status_code == 200:
+            text = resp.text.lower()
+            if "metro" in text or "m4" in text or "m5" in text: transport_modes.append("Metro")
+            if "metrobüs" in text: transport_modes.append("Metrobüs")
+            if "marmaray" in text: transport_modes.append("Marmaray")
+            if "tramvay" in text: transport_modes.append("Tramvay")
+            if "vapur" in text or "iskele" in text: transport_modes.append("Vapur")
+            
+            if transport_modes:
+                result["transport"] = f"🚇 ULAŞIM: Bölgede {', '.join(transport_modes)} erişimi mevcut."
+            else:
+                 result["transport"] = "🚌 ULAŞIM: Ağırlıklı olarak otobüs ve minibüs hatları ile ulaşım sağlanıyor."
+        
+        result["general"] = f"📍 {search_loc_full} bölgesi için internet verileri tarandı."
+        
+        # DB'ye KAYDET
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        await area_insights_collection.update_one(
+            {"_id": search_loc_slug},
+            {"$set": {
+                "updated_at": now_str,
+                "location_name": search_loc_full,
+                "data": result
+            }},
+            upsert=True
+        )
+
+    except Exception as e:
+        print(f"Bölge analiz hatası: {e}")
+    
+    return result

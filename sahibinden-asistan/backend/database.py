@@ -18,6 +18,7 @@ listings_collection = db["listings"]
 # --- YENİ EKLENEN KISIM ---
 # Google ile giriş yapan üyelerin kaydedileceği yer
 users_collection = db["users"] 
+area_insights_collection = db["area_insights"] # Bölge haberleri ve analizi için 
 
 async def get_db():
     return db
