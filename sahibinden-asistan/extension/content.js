@@ -37,7 +37,7 @@ function getCategoryPath() {
     return null;
 }
 
-// 🟢 2. HIZLI TARAMA MODU (Liste Sayfası - GELİŞMİŞ)
+// 🟢 2. HIZLI TARAMA MODU (Liste Sayfası - DOĞRU SÜTUN OKUMA)
 async function runSweepMode() {
     const searchTable = document.querySelector('table#searchResultsTable');
 
@@ -46,46 +46,98 @@ async function runSweepMode() {
         const pageCategory = getCategoryPath();
         const listingType = detectListingType(pageCategory);
 
-        // 🏠 LOKASYON: Breadcrumb'dan sayfa lokasyonunu al
+        // 🏠 LOKASYON: Breadcrumb'dan sayfa lokasyonunu al (İstanbul > Beylikdüzü > Yakuplu gibi)
         const pageLocation = getPageLocation();
 
-        console.log(`BAI BILMIS: Tarama başlıyor - Kategori: ${listingType}, Lokasyon: ${pageLocation}`);
+        console.log(`🔍 BAI BILMIS: Tarama başlıyor - Tip: ${listingType}, Lokasyon: ${pageLocation}`);
 
         let rows = document.querySelectorAll('tr.searchResultsItem');
         let batchData = [];
 
-        rows.forEach(row => {
+        rows.forEach((row, index) => {
             try {
                 let id = row.getAttribute('data-id');
                 let priceText = row.querySelector('.searchResultsPriceValue span')?.innerText;
 
                 let titleElement = row.querySelector('.searchResultsTitleValue a');
-                let title = titleElement?.innerText || "Liste İlanı";
+                let title = titleElement?.innerText?.trim() || "Liste İlanı";
                 let url = titleElement?.href || "";
 
-                // --- SÜTUN AYRIŞTIRMA (GELİŞMİŞ) ---
-                let attributes = row.querySelectorAll('.searchResultsAttributeValue');
+                // --- TÜM SÜTUNLARI TARA (td hücrelerinden) ---
+                let allCells = row.querySelectorAll('td');
                 let year = null, km = null, roomCount = null, areaM2 = null, buildingAge = null, transmission = null;
-                let rowLocation = pageLocation; // Varsayılan olarak sayfa lokasyonunu kullan
+                let rowLocation = pageLocation;
 
-                // Araç kategorisi için [Yıl, KM, Renk, ...]
-                if (listingType === "araba") {
-                    if (attributes.length >= 1) year = attributes[0]?.innerText?.trim();
-                    if (attributes.length >= 2) km = attributes[1]?.innerText?.trim();
-                    // Bazı listelerde vites bilgisi de olabilir
-                    if (attributes.length >= 4) transmission = attributes[3]?.innerText?.trim();
+                // Tablo başlıklarını kontrol et ve sütun indekslerini bul
+                const headerRow = searchTable.querySelector('thead tr');
+                if (headerRow) {
+                    const headers = Array.from(headerRow.querySelectorAll('th')).map(h => h.innerText.toLowerCase().trim());
+
+                    allCells.forEach((cell, cellIndex) => {
+                        const cellText = cell.innerText?.trim() || "";
+                        const header = headers[cellIndex] || "";
+
+                        // Emlak sütunları
+                        if (header.includes("m²") || header.includes("brüt") || header.includes("net")) {
+                            areaM2 = cellText;
+                        }
+                        if (header.includes("oda")) {
+                            roomCount = cellText;
+                        }
+                        if (header.includes("mahalle") || header.includes("semt") || header.includes("ilçe")) {
+                            if (cellText.length > 1) rowLocation = pageLocation + " > " + cellText;
+                        }
+                        if (header.includes("bina") || header.includes("yaş")) {
+                            buildingAge = cellText;
+                        }
+
+                        // Araç sütunları
+                        if (header.includes("yıl") || header.includes("model")) {
+                            year = cellText;
+                        }
+                        if (header.includes("km")) {
+                            km = cellText;
+                        }
+                        if (header.includes("vites")) {
+                            transmission = cellText;
+                        }
+                    });
                 }
 
-                // Emlak kategorisi için [Oda, m², Bina Yaşı, ...]
-                if (listingType.includes("konut") || listingType.includes("isyeri")) {
-                    if (attributes.length >= 1) roomCount = attributes[0]?.innerText?.trim();
-                    if (attributes.length >= 2) areaM2 = attributes[1]?.innerText?.trim();
-                    if (attributes.length >= 3) buildingAge = attributes[2]?.innerText?.trim();
+                // Alternatif: Eski yöntem (AttributeValue sınıfı)
+                if (!areaM2 && !roomCount && !year) {
+                    let attributes = row.querySelectorAll('.searchResultsAttributeValue');
+                    if (listingType === "araba" && attributes.length >= 2) {
+                        year = attributes[0]?.innerText?.trim();
+                        km = attributes[1]?.innerText?.trim();
+                    }
+                    if ((listingType.includes("konut") || listingType.includes("isyeri")) && attributes.length >= 2) {
+                        // Sahibinden'de emlak için: [0]=m², [1]=Oda Sayısı veya tam tersi
+                        const attr0 = attributes[0]?.innerText?.trim() || "";
+                        const attr1 = attributes[1]?.innerText?.trim() || "";
 
-                    // Satırda lokasyon bilgisi varsa al (bazı listelerde görünür)
-                    const locationCell = row.querySelector('.searchResultsLocationValue');
-                    if (locationCell) {
-                        rowLocation = locationCell.innerText.trim();
+                        // m² genelde rakam içerir, oda sayısı + içerir
+                        if (attr0.includes("+") || attr0.match(/^\d\+/)) {
+                            roomCount = attr0;
+                            areaM2 = attr1;
+                        } else {
+                            areaM2 = attr0;
+                            roomCount = attr1;
+                        }
+
+                        if (attributes.length >= 3) buildingAge = attributes[2]?.innerText?.trim();
+                    }
+                }
+
+                // Mahalle sütunu (en sağdaki hücre genelde)
+                const lastCells = row.querySelectorAll('td');
+                if (lastCells.length > 0) {
+                    const lastCell = lastCells[lastCells.length - 1];
+                    const lastText = lastCell?.innerText?.trim() || "";
+                    if (lastText.includes("Mah") || lastText.includes("mah") || lastText.length < 20) {
+                        if (lastText.length > 2 && !lastText.includes("TL") && !lastText.includes("2026") && !lastText.includes("2025")) {
+                            rowLocation = pageLocation + " > " + lastText;
+                        }
                     }
                 }
 
@@ -102,11 +154,16 @@ async function runSweepMode() {
                             transmission,
                             category_path: pageCategory,
                             listing_type: listingType,
-                            location: rowLocation,  // 🔑 LOKASYON EKLENDİ
+                            location: rowLocation,
                             room_count: roomCount,
                             area_m2: areaM2,
                             building_age: buildingAge
                         });
+
+                        // İlk 3 kaydı logla (debug için)
+                        if (index < 3) {
+                            console.log(`📝 İlan ${index + 1}: ${title.substring(0, 30)}... | ${areaM2} m² | ${roomCount} oda | ${rowLocation}`);
+                        }
                     }
                 }
             } catch (e) { console.log("Satır okuma hatası:", e); }
@@ -121,8 +178,11 @@ async function runSweepMode() {
                     body: JSON.stringify(batchData)
                 });
                 const result = await response.json();
-                console.log(`✅ BAI BILMIS: ${batchData.length} ${listingType} ilanı kaydedildi. Lokasyon: ${pageLocation}`);
+                console.log(`✅ BAI BILMIS: ${batchData.length} ${listingType} ilanı kaydedildi!`);
+                console.log(`📍 Lokasyon: ${pageLocation} | m² ve oda bilgisi: ${batchData.filter(d => d.area_m2).length} ilan`);
             } catch (e) { console.log("Bulk upload hatası:", e); }
+        } else {
+            console.log("⚠️ BAI BILMIS: Bu sayfada kayıt edilecek ilan bulunamadı.");
         }
     }
 }
