@@ -129,37 +129,41 @@ async def calculate_valuation(title, current_price, current_id, current_year, ca
             item_room = item.get("room_count", "")
             item_area = clean_number(item.get("area_m2", 0))
             
-            # 🏠 EMLAK İÇİN LOKASYON BAZLI FİLTRELEME 🏠
+            # 🏠 EMLAK İÇİN ESNEK FİLTRELEME 🏠
             if is_real_estate:
                 # Aynı ilan tipi olmalı (satılık-satılık, kiralık-kiralık)
                 if listing_type and item_type and listing_type != item_type:
                     continue
                 
-                # Lokasyon eşleşmesi (en az 1 parça eşleşmeli)
-                location_match_level = 0
-                if location_parts and item_location:
-                    for part in location_parts:
-                        if part in item_location:
-                            location_match_level += 1
-                
-                # En az ilçe seviyesinde eşleşme olmalı (1 parça)
-                if location_parts and location_match_level == 0:
-                    continue
-                
-                # Oda sayısı benzer olmalı (varsa)
+                # ÖNCELİK 1: Oda sayısı eşleşmesi (en önemli)
+                room_match = False
                 if room_count and item_room:
                     try:
                         current_rooms = int(re.sub(r'[^\d]', '', room_count.split("+")[0]))
                         item_rooms = int(re.sub(r'[^\d]', '', item_room.split("+")[0]))
-                        if abs(current_rooms - item_rooms) > 1:  # ±1 oda toleransı
-                            continue
-                    except: pass
+                        if abs(current_rooms - item_rooms) <= 1:  # ±1 oda toleransı
+                            room_match = True
+                    except: 
+                        room_match = True  # Parse edilemezse geç
+                else:
+                    room_match = True  # Oda bilgisi yoksa geç
                 
-                # m² benzer olmalı (±%30 tolerans)
-                if target_area > 0 and item_area > 0:
-                    area_ratio = item_area / target_area
-                    if area_ratio < 0.7 or area_ratio > 1.3:
-                        continue
+                if not room_match:
+                    continue
+                
+                # ÖNCELİK 2: Lokasyon eşleşmesi (esnek - sadece ilçe yeterli)
+                location_match = False
+                if location_parts and item_location:
+                    # Sadece İLÇE seviyesinde eşleşme ara (ilk 2 parça)
+                    for part in location_parts[:2]:  # Sadece il ve ilçe
+                        if part in item_location:
+                            location_match = True
+                            break
+                else:
+                    location_match = True  # Lokasyon bilgisi yoksa geç
+                
+                # Lokasyon eşleşmezse bile devam et (sadece uyarı)
+                # m² kontrolü KALDIRILDI - çok kısıtlayıcıydı
                         
             # 🚗 ARAÇ İÇİN KATEGORİ/BAŞLIK FİLTRELEME 🚗
             else:
