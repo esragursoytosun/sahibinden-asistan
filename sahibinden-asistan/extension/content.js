@@ -335,6 +335,71 @@ function handleTelegramClick() {
     window.open(`https://t.me/BAIBilmisBot?start=${user.id}`, '_blank');
 }
 
+// 🟢 AI SONUÇ YAN PANEL FONKSİYONU (SOLA AÇILIR) 🟢
+function showAiSidePanel(htmlContent) {
+    // Varsa eski paneli kaldır
+    const existingPanel = document.getElementById('bai-ai-side-panel');
+    if (existingPanel) existingPanel.remove();
+
+    // Yana açılan panel oluştur
+    const sidePanel = document.createElement('div');
+    sidePanel.id = 'bai-ai-side-panel';
+    sidePanel.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 420px;
+        height: 100vh;
+        background: linear-gradient(180deg, #293542 0%, #1a2530 100%);
+        z-index: 2147483647;
+        box-shadow: 5px 0 30px rgba(0,0,0,0.3);
+        display: flex;
+        flex-direction: column;
+        font-family: 'Open Sans', sans-serif;
+        animation: slideIn 0.3s ease;
+    `;
+
+    // CSS animasyonu ekle
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes slideIn {
+            from { transform: translateX(-100%); }
+            to { transform: translateX(0); }
+        }
+        @keyframes slideOut {
+            from { transform: translateX(0); }
+            to { transform: translateX(-100%); }
+        }
+    `;
+    document.head.appendChild(style);
+
+    sidePanel.innerHTML = `
+        <div style="padding:15px 20px;background:rgba(255,208,0,0.1);border-bottom:1px solid rgba(255,255,255,0.1);display:flex;justify-content:space-between;align-items:center;">
+            <div>
+                <div style="font-size:16px;font-weight:900;color:#FFD000;">🤖 AI ANALİZ RAPORU</div>
+                <div style="font-size:10px;color:#888;margin-top:2px;">BAI Bilmiş Detaylı Değerlendirme</div>
+            </div>
+            <button id="closeSidePanel" style="background:none;border:none;color:#fff;font-size:24px;cursor:pointer;padding:5px 10px;opacity:0.7;">&times;</button>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:20px;background:#fff;">
+            <div id="sidePanelContent" style="font-size:13px;line-height:1.7;color:#333;">
+                ${htmlContent}
+            </div>
+        </div>
+        <div style="padding:12px 20px;background:#293542;border-top:1px solid rgba(255,255,255,0.1);text-align:center;">
+            <div style="font-size:10px;color:#888;">💡 İpucu: Paneli kapatmak için sağ üstteki X'e tıklayın</div>
+        </div>
+    `;
+
+    document.body.appendChild(sidePanel);
+
+    // Kapatma butonu
+    document.getElementById('closeSidePanel').onclick = () => {
+        sidePanel.style.animation = 'slideOut 0.3s ease forwards';
+        setTimeout(() => sidePanel.remove(), 300);
+    };
+}
+
 // 🟢 AI SONUÇ ACCORDION FONKSİYONU (AÇILIR-KAPANIR BÖLÜMLER) 🟢
 function showAiCarousel(container, htmlContent) {
     const tempDiv = document.createElement('div');
@@ -666,9 +731,15 @@ function showOverlay(data, result) {
                 resBox.innerHTML = `<div style="text-align:center;">Analiz için giriş yapmalısınız.</div>`;
             }
             else if (j.status === "success") {
-                // Accordion formatında göster (tıkla aç/kapa)
-                showAiCarousel(resBox, j.ai_response);
+                // Yana açılan panelde göster
+                showAiSidePanel(j.ai_response);
                 btn.innerHTML = "✅ Analiz Tamamlandı";
+                resBox.innerHTML = `<div style="text-align:center;padding:15px;background:#e8f5e9;border-radius:8px;">
+                    <div style="font-size:20px;margin-bottom:5px;">✅</div>
+                    <div style="font-size:12px;color:#2e7d32;font-weight:bold;">Analiz hazır! Sol panelde görüntüleniyor.</div>
+                    <button id="reopenAiPanel" style="margin-top:10px;padding:8px 15px;background:#293542;color:#FFD000;border:none;border-radius:6px;cursor:pointer;font-size:11px;">📖 Tekrar Aç</button>
+                </div>`;
+                document.getElementById('reopenAiPanel').onclick = () => showAiSidePanel(j.ai_response);
             }
             else {
                 // Hata durumu - meşgul uyarısı veya diğer hatalar

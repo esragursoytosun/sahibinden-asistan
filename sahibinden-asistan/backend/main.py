@@ -152,22 +152,18 @@ async def calculate_valuation(title, current_price, current_id, current_year, ca
                 if not room_match:
                     continue
                 
-                # ÖNCELİK 2: İLÇE/SEMT EŞLEŞMESİ (ZORUNLU)
-                # En az ilçe seviyesinde eşleşme olmalı
-                location_match = False
+                # ÖNCELİK 2: İLÇE/SEMT EŞLEŞMESİ (ESNEK)
+                # Lokasyon varsa eşleşmeli, yoksa kabul et
+                location_match = True  # Varsayılan: kabul
                 if location_parts and item_location:
-                    # İlçe veya mahalle eşleşmesi ara
+                    # İkisi de varsa eşleşme ara
+                    location_match = False
                     for part in location_parts:
                         if len(part) > 2 and part in item_location:
                             location_match = True
                             break
-                elif not location_parts:
-                    # Mevcut ilana lokasyon girilmemişse, tüm ilanları dahil et
-                    location_match = True
-                
-                # Lokasyon eşleşmiyorsa ATLA (sıkı filtre)
-                if not location_match:
-                    continue
+                # Mevcut ilan veya db ilanı lokasyon içermiyorsa kabul et
+                # (eski veriler lokasyon içermiyor olabilir)
                         
             # 🚗 ARAÇ İÇİN KATEGORİ/BAŞLIK FİLTRELEME 🚗
             else:
@@ -288,37 +284,72 @@ def detect_listing_type(category_path: str, listing_type: str = None) -> str:
     # Vasıta (varsayılan)
     return "araba"
 
-# 🟢 BÖLGE GÜVENLİK ANALİZİ (HABER ARAMA) 🟢
-async def search_area_news(location: str) -> str:
-    """Belirtilen lokasyonda güvenlik ile ilgili haberleri özetler"""
+# 🟢 BÖLGE ANALİZİ (HABER + GELİŞİM + ULAŞIM) 🟢
+async def search_area_news(location: str) -> dict:
+    """Belirtilen lokasyon hakkında kapsamlı bilgi toplar"""
     if not location or len(location) < 3:
-        return ""
+        return {}
+    
+    result = {
+        "safety": "",
+        "development": "",
+        "transport": "",
+        "general": ""
+    }
+    
+    # Lokasyonun ana kısmını al (İstanbul > Üsküdar > Küçüksu -> Üsküdar Küçüksu)
+    loc_parts = [p.strip() for p in location.replace(">", ",").split(",") if len(p.strip()) > 2]
+    search_loc = " ".join(loc_parts[-2:]) if len(loc_parts) >= 2 else location
+    
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
     
     try:
-        # Basit haber arama - Google ile
-        search_query = f"{location} olay haber suç asayiş"
-        search_url = f"https://www.google.com/search?q={requests.utils.quote(search_query)}&tbm=nws"
-        
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-        response = requests.get(search_url, headers=headers, timeout=5)
-        
-        if response.status_code == 200:
-            # Basit analiz: Haber başlıkları var mı?
-            text = response.text.lower()
-            negative_keywords = ["cinayet", "hırsızlık", "gasp", "uyuşturucu", "kavga", "yaralama", "bıçaklı", "silahlı"]
-            found_issues = [kw for kw in negative_keywords if kw in text]
-            
-            if len(found_issues) >= 3:
-                return f"⚠️ DİKKAT: Bu bölgede son dönemde bazı güvenlik olayları haberlere yansımış ({', '.join(found_issues[:3])}). Detaylı araştırma önerilir."
-            elif len(found_issues) >= 1:
-                return f"ℹ️ Bu bölgede nadiren güvenlik haberleri görülmüş. Genel olarak sakin."
+        # 1. GÜVENLİK ANALİZİ
+        safety_query = f"{search_loc} asayiş olay suç haber"
+        safety_url = f"https://www.google.com/search?q={requests.utils.quote(safety_query)}&tbm=nws"
+        resp = requests.get(safety_url, headers=headers, timeout=5)
+        if resp.status_code == 200:
+            text = resp.text.lower()
+            negative = ["cinayet", "hırsızlık", "gasp", "uyuşturucu", "kavga", "silahlı", "bıçaklı", "taciz"]
+            found = [kw for kw in negative if kw in text]
+            if len(found) >= 3:
+                result["safety"] = f"⚠️ GÜVENLİK: Bu bölgede son dönemde güvenlik olayları haberlere yansımış. Dikkatli olun."
+            elif len(found) >= 1:
+                result["safety"] = f"ℹ️ GÜVENLİK: Nadiren güvenlik haberi var, genel olarak sakin bölge."
             else:
-                return "✅ Bu bölgede ciddi güvenlik sorunu tespit edilmedi."
+                result["safety"] = "✅ GÜVENLİK: Ciddi güvenlik sorunu tespit edilmedi."
         
-        return ""
+        # 2. GELİŞİM / YATIRIM ANALİZİ
+        dev_query = f"{search_loc} yeni proje inşaat metro kentsel dönüşüm"
+        dev_url = f"https://www.google.com/search?q={requests.utils.quote(dev_query)}&tbm=nws"
+        resp = requests.get(dev_url, headers=headers, timeout=5)
+        if resp.status_code == 200:
+            text = resp.text.lower()
+            positive = ["metro", "tramvay", "hastane", "avm", "okul", "park", "dönüşüm", "yatırım", "proje"]
+            found = [kw for kw in positive if kw in text]
+            if len(found) >= 2:
+                result["development"] = f"📈 GELİŞİM: Bölgede yeni projeler/yatırımlar planlanıyor ({', '.join(found[:3])}). Değer artışı bekleniyor."
+            else:
+                result["development"] = "📊 GELİŞİM: Bölgede büyük yatırım haberi bulunmadı."
+        
+        # 3. ULAŞIM ANALİZİ
+        transport_query = f"{search_loc} ulaşım metro otobüs toplu taşıma"
+        transport_url = f"https://www.google.com/search?q={requests.utils.quote(transport_query)}"
+        resp = requests.get(transport_url, headers=headers, timeout=5)
+        if resp.status_code == 200:
+            text = resp.text.lower()
+            transport_kw = ["metro", "metrobüs", "marmaray", "tramvay", "vapur", "minibüs"]
+            found = [kw for kw in transport_kw if kw in text]
+            if found:
+                result["transport"] = f"🚇 ULAŞIM: Bölgede {', '.join(found[:3])} erişimi mevcut."
+        
+        # 4. GENEL BÖLGE BİLGİSİ
+        result["general"] = f"📍 {search_loc} bölgesi analiz edildi."
+        
     except Exception as e:
-        print(f"Haber arama hatası: {e}")
-        return ""
+        print(f"Bölge analiz hatası: {e}")
+    
+    return result
 
 # 🟢 ARAÇ PROMPT OLUŞTURUCU 🟢
 def create_car_prompt(data, market_context: str, user_notes: str) -> str:
@@ -360,13 +391,23 @@ CEVABINI TAMAMEN AŞAĞIDAKİ HTML ŞABLONUNDA VER (sadece HTML, başka bir şey
 """
 
 # 🟢 KİRALIK KONUT PROMPT OLUŞTURUCU 🟢
-def create_rental_prompt(data, market_context: str, user_notes: str) -> str:
+def create_rental_prompt(data, market_context: str, user_notes: str, area_info: dict = None) -> str:
     """Kiralık konut ilanları için AI prompt oluşturur"""
     desc = (data.description or "")[:400]
     location = data.location or "Belirtilmemiş"
     room_count = data.room_count or "?"
     area_m2 = data.area_m2 or "?"
     building_age = data.building_age or "?"
+    
+    # Bölge bilgilerini formatla
+    area_news = ""
+    if area_info:
+        area_news = f"""
+🔍 BÖLGE ANALİZİ:
+{area_info.get('safety', '')}
+{area_info.get('development', '')}
+{area_info.get('transport', '')}
+"""
     
     return f"""Sen BAI Bilmiş - akıllı emlak danışmanısın.
 
@@ -375,7 +416,7 @@ KİRA: {data.price:,} TL/ay | LOKASYON: {location} | ODA: {room_count} | m²: {a
 AÇIKLAMA: {desc}
 
 {market_context}
-
+{area_news}
 KULLANICI YORUMLARI: {user_notes or 'Yok'}
 
 CEVABINI TAMAMEN AŞAĞIDAKİ HTML ŞABLONUNDA VER (sadece HTML, başka bir şey yazma):
@@ -396,8 +437,8 @@ CEVABINI TAMAMEN AŞAĞIDAKİ HTML ŞABLONUNDA VER (sadece HTML, başka bir şey
 <li>[Dikkat 2]</li>
 </ul>
 
-<h3 style="color:#9b59b6;margin:0 0 8px;font-size:14px;">📍 MAHALLE HAKKINDA</h3>
-<p style="background:#f5f0ff;padding:10px;border-radius:6px;margin:0 0 12px;">[Ulaşım, market, okul vb. bilgiler]</p>
+<h3 style="color:#9b59b6;margin:0 0 8px;font-size:14px;">📍 BÖLGE BİLGİSİ</h3>
+<p style="background:#f5f0ff;padding:10px;border-radius:6px;margin:0 0 12px;">[Güvenlik, ulaşım, gelişim bilgileri - yukarıdaki bölge analizini kullan]</p>
 
 <h3 style="color:#3498db;margin:0 0 8px;font-size:14px;">💡 ÖNERİM</h3>
 <p style="background:#e8f4f8;padding:10px;border-radius:6px;border-left:3px solid #3498db;">[Pazarlık ve karar önerisi]</p>
@@ -405,7 +446,7 @@ CEVABINI TAMAMEN AŞAĞIDAKİ HTML ŞABLONUNDA VER (sadece HTML, başka bir şey
 """
 
 # 🟢 SATILIK KONUT PROMPT OLUŞTURUCU 🟢
-def create_home_sale_prompt(data, market_context: str, user_notes: str) -> str:
+def create_home_sale_prompt(data, market_context: str, user_notes: str, area_info: dict = None) -> str:
     """Satılık konut ilanları için AI prompt oluşturur"""
     desc = (data.description or "")[:400]
     location = data.location or "Belirtilmemiş"
@@ -422,6 +463,16 @@ def create_home_sale_prompt(data, market_context: str, user_notes: str) -> str:
                 m2_price = f"{int(data.price / area_num):,} TL/m²"
     except: pass
     
+    # Bölge bilgilerini formatla
+    area_news = ""
+    if area_info:
+        area_news = f"""
+🔍 BÖLGE ANALİZİ:
+{area_info.get('safety', '')}
+{area_info.get('development', '')}
+{area_info.get('transport', '')}
+"""
+    
     return f"""Sen BAI Bilmiş - akıllı emlak danışmanısın.
 
 SATILIK: {data.title}
@@ -429,7 +480,7 @@ FİYAT: {data.price:,} TL | m² FİYATI: {m2_price or '?'} | LOKASYON: {location
 AÇIKLAMA: {desc}
 
 {market_context}
-
+{area_news}
 KULLANICI YORUMLARI: {user_notes or 'Yok'}
 
 CEVABINI TAMAMEN AŞAĞIDAKİ HTML ŞABLONUNDA VER (sadece HTML, başka bir şey yazma):
@@ -449,6 +500,9 @@ CEVABINI TAMAMEN AŞAĞIDAKİ HTML ŞABLONUNDA VER (sadece HTML, başka bir şey
 <li>[Bina yaşı riski varsa]</li>
 <li>[Diğer riskler]</li>
 </ul>
+
+<h3 style="color:#9b59b6;margin:0 0 8px;font-size:14px;">📍 BÖLGE BİLGİSİ</h3>
+<p style="background:#f5f0ff;padding:10px;border-radius:6px;margin:0 0 12px;">[Güvenlik, ulaşım, gelişim - yukarıdaki bölge analizini kullan]</p>
 
 <h3 style="color:#f39c12;margin:0 0 8px;font-size:14px;">📈 YATIRIM POTANSİYELİ</h3>
 <p style="background:#fef9e7;padding:10px;border-radius:6px;margin:0 0 12px;">[Kira getirisi, değer artış potansiyeli]</p>
@@ -606,11 +660,16 @@ async def ask_ai(data: ListingData):
                 f"- Durum: {valuation['status']}"
             )
 
+    # 🟢 BÖLGE HABERLERİNİ GETİR (Emlak için) 🟢
+    area_info = {}
+    if listing_type in ["konut_kiralik", "konut_satilik"]:
+        area_info = await search_area_news(data.location)
+
     # 🟢 KATEGORİYE GÖRE PROMPT OLUŞTUR 🟢
     if listing_type == "konut_kiralik":
-        prompt = create_rental_prompt(data, market_context, user_notes)
+        prompt = create_rental_prompt(data, market_context, user_notes, area_info)
     elif listing_type == "konut_satilik":
-        prompt = create_home_sale_prompt(data, market_context, user_notes)
+        prompt = create_home_sale_prompt(data, market_context, user_notes, area_info)
     else:
         # Varsayılan: Araç
         prompt = create_car_prompt(data, market_context, user_notes)
