@@ -4,6 +4,7 @@ import requests
 import re
 from datetime import datetime, timedelta
 from typing import List
+import xml.etree.ElementTree as ET
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -160,8 +161,13 @@ async def calculate_valuation(title, current_price, current_id, current_year, ca
                     if len(target_spot) > 2 and target_spot in item_location:
                         location_match = True
                 
-                # Lokasyon yoksa (eski veri) yine de dahil et (veri yetersizliğini önlemek için)
-                if not location_parts or not item_location:
+                # KESİN LOKASYON ŞARTI (YANLIŞ EŞLEŞMEYİ ÖNLEMEK İÇİN)
+                # Eğer aradığımız spesifik bir mahalle varsa, lokasyon bilgisi olmayan ilanları DAHİL ETME.
+                if location_parts and not item_location:
+                    location_match = False
+                
+                # Eğer hedef lokasyon yoksa (genel arama), o zaman mecburen kabul et
+                elif not location_parts:
                     location_match = True
                     
                 if not location_match: continue
@@ -403,11 +409,18 @@ def create_rental_prompt(data, market_context: str, user_notes: str, area_info: 
     # Bölge bilgilerini formatla
     area_news = ""
     if area_info:
+        # Haber başlıklarını al
+        news_headlines = ""
+        if area_info.get("news_items"):
+            news_headlines = "\nSON HABER BAŞLIKLARI:\n" + "\n".join([f"- {n['title']}" for n in area_info['news_items'][:5]])
+            
         area_news = f"""
 🔍 BÖLGE ANALİZİ:
 {area_info.get('safety', '')}
 {area_info.get('development', '')}
 {area_info.get('transport', '')}
+
+{news_headlines}
 """
     
     return f"""Sen BAI Bilmiş - akıllı emlak danışmanısın.
@@ -467,11 +480,18 @@ def create_home_sale_prompt(data, market_context: str, user_notes: str, area_inf
     # Bölge bilgilerini formatla
     area_news = ""
     if area_info:
+        # Haber başlıklarını al
+        news_headlines = ""
+        if area_info.get("news_items"):
+            news_headlines = "\nSON HABER BAŞLIKLARI:\n" + "\n".join([f"- {n['title']}" for n in area_info['news_items'][:5]])
+            
         area_news = f"""
 🔍 BÖLGE ANALİZİ:
 {area_info.get('safety', '')}
 {area_info.get('development', '')}
 {area_info.get('transport', '')}
+
+{news_headlines}
 """
     
     return f"""Sen BAI Bilmiş - akıllı emlak danışmanısın.
@@ -712,6 +732,27 @@ async def ask_ai(data: ListingData):
                             text = "".join([part.get("text", "") for part in candidate["content"]["parts"]])
                             if text:
                                 print(f"✅ Başarılı: {model_name}")
+                                
+                                # 🟢 HABER FEED (Twitter Tarzı) EKLE 🟢
+                                if area_info.get("news_items"):
+                                    news_html = "<div style='margin-top:25px;padding-top:15px;border-top:2px solid #eee;'>"
+                                    news_html += "<h3 style='font-size:14px;color:#293542;margin-bottom:12px;display:flex;align-items:center;'>🗞️ BÖLGE HABER AKIŞI <span style='font-size:10px;background:#eee;padding:2px 6px;border-radius:10px;margin-left:8px;color:#666;'>Canlı</span></h3>"
+                                    for item in area_info['news_items'][:5]:
+                                        source_name = item.get('source', 'Haber')
+                                        date_str = item.get('date', '')[:16]
+                                        news_html += f"""
+                                        <div style="margin-bottom:10px;padding:10px;background:#fff;border:1px solid #e1e8ed;border-radius:8px;transition:all 0.2s;">
+                                            <div style="display:flex;align-items:center;margin-bottom:5px;">
+                                                <div style="width:20px;height:20px;background:#1da1f2;border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-size:10px;font-weight:bold;margin-right:8px;">{source_name[0]}</div>
+                                                <div style="font-size:11px;font-weight:bold;color:#14171a;">{source_name}</div>
+                                                <div style="font-size:10px;color:#657786;margin-left:5px;">• {date_str}</div>
+                                            </div>
+                                            <a href="{item['link']}" target="_blank" style="text-decoration:none;color:#14171a;font-size:12px;line-height:1.4;display:block;">{item['title']}</a>
+                                        </div>
+                                        """
+                                    news_html += "</div>"
+                                    text += news_html
+                                
                                 return {"status": "success", "ai_response": text}
                 
                 # Hata yönetimi
@@ -1138,15 +1179,14 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run("backend.main:app", host="0.0.0.0", port=port)
 
-# 🟢 BÖLGE ANALİZİ (PERSISTENT - YENİ) 🟢
+# 🟢 BÖLGE ANALİZİ (PERSISTENT - RSS) 🟢
 async def search_area_news_persistent(location: str) -> dict:
-    """Belirtilen lokasyon hakkında kapsamlı bilgi toplar ve veritabanına kaydeder"""
-    if not location or len(location) < 3:
-        return {}
+    """Belirtilen lokasyon hakkında kapsamlı bilgi toplar (RSS) ve veritabanına kaydeder"""
+    if not location or len(location) < 3: return {}
     
     # Lokasyon temizleme
     loc_parts = [p.strip() for p in location.replace(">", ",").split(",") if len(p.strip()) > 2]
-    # En detaylı kısmı al
+    # En detaylı kısmı al (Örn: Üsküdar Küçüksu)
     if len(loc_parts) >= 2:
         search_loc_full = " ".join(loc_parts[-2:])
     elif len(loc_parts) == 1:
@@ -1156,7 +1196,7 @@ async def search_area_news_persistent(location: str) -> dict:
         
     search_loc_slug = search_loc_full.lower().replace(" ", "-").replace("ı", "i").replace("ü", "u").replace("ö", "o").replace("ş", "s").replace("ç", "c").replace("ğ", "g")
     
-    # 1. ÖNCE DB KONTROL ET (Son 30 gün)
+    # 1. ÖNCE DB KONTROL ET (Son 24 saat - Haberler güncel olmalı)
     try:
         from backend.database import area_insights_collection
         existing_data = await area_insights_collection.find_one({"_id": search_loc_slug})
@@ -1164,76 +1204,71 @@ async def search_area_news_persistent(location: str) -> dict:
         if existing_data:
             last_date = existing_data.get("updated_at")
             if last_date:
-                # 30 gün geçti mi?
+                # 24 saat geçti mi? (Haber akışı için kısa tut)
                 last_dt = datetime.strptime(last_date, "%Y-%m-%d %H:%M:%S")
-                if (datetime.now() - last_dt).days < 30:
+                if (datetime.now() - last_dt).days < 1:
                     return existing_data.get("data", {})
     except Exception as e:
         print(f"DB Read Error: {e}")
     
-    # 2. YENİ ARAMA YAP (Detaylı)
+    # 2. RSS ARAMA (Google News)
+    rss_url = f"https://news.google.com/rss/search?q={search_loc_full}+haber&hl=tr-TR&gl=TR&ceid=TR:tr"
+    
     result = {
         "safety": "",
         "development": "",
         "transport": "",
-        "general": ""
+        "general": f"📍 {search_loc_full} Bölgesi Haber Özeti",
+        "news_items": []
     }
     
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-    
     try:
-        # 1. GÜVENLİK ANALİZİ
-        safety_query = f"{search_loc_full} asayiş olay suç haber"
-        safety_url = f"https://www.google.com/search?q={requests.utils.quote(safety_query)}&tbm=nws"
-        resp = requests.get(safety_url, headers=headers, timeout=5)
+        resp = requests.get(rss_url, timeout=5)
         if resp.status_code == 200:
-            text = resp.text.lower()
-            negative = ["cinayet", "hırsızlık", "gasp", "uyuşturucu", "kavga", "silahlı", "bıçaklı", "taciz", "çete"]
-            found = [kw for kw in negative if kw in text]
-            unique_found = list(set(found))
+            root = ET.fromstring(resp.content)
+            items = root.findall(".//item")
             
-            if len(unique_found) >= 3:
-                result["safety"] = f"⚠️ GÜVENLİK: Bu bölgede son dönemde bazı güvenlik olayları ({', '.join(unique_found[:3])}) haberlere yansımış. Detaylı araştırma önerilir."
-            elif len(unique_found) >= 1:
-                result["safety"] = f"ℹ️ GÜVENLİK: Nadiren asayiş haberi görülüyor ({unique_found[0]}). Genel olarak sakin bir bölge."
-            else:
-                result["safety"] = "✅ GÜVENLİK: Bölge ile ilgili ciddi bir asayiş sorunu haberi tespit edilmedi."
-        
-        # 2. GELİŞİM / YATIRIM ANALİZİ
-        dev_query = f"{search_loc_full} yeni konut projesi metro avm hastane yatırım"
-        dev_url = f"https://www.google.com/search?q={requests.utils.quote(dev_query)}&tbm=nws"
-        resp = requests.get(dev_url, headers=headers, timeout=5)
-        if resp.status_code == 200:
-            text = resp.text.lower()
-            positive = ["metro", "tramvay", "hastane", "avm", "üniversite", "park", "millet bahçesi", "kentsel dönüşüm"]
-            found = [kw for kw in positive if kw in text]
-            unique_found = list(set(found))
+            # Anahtar Kelimeler
+            neg_kw = ["cinayet", "silahlı", "kavga", "hırsızlık", "uyuşturucu", "gasp", "ölü", "yaralı", "yangın", "kaza", "operasyon", "çete"]
+            pos_kw = ["yatırım", "proje", "metro", "tören", "hizmet", "park", "okul", "hastane", "açılış", "değer", "konut"]
+            trans_kw = ["metro", "otobüs", "sefer", "durak", "marmaray", "ulaşım", "yol", "köprü", "tünel"]
             
-            if len(unique_found) >= 2:
-                result["development"] = f"📈 GELİŞİM: Bölge değerleniyor. Yakın zamanda {', '.join(unique_found[:3])} gibi projeler haberlere konu olmuş."
-            else:
-                result["development"] = "📊 GELİŞİM: Bölgede büyük bir kamu yatırımı veya mega proje haberi öne çıkmıyor. İstikrarlı bir bölge."
-        
-        # 3. ULAŞIM ANALİZİ
-        transport_query = f"{search_loc_full} ulaşım otobüs metro durak"
-        transport_url = f"https://www.google.com/search?q={requests.utils.quote(transport_query)}"
-        resp = requests.get(transport_url, headers=headers, timeout=5)
-        
-        transport_modes = []
-        if resp.status_code == 200:
-            text = resp.text.lower()
-            if "metro" in text or "m4" in text or "m5" in text: transport_modes.append("Metro")
-            if "metrobüs" in text: transport_modes.append("Metrobüs")
-            if "marmaray" in text: transport_modes.append("Marmaray")
-            if "tramvay" in text: transport_modes.append("Tramvay")
-            if "vapur" in text or "iskele" in text: transport_modes.append("Vapur")
+            safety_hits = []
+            dev_hits = []
+            trans_hits = []
             
-            if transport_modes:
-                result["transport"] = f"🚇 ULAŞIM: Bölgede {', '.join(transport_modes)} erişimi mevcut."
+            for item in items[:15]: # Son 15 haber
+                title = item.find("title").text if item.find("title") is not None else ""
+                link = item.find("link").text if item.find("link") is not None else ""
+                pubDate = item.find("pubDate").text if item.find("pubDate") is not None else ""
+                source = item.find("source").text if item.find("source") is not None else "Google Haberler"
+                
+                # Listeye ekle
+                result["news_items"].append({
+                    "title": title,
+                    "link": link,
+                    "date": pubDate,
+                    "source": source
+                })
+                
+                t_low = title.lower()
+                if any(k in t_low for k in neg_kw): safety_hits.append(title)
+                if any(k in t_low for k in pos_kw): dev_hits.append(title)
+                if any(k in t_low for k in trans_kw): trans_hits.append(title)
+            
+            # Analiz Metinlerini Oluştur
+            if safety_hits:
+                result["safety"] = f"⚠️ GÜVENLİK: Güncel haberlerde bazı asayiş olayları ({len(safety_hits)} adet) göze çarpıyor. Örn: {safety_hits[0]}"
             else:
-                 result["transport"] = "🚌 ULAŞIM: Ağırlıklı olarak otobüs ve minibüs hatları ile ulaşım sağlanıyor."
-        
-        result["general"] = f"📍 {search_loc_full} bölgesi için internet verileri tarandı."
+                result["safety"] = "✅ GÜVENLİK: Güncel haber akışında bölgeyle ilgili olumsuz bir asayiş olayı öne çıkmıyor."
+                
+            if dev_hits:
+                result["development"] = f"📈 GELİŞİM: Bölge hareketli, yeni projeler ve yatırımlar gündemde: {dev_hits[0]}"
+            else:
+                result["development"] = "📊 GELİŞİM: Son dönemde bölgeyle ilgili büyük bir yatırım haberi akışa düşmedi."
+
+            if trans_hits:
+                result["transport"] = f"🚇 ULAŞIM: Ulaşım ve altyapı ile ilgili haberler mevcut: {trans_hits[0]}"
         
         # DB'ye KAYDET
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -1248,6 +1283,6 @@ async def search_area_news_persistent(location: str) -> dict:
         )
 
     except Exception as e:
-        print(f"Bölge analiz hatası: {e}")
+        print(f"RSS Analiz Hatası: {e}")
     
     return result
