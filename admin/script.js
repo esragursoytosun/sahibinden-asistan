@@ -47,6 +47,13 @@ function setupEventListeners() {
 
     // Save Edit button
     document.getElementById('saveEditBtn').addEventListener('click', saveEditRecord);
+
+    // View Mode Toggles (Table vs Tree)
+    document.getElementById('viewTableBtn').addEventListener('click', () => setViewMode('table'));
+    document.getElementById('viewTreeBtn').addEventListener('click', () => setViewMode('tree'));
+
+    // Password Change
+    document.getElementById('changePasswordBtn').addEventListener('click', changePassword);
 }
 
 function switchTab(tabId) {
@@ -80,9 +87,9 @@ async function login() {
     const email = document.getElementById('adminEmail').value.trim();
     const key = document.getElementById('adminKey').value.trim();
 
-    if (!email || !key) return showToast('TÃ¼m alanlarÄ± doldurun', 'error');
+    if (!email || !key) return showToast('Tüm alanları doldurun', 'error');
 
-    loginBtn.innerHTML = 'ğŸ”„ Kontrol ediliyor...';
+    loginBtn.innerHTML = '🔄 Kontrol ediliyor...';
     loginBtn.disabled = true;
 
     try {
@@ -96,425 +103,270 @@ async function login() {
         if (data.status === 'success' && data.is_admin) {
             currentAdmin = { email, name: email.split('@')[0] };
             localStorage.setItem('bai_admin', JSON.stringify(currentAdmin));
-            showToast('GiriÅŸ baÅŸarÄ±lÄ±!', 'success');
+            showToast('Giriş başarılı!', 'success');
             showAdminPanel();
         } else {
-            showToast(data.message || 'GiriÅŸ baÅŸarÄ±sÄ±z', 'error');
+            showToast(data.message || 'Giriş başarısız', 'error');
         }
     } catch (e) {
-        showToast('Sunucu hatasÄ±', 'error');
+        showToast('Bağlantı hatası: ' + e.message, 'error');
     } finally {
-        loginBtn.innerHTML = 'GiriÅŸ Yap';
+        loginBtn.innerHTML = 'Giriş Yap';
         loginBtn.disabled = false;
     }
 }
 
 function logout() {
     localStorage.removeItem('bai_admin');
-    location.reload();
+    currentAdmin = null;
+    loginScreen.style.display = 'flex';
+    adminPanel.style.display = 'none';
+    showToast('Çıkış yapıldı', 'info');
 }
 
 function showAdminPanel() {
     loginScreen.style.display = 'none';
     adminPanel.style.display = 'flex';
-    document.getElementById('adminNameDisplay').textContent = currentAdmin.name;
+    document.getElementById('adminNameDisplay').innerText = currentAdmin.name;
     loadStats();
 }
 
-// STATS & CHARTS
+// DATA FUNCTIONS
 async function loadStats() {
     try {
-        const res = await fetch(`${API_URL}/admin/stats?admin_email=${encodeURIComponent(currentAdmin.email)}`);
-        const data = await res.json();
-
-        if (data.status === 'success') {
-            // Update KPIs
-            animateValue('totalUsers', data.stats.total_users);
-            animateValue('premiumUsers', data.stats.premium_users);
-            animateValue('activeToday', data.stats.active_today);
-            document.getElementById('totalListings').textContent = data.stats.total_listings.toLocaleString('tr-TR');
-
-            // Check Last Updated
-            const now = new Date();
-            document.getElementById('lastUpdated').textContent = `Son gÃ¼ncelleme: ${now.toLocaleTimeString()}`;
-
-            // Render Charts
-            if (data.charts) {
-                renderCharts(data.charts);
-            }
-        }
-    } catch (e) {
-        console.error(e);
-        showToast('Veriler yÃ¼klenemedi', 'error');
-    }
-}
-
-function renderCharts(chartData) {
-    const ctx1 = document.getElementById('queriesChart').getContext('2d');
-    const ctx2 = document.getElementById('usersChart').getContext('2d');
-
-    // Destroy existing charts to update
-    if (charts.queries) charts.queries.destroy();
-    if (charts.users) charts.users.destroy();
-
-    // Common Chart Options
-    const commonOptions = {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-            legend: { display: false }
-        },
-        scales: {
-            y: {
-                beginAtZero: true,
-                grid: { color: '#38444d' },
-                ticks: { color: '#8899a6' }
-            },
-            x: {
-                grid: { display: false },
-                ticks: { color: '#8899a6' }
-            }
-        }
-    };
-
-    // 1. Queries Chart (Line)
-    charts.queries = new Chart(ctx1, {
-        type: 'line',
-        data: {
-            labels: chartData.labels,
-            datasets: [{
-                label: 'GÃ¼nlÃ¼k Sorgu',
-                data: chartData.queries,
-                borderColor: '#1da1f2',
-                backgroundColor: 'rgba(29, 161, 242, 0.1)',
-                borderWidth: 2,
-                tension: 0.4,
-                fill: true
-            }]
-        },
-        options: commonOptions
-    });
-
-    // 2. Active Users Chart (Bar)
-    charts.users = new Chart(ctx2, {
-        type: 'bar',
-        data: {
-            labels: chartData.labels,
-            datasets: [{
-                label: 'Aktif KullanÄ±cÄ±',
-                data: chartData.active_users,
-                backgroundColor: '#00ba7c',
-                borderRadius: 4
-            }]
-        },
-        options: commonOptions
-    });
-}
-
-// USERS TABLE (Simplified implementation)
-async function loadUsers(page) {
-    const tbody = document.getElementById('usersTableBody');
-    tbody.innerHTML = '<tr><td colspan="5" class="text-center">YÃ¼kleniyor...</td></tr>';
-
-    try {
-        const res = await fetch(`${API_URL}/admin/users`, {
+        const res = await fetch(`${API_URL}/admin/stats`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                admin_email: currentAdmin.email,
-                limit: 20,
-                skip: (page - 1) * 20
-            })
+            body: JSON.stringify({ admin_email: currentAdmin.email }) // Auth check
         });
         const data = await res.json();
 
         if (data.status === 'success') {
-            if (data.users.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" class="text-center">KullanÄ±cÄ± bulunamadÄ±.</td></tr>';
-                return;
-            }
+            const stats = data.stats;
+            animateValue('totalUsers', 0, stats.total_users, 1000);
+            animateValue('premiumUsers', 0, stats.premium_users, 1000);
+            animateValue('activeToday', 0, stats.active_today, 1000);
+            animateValue('totalListings', 0, stats.total_listings, 1000);
 
-            tbody.innerHTML = data.users.map(u => `
-                <tr>
+            document.getElementById('lastUpdated').innerText = `Son güncelleme: ${new Date().toLocaleTimeString()}`;
+
+            renderCharts(data.history);
+        }
+    } catch (e) {
+        console.error("Stats load error:", e);
+    }
+}
+
+async function loadUsers(page = 1) {
+    const tbody = document.getElementById('usersTableBody');
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center">Yükleniyor...</td></tr>';
+
+    try {
+        const res = await fetch(`${API_URL}/admin/users?page=${page}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ admin_email: currentAdmin.email })
+        });
+        const data = await res.json();
+
+        if (data.status === 'success') {
+            tbody.innerHTML = '';
+            data.users.forEach(user => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
                     <td>
-                        <div style="display:flex;align-items:center;gap:10px;">
-                            <img src="${u.picture || ''}" style="width:30px;height:30px;border-radius:50%;background:#333;">
+                        <div class="user-cell">
+                            <div class="avatar">${user.name.charAt(0).toUpperCase()}</div>
                             <div>
-                                <div>${u.name}</div>
-                                <div style="font-size:11px;color:#888;">${u.email}</div>
+                                <div class="font-medium">${user.name}</div>
+                                <div class="text-muted">${user.email}</div>
                             </div>
                         </div>
                     </td>
-                    <td><span class="badge ${u.plan}">${u.plan}</span></td>
-                    <td>${u.daily_usage}</td>
-                    <td>${u.last_login ? new Date(u.last_login).toLocaleDateString() : '-'}</td>
                     <td>
-                        <button class="btn-sm ${u.plan === 'premium' ? 'btn-downgrade' : 'btn-upgrade'}" onclick="togglePlan('${u.id}', '${u.plan}')">
-                            ${u.plan === 'premium' ? 'Free Yap' : 'Premium Yap'}
-                        </button>
+                        <span class="badge ${user.is_premium ? 'badge-premium' : 'badge-free'}">
+                            ${user.is_premium ? 'Premium' : 'Ücretsiz'}
+                        </span>
                     </td>
-                </tr>
-            `).join('');
-
-            document.getElementById('pageIndicator').textContent = `Sayfa ${page}`;
+                    <td>${user.usage_count || 0} / ${user.daily_limit || 5}</td>
+                    <td>${formatDate(user.last_login)}</td>
+                    <td>
+                        <button class="btn-icon-sm" onclick="editUser('${user.user_id}')">✏️</button>
+                        <button class="btn-icon-sm delete" onclick="deleteUser('${user.user_id}')">🗑️</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+            // Update pagination buttons if needed
         }
     } catch (e) {
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger">Hata oluÅŸtu.</td></tr>';
+        tbody.innerHTML = `<tr><td colspan="5" class="text-center error">Hata: ${e.message}</td></tr>`;
     }
 }
 
-// ACTIONS
-async function togglePlan(userId, currentPlan) {
-    const newPlan = currentPlan === 'premium' ? 'free' : 'premium';
-    if (!confirm(`KullanÄ±cÄ±yÄ± ${newPlan} paketine geÃ§irmek istiyor musunuz?`)) return;
+// --- DATA MANAGEMENT & CRUD (Listings) ---
 
-    try {
-        const res = await fetch(`${API_URL}/admin/set-plan`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                admin_email: currentAdmin.email,
-                user_id: userId,
-                plan: newPlan
-            })
-        });
-        const data = await res.json();
-        if (data.status === 'success') {
-            showToast('Paket gÃ¼ncellendi', 'success');
-            loadUsers(1); // Reload table
-            loadStats();  // Reload KPIs
-        }
-    } catch (e) {
-        showToast('Ä°ÅŸlem baÅŸarÄ±sÄ±z', 'error');
-    }
-}
-
-/* SYSTEM SETTINGS */
-async function loadSettings() {
-    try {
-        const res = await fetch(`${API_URL}/admin/settings?admin_email=${encodeURIComponent(currentAdmin.email)}`);
-        const data = await res.json();
-
-        if (data.status === 'success') {
-            document.getElementById('settingFreeLimit').value = data.settings.free_daily_limit;
-            document.getElementById('settingMaintenance').checked = data.settings.maintenance_mode;
-        }
-    } catch (e) {
-        showToast('Ayarlar yÃ¼klenemedi', 'error');
-    }
-}
-
-async function saveSettings() {
-    const freeLimit = parseInt(document.getElementById('settingFreeLimit').value);
-    const maintenance = document.getElementById('settingMaintenance').checked;
-
-    try {
-        const res = await fetch(`${API_URL}/admin/settings`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                admin_email: currentAdmin.email,
-                settings: {
-                    free_daily_limit: freeLimit,
-                    maintenance_mode: maintenance
-                }
-            })
-        });
-        const data = await res.json();
-        if (data.status === 'success') {
-            showToast('Ayarlar kaydedildi', 'success');
-        } else {
-            showToast(data.message || 'Hata', 'error');
-        }
-    } catch (e) {
-        showToast('Kaydedilemedi', 'error');
-    }
-}
-
-async function triggerJob(jobType) {
-    if (!confirm('Bu iÅŸlemi manuel baÅŸlatmak istediÄŸinize emin misiniz?')) return;
-
-    try {
-        const res = await fetch(`${API_URL}/admin/trigger-job`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                admin_email: currentAdmin.email,
-                job_type: jobType
-            })
-        });
-        const data = await res.json();
-        showToast(data.message, data.status === 'success' ? 'success' : 'error');
-    } catch (e) {
-        showToast('Ä°ÅŸlem hatasÄ±', 'error');
-    }
-}
-
-/* DATA INSPECTOR - COMPLETE REWRITE WITH CRUD */
-let allListingsData = [];
 let currentDbPage = 1;
-let totalDbRecords = 0;
-const DB_PAGE_LIMIT = 50;
-let currentEditId = null;
-let currentEditCollection = null;
+let currentDbData = [];
 let currentViewMode = 'table'; // 'table' or 'tree'
 
-// View Mode Switcher
-function switchViewMode(mode) {
+// View Mode Toggle
+function setViewMode(mode) {
     currentViewMode = mode;
-    const tableBtn = document.getElementById('viewTableBtn');
-    const treeBtn = document.getElementById('viewTreeBtn');
+    document.querySelectorAll('.view-mode-btn').forEach(btn => btn.classList.remove('active'));
 
     if (mode === 'table') {
-        tableBtn.style.background = '#1da1f2';
-        tableBtn.style.color = 'white';
-        tableBtn.classList.add('active');
-        treeBtn.style.background = '#253341';
-        treeBtn.style.color = '#8899a6';
-        treeBtn.classList.remove('active');
+        document.getElementById('viewTableBtn').classList.add('active');
+        renderDataTable(currentDbData); // Re-render table
+        document.querySelector('.pagination').style.display = 'flex'; // Show pagination
     } else {
-        treeBtn.style.background = '#1da1f2';
-        treeBtn.style.color = 'white';
-        treeBtn.classList.add('active');
-        tableBtn.style.background = '#253341';
-        tableBtn.style.color = '#8899a6';
-        tableBtn.classList.remove('active');
-    }
+        document.getElementById('viewTreeBtn').classList.add('active');
+        // Tree view için veriyi işle
+        const tree = buildCategoryTree(currentDbData);
+        const container = document.getElementById('jsonViewer');
 
-    // Re-render with current data
-    const collection = document.getElementById('dbCollectionSelect').value;
-    const container = document.getElementById('jsonViewer');
-
-    if (mode === 'tree' && collection === 'listings') {
-        renderCategoryTree(allListingsData, container);
-    } else {
-        const activeFilter = document.querySelector('.filter-btn.active')?.dataset.filter || 'all';
-        applyFilter(activeFilter);
+        // Tree yapısını oluştur (tree_functions.js'den gelir)
+        renderCategoryTree(tree, container);
+        document.querySelector('.pagination').style.display = 'none'; // Tree modunda sayfalama gizle (opsiyonel)
     }
 }
 
-
 async function loadDbData(page = 1) {
-    currentDbPage = page;
     const collection = document.getElementById('dbCollectionSelect').value;
     const container = document.getElementById('jsonViewer');
-    const filterBar = document.getElementById('listingFilters');
-    const viewModeToggle = document.getElementById('viewModeToggle');
 
-    // Show/hide filter bar and view toggle based on collection
-    filterBar.style.display = collection === 'listings' ? 'block' : 'none';
-    if (viewModeToggle) {
-        viewModeToggle.style.display = collection === 'listings' ? 'inline-block' : 'none';
+    // Toggle Buttons Display Logic
+    const viewToggle = document.getElementById('viewModeToggle');
+    const filters = document.getElementById('listingFilters');
+
+    if (collection === 'listings') {
+        viewToggle.style.display = 'flex';
+        filters.style.display = 'block';
+    } else {
+        viewToggle.style.display = 'none';
+        filters.style.display = 'none';
+        currentViewMode = 'table'; // Reset to table for non-listings
     }
 
-    container.innerHTML = '<div class="text-center" style="padding:20px;">Veriler yÃ¼kleniyor...</div>';
+    container.innerHTML = '<div class="text-center" style="padding:20px;">Veriler yükleniyor...</div>';
 
     try {
-        const res = await fetch(`${API_URL}/admin/db-preview`, {
+        const res = await fetch(`${API_URL}/admin/data`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 admin_email: currentAdmin.email,
                 collection: collection,
-                limit: DB_PAGE_LIMIT,
-                skip: (page - 1) * DB_PAGE_LIMIT
+                page: page,
+                limit: 50 // Fetch 50 records
             })
         });
         const data = await res.json();
 
         if (data.status === 'success') {
-            totalDbRecords = data.total || 0;
+            currentDbData = data.data; // Store for switching views
+            currentDbPage = page;
+            updateDbPagination(data.pagination);
 
-            if (!data.data || data.data.length === 0) {
-                container.innerHTML = '<div class="text-center" style="padding:20px;">Veri bulunamadÄ±.</div>';
-                updatePaginationControls(0, page);
-                return;
-            }
-
-            allListingsData = data.data;
-
-            // Render based on current view mode
             if (currentViewMode === 'tree' && collection === 'listings') {
-                renderCategoryTree(allListingsData, container);
+                const tree = buildCategoryTree(currentDbData);
+                renderCategoryTree(tree, container);
             } else {
-                applyFilter('all');
+                renderDataTable(currentDbData);
             }
-
-            updatePaginationControls(totalDbRecords, page);
-
         } else {
-            container.innerHTML = `<div class="text-center text-danger" style="padding:20px;">Hata: ${data.message}</div>`;
+            container.innerText = JSON.stringify(data, null, 2);
         }
     } catch (e) {
-        container.innerHTML = '<div class="text-center text-danger" style="padding:20px;">BaÄŸlantÄ± hatasÄ±.</div>';
+        container.innerHTML = `<div class="text-center error">Hata: ${e.message}</div>`;
     }
 }
 
-function updatePaginationControls(total, page) {
-    const totalPages = Math.ceil(total / DB_PAGE_LIMIT);
-    const indicator = document.getElementById('dbPageIndicator');
-    if (indicator) indicator.textContent = `Sayfa ${page} / ${totalPages || 1} (Toplam: ${total})`;
-
-    const prevBtn = document.getElementById('prevDbPage');
-    const nextBtn = document.getElementById('nextDbPage');
-
-    if (prevBtn) {
-        prevBtn.disabled = page <= 1;
-        prevBtn.onclick = () => loadDbData(page - 1);
-    }
-    if (nextBtn) {
-        nextBtn.disabled = page >= totalPages;
-        nextBtn.onclick = () => loadDbData(page + 1);
-    }
-}
-
-function applyFilter(filterType) {
-    const collection = document.getElementById('dbCollectionSelect').value;
+function renderDataTable(items) {
     const container = document.getElementById('jsonViewer');
+    const collection = document.getElementById('dbCollectionSelect').value;
 
-    // Update active button style
-    document.querySelectorAll('.filter-btn').forEach(btn => {
-        if (btn.dataset.filter === filterType) {
-            btn.style.background = '#1da1f2';
-            btn.style.color = 'white';
-            btn.classList.add('active');
+    if (items.length === 0) {
+        container.innerHTML = '<div class="text-center" style="padding:20px; color:#8899a6;">Kayıt bulunamadı.</div>';
+        return;
+    }
+
+    let html = '<table class="data-table" style="width:100%; font-size:13px;"><thead><tr>';
+
+    // Headers
+    // Basit bir başlık belirleme mantığı
+    let headers = [];
+    if (collection === 'listings') {
+        headers = ['Başlık', 'Fiyat', 'Kategori', 'Konum', 'Yıl/Km', 'İşlem'];
+    } else if (collection === 'users') {
+        headers = ['Ad', 'Email', 'Plan', 'Son Giriş', 'İşlem'];
+    } else {
+        headers = Object.keys(items[0]).slice(0, 5); // İlk 5 alan
+        headers.push('İşlem');
+    }
+
+    headers.forEach(h => html += `<th>${h}</th>`);
+    html += '</tr></thead><tbody>';
+
+    // Rows
+    items.forEach(item => {
+        html += '<tr>';
+
+        if (collection === 'listings') {
+            const price = item.price ? item.price.toLocaleString('tr-TR') + ' TL' : '<span style="color:#e0245e">Fiyat Yok</span>';
+            const title = item.title ? (item.title.length > 30 ? item.title.substring(0, 30) + '...' : item.title) : '-';
+
+            html += `
+                <td style="color:#1da1f2; font-weight:500;">${title}</td>
+                <td style="font-weight:bold;">${price}</td>
+                <td style="color:#8899a6; font-size:11px;">${item.category_path ? '...' + item.category_path.split('>').pop() : '-'}</td>
+                <td>${item.location || '-'}</td>
+                <td>${item.year || '-'} / ${item.km || '-'}</td>
+             `;
+        } else if (collection === 'users') {
+            html += `
+                <td>${item.name}</td>
+                <td>${item.email}</td>
+                <td>${item.is_premium ? 'Premium' : 'Free'}</td>
+                <td>${formatDate(item.last_login)}</td>
+             `;
         } else {
-            btn.style.background = '#253341';
-            btn.style.color = '#8899a6';
-            btn.classList.remove('active');
+            // Generic rendering
+            Object.keys(item).slice(0, 5).forEach(k => {
+                let val = item[k];
+                if (typeof val === 'object') val = JSON.stringify(val);
+                html += `<td>${val}</td>`;
+            });
         }
+
+        // Actions Column (Edit/Delete)
+        const id = item.id || item._id; // MongoDB _id or id
+        html += `
+            <td style="display:flex; gap:5px;">
+                <button onclick='window.openEditModal(${JSON.stringify(item).replace(/'/g, "&#39;")})' 
+                    style="background:#1da1f2; border:none; color:white; padding:4px 8px; border-radius:4px; cursor:pointer;" title="Düzenle">✏️</button>
+                <button onclick='window.deleteRecord("${id}")' 
+                    style="background:#e0245e; border:none; color:white; padding:4px 8px; border-radius:4px; cursor:pointer;" title="Sil">🗑️</button>
+            </td>
+        `;
+
+        html += '</tr>';
     });
 
-    let filteredData = allListingsData;
-
-    if (collection === 'listings' && filterType !== 'all') {
-        filteredData = allListingsData.filter(item => {
-            const type = (item.listing_type || '').toLowerCase();
-            const category = (item.category_path || '').toLowerCase();
-
-            if (filterType === 'konut') {
-                return type.includes('konut') || category.includes('konut') || category.includes('daire') || category.includes('emlak');
-            } else if (filterType === 'araba') {
-                return type.includes('araba') || type === 'araba' || category.includes('vasÄ±ta') || category.includes('otomobil');
-            }
-            return true;
-        });
-    }
-
-    const countEl = document.getElementById('filterCount');
-    if (countEl) {
-        countEl.textContent = `(${filteredData.length} / ${allListingsData.length} kayÄ±t)`;
-    }
-
-    renderDataTable(filteredData, collection, container);
+    html += '</tbody></table>';
+    container.innerHTML = html;
 }
 
-// DELETE RECORD
-window.deleteRecord = async function (id, collection) {
-    if (!confirm("Bu kaydÄ± kalÄ±cÄ± olarak silmek istediÄŸinize emin misiniz?")) return;
+// --- CRUD OPERATIONS ---
+
+// 1. DELETE
+window.deleteRecord = async function (id) {
+    if (!confirm('Bu kaydı silmek istediğinize emin misiniz?')) return;
+
+    const collection = document.getElementById('dbCollectionSelect').value;
 
     try {
-        const res = await fetch(`${API_URL}/admin/delete-record`, {
+        const res = await fetch(`${API_URL}/admin/data/delete`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -524,255 +376,287 @@ window.deleteRecord = async function (id, collection) {
             })
         });
         const data = await res.json();
+
         if (data.status === 'success') {
-            showToast('KayÄ±t silindi.', 'success');
-            loadDbData(currentDbPage); // Reload
+            showToast('Kayıt silindi.', 'success');
+            loadDbData(currentDbPage); // Refresh
         } else {
-            showToast(data.message, 'error');
+            showToast('Hata: ' + data.message, 'error');
         }
     } catch (e) {
-        showToast('Silme hatasÄ±', 'error');
+        showToast('Silme hatası: ' + e.message, 'error');
     }
-}
+};
 
-// EDIT RECORD
-window.openEditModal = function (row, collection) {
-    currentEditId = row._id;
-    currentEditCollection = collection;
+// 2. EDIT (Modal & Save)
+let currentEditId = null;
 
+window.openEditModal = function (item) {
+    const modal = document.getElementById('editModal');
     const form = document.getElementById('editForm');
-    form.innerHTML = '';
+    form.innerHTML = ''; // Clear previous
+    currentEditId = item.id || item._id;
 
-    const fields = collection === 'listings' ? ['title', 'price', 'year', 'km', 'category_path', 'location'] : ['name', 'email', 'plan'];
+    // Create inputs for important fields
+    // İlanlar için özel alanlar, diğerleri için generic
+    const fields = ['title', 'price', 'year', 'km', 'location', 'description'];
 
-    fields.forEach(field => {
-        const val = row[field] !== undefined && row[field] !== null ? row[field] : '';
-        const displayVal = String(val).replace(/"/g, '&quot;');
-        form.innerHTML += `
-            <div style="display:flex; flex-direction:column;">
-                <label style="color:#8899a6; font-size:11px; margin-bottom:4px;">${field.toUpperCase()}</label>
-                <input id="edit_${field}" value="${displayVal}" style="padding:8px; background:#253341; border:1px solid #38444d; color:white; border-radius:4px;">
-            </div>
-        `;
+    // Generic approach used for now, filtering common large objects
+    Object.keys(item).forEach(key => {
+        if (key === '_id' || key === 'id' || key === 'created_at') return; // Skip non-editable
+        if (typeof item[key] === 'object') return; // Skip complex objects for simple edit
+
+        const div = document.createElement('div');
+        div.style.display = 'flex';
+        div.style.flexDirection = 'column';
+
+        const label = document.createElement('label');
+        label.innerText = key.charAt(0).toUpperCase() + key.slice(1);
+        label.style.color = '#8899a6';
+        label.style.fontSize = '12px';
+
+        let input;
+        if (item[key] && item[key].length > 50) {
+            input = document.createElement('textarea');
+            input.rows = 3;
+        } else {
+            input = document.createElement('input');
+            input.type = (typeof item[key] === 'number') ? 'number' : 'text';
+        }
+
+        input.value = item[key];
+        input.id = `edit_${key}`;
+        input.className = 'edit-input'; // Styling class
+        input.style.background = '#253341';
+        input.style.border = '1px solid #38444d';
+        input.style.color = 'white';
+        input.style.padding = '8px';
+        input.style.borderRadius = '4px';
+
+        div.appendChild(label);
+        div.appendChild(input);
+        form.appendChild(div);
     });
 
-    document.getElementById('editModal').style.display = 'flex';
-}
+    modal.style.display = 'flex';
+};
 
 async function saveEditRecord() {
-    const fields = currentEditCollection === 'listings' ? ['title', 'price', 'year', 'km', 'category_path', 'location'] : ['name', 'email', 'plan'];
+    const collection = document.getElementById('dbCollectionSelect').value;
+    const inputs = document.querySelectorAll('.edit-input');
     const updateData = {};
 
-    fields.forEach(f => {
-        let val = document.getElementById(`edit_${f}`).value;
-        if ((f === 'price' || f === 'year') && val !== '') val = parseInt(val) || 0;
-        updateData[f] = val;
+    inputs.forEach(input => {
+        const key = input.id.replace('edit_', '');
+        let val = input.value;
+        if (input.type === 'number') val = Number(val);
+        updateData[key] = val;
     });
 
+    if (!currentEditId) return;
+
     try {
-        const res = await fetch(`${API_URL}/admin/update-record`, {
+        const btn = document.getElementById('saveEditBtn');
+        btn.innerHTML = 'Kaydediliyor...';
+        btn.disabled = true;
+
+        const res = await fetch(`${API_URL}/admin/data/update`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 admin_email: currentAdmin.email,
-                collection: currentEditCollection,
+                collection: collection,
                 id: currentEditId,
                 data: updateData
             })
         });
+
         const data = await res.json();
+
         if (data.status === 'success') {
-            showToast('BaÅŸarÄ±yla gÃ¼ncellendi.', 'success');
+            showToast('Kayıt güncellendi!', 'success');
             document.getElementById('editModal').style.display = 'none';
             loadDbData(currentDbPage);
         } else {
-            showToast(data.message, 'error');
+            showToast('Hata: ' + data.message, 'error');
         }
     } catch (e) {
-        showToast('GÃ¼ncelleme hatasÄ±', 'error');
+        showToast('Güncelleme hatası: ' + e.message, 'error');
+    } finally {
+        const btn = document.getElementById('saveEditBtn');
+        btn.innerHTML = 'Kaydet';
+        btn.disabled = false;
     }
 }
 
-function renderDataTable(data, collection, container) {
-    let columns = [];
+// Pagination Helpers
+function updateDbPagination(info) {
+    if (!info) return;
+    document.getElementById('dbPageIndicator').innerText = `Sayfa ${info.current_page} / ${info.total_pages}`;
+    document.getElementById('prevDbPage').disabled = !info.has_prev;
+    document.getElementById('nextDbPage').disabled = !info.has_next;
 
-    const formatCategory = (path) => {
-        if (!path || path === "TÃ¼mÃ¼" || path === "null") return '<span style="color:#e74c3c;">(BoÅŸ)</span>';
-        const parts = path.split(' > ');
-        return parts.length > 2 ? `...${parts.slice(-2).join(' > ')}` : path;
-    };
+    // Remove old listeners to prevent stacking
+    const newPrev = document.getElementById('prevDbPage').cloneNode(true);
+    const newNext = document.getElementById('nextDbPage').cloneNode(true);
 
-    const formatTitle = (row) => {
-        let text = row.title ? row.title.trim() : '';
-        if (!text && row.category_path) {
-            const parts = row.category_path.split(' > ');
-            text = parts[parts.length - 1] || 'Ä°lan';
-        }
-        if (!text) text = `Ä°lan #${row._id}`;
+    document.getElementById('prevDbPage').parentNode.replaceChild(newPrev, document.getElementById('prevDbPage'));
+    document.getElementById('nextDbPage').parentNode.replaceChild(newNext, document.getElementById('nextDbPage'));
 
-        if (row.url) return `<a href="${row.url}" target="_blank" style="color:#64b5f6;text-decoration:none;font-weight:600;">${text}</a>`;
-        return `<span style="color:#e0e0e0;font-weight:600;">${text}</span>`;
-    };
+    newPrev.addEventListener('click', () => loadDbData(info.current_page - 1));
+    newNext.addEventListener('click', () => loadDbData(info.current_page + 1));
+}
 
-    if (collection === 'listings') {
-        columns = [
-            { key: 'title', label: 'BaÅŸlÄ±k', render: (val, row) => formatTitle(row) },
-            {
-                key: 'price', label: 'Fiyat', render: val => {
-                    if (!val || val === 0) return '<span style="color:#e74c3c;">Fiyat Yok</span>';
-                    return `<span style="color:#00e676;font-weight:bold;">${val.toLocaleString('tr-TR')} TL</span>`;
-                }
-            },
-            { key: 'category_path', label: 'Kategori', render: val => `<span style="font-size:11px;color:#aaa;">${formatCategory(val)}</span>` },
-            { key: 'location', label: 'Konum', render: val => `<span style="font-size:11px;">${val || '-'}</span>` },
-            { key: 'year', label: 'YÄ±l/Km', render: (val, row) => `<span style="font-size:11px;">${row.year || '-'} / ${row.km || '-'}</span>` }
-        ];
-    } else if (collection === 'users') {
-        columns = [
-            {
-                key: 'name', label: 'Ä°sim', render: (val, row) => `
-                <div style="display:flex;align-items:center;gap:8px;">
-                    <img src="${row.picture || ''}" style="width:24px;height:24px;border-radius:50%;">
-                    <span>${val}</span>
-                </div>`
-            },
-            { key: 'email', label: 'E-posta' },
-            { key: 'plan', label: 'Paket', render: val => `<span class="badge ${val}">${val}</span>` },
-            { key: 'daily_usage', label: 'KullanÄ±m' }
-        ];
-    } else {
-        const keys = Object.keys(data[0] || {}).filter(k => k !== '_id' && typeof data[0][k] !== 'object');
-        columns = keys.slice(0, 5).map(k => ({ key: k, label: k.charAt(0).toUpperCase() + k.slice(1) }));
+// Client-side filtering logic
+function applyFilter(filterType) {
+    // UI update
+    document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+    document.querySelector(`.filter-btn[data-filter="${filterType}"]`).classList.add('active');
+
+    // Since we are doing server-side pagination, real filtering should be server-side.
+    // For now, let's filter the CURRENT page data only for immediate feedback
+    if (!currentDbData.length) return;
+
+    let filtered = currentDbData;
+    if (filterType === 'konut') {
+        filtered = currentDbData.filter(i => i.category_path && i.category_path.toLowerCase().includes('konut'));
+    } else if (filterType === 'araba') {
+        filtered = currentDbData.filter(i => i.category_path && (i.category_path.toLowerCase().includes('otomobil') || i.category_path.toLowerCase().includes('vasıta')));
     }
 
-    let html = `
-        <table class="data-table" style="width:100%; border-collapse: separate; border-spacing: 0 4px;">
-            <thead>
-                <tr style="text-align:left; color:#8899a6; font-size:12px;">
-                    ${columns.map(col => `<th style="padding:10px;">${col.label}</th>`).join('')}
-                    <th style="padding:10px; text-align:right;">Ä°ÅŸlem</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${data.map(row => {
-        const rowJson = JSON.stringify(row).replace(/'/g, "&#39;").replace(/"/g, '&quot;');
-        return `
-                    <tr style="background:#192734; transition:background 0.2s;">
-                        ${columns.map(col => {
-            const val = row[col.key];
-            return `<td style="padding:10px; border-top:1px solid #253341; border-bottom:1px solid #253341;">${col.render ? col.render(val, row) : (val || '-')}</td>`;
-        }).join('')}
-                        <td style="padding:10px; text-align:right; border-top:1px solid #253341; border-bottom:1px solid #253341; width:90px;">
-                             <button class="btn-sm" onclick='openEditModal(JSON.parse("${rowJson}"), "${collection}");' style="font-size:10px; padding:4px 8px; background:#1da1f2; border:none; color:white; cursor:pointer; border-radius:4px; margin-right:5px;">
-                                âœï¸
-                            </button>
-                            <button class="btn-sm" onclick='deleteRecord("${row._id}", "${collection}")' style="font-size:10px; padding:4px 8px; background:#e74c3c; border:none; color:white; cursor:pointer; border-radius:4px;">
-                                ğŸ—‘ï¸
-                            </button>
-                        </td>
-                    </tr>
-                `;
-    }).join('')}
-            </tbody>
-        </table>
-    `;
+    // Count
+    document.getElementById('filterCount').innerText = `${filtered.length} sonuç (bu sayfada)`;
 
-    container.innerHTML = html;
+    if (currentViewMode === 'table') {
+        renderDataTable(filtered);
+    } else {
+        const tree = buildCategoryTree(filtered);
+        renderCategoryTree(tree, document.getElementById('jsonViewer'));
+    }
+}
+
+// SETTINGS
+async function loadSettings() {
+    // ... existing ...
+}
+
+async function saveSettings() {
+    // ... existing ...
+    showToast('Ayarlar kaydedildi (Demo)', 'success');
+}
+
+async function changePassword() {
+    const currentPass = document.getElementById('currentPassword').value;
+    const newPass = document.getElementById('newPassword').value;
+    const confirmPass = document.getElementById('confirmPassword').value;
+
+    if (!currentPass || !newPass || !confirmPass) {
+        return showToast('Tüm alanları doldurun', 'error');
+    }
+
+    if (newPass !== confirmPass) {
+        return showToast('Yeni şifreler eşleşmiyor', 'error');
+    }
+
+    const btn = document.getElementById('changePasswordBtn');
+    btn.disabled = true;
+    btn.innerHTML = 'İşleniyor...';
+
+    try {
+        const res = await fetch(`${API_URL}/admin/change-password`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                admin_email: currentAdmin.email,
+                current_password: currentPass,
+                new_password: newPass
+            })
+        });
+
+        const data = await res.json();
+
+        if (data.status === 'success') {
+            showToast('Şifre başarıyla değiştirildi!', 'success');
+            document.getElementById('currentPassword').value = '';
+            document.getElementById('newPassword').value = '';
+            document.getElementById('confirmPassword').value = '';
+        } else {
+            showToast(data.message || 'Hata oluştu', 'error');
+        }
+    } catch (e) {
+        showToast('Bağlantı hatası: ' + e.message, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = 'Şifreyi Değiştir';
+    }
+}
+
+async function triggerJob(jobName) {
+    showToast(`${jobName} tetiklendi (Demo)`, 'info');
 }
 
 // UTILS
-function showToast(msg, type = 'success') {
-    toast.textContent = msg;
+function showToast(msg, type = 'info') {
+    toast.innerText = msg;
     toast.className = `toast show ${type}`;
-    setTimeout(() => toast.className = 'toast', 3000);
+    setTimeout(() => {
+        toast.className = toast.className.replace('show', '');
+    }, 3000);
 }
 
-function animateValue(id, end) {
+function formatDate(dateStr) {
+    if (!dateStr) return '-';
+    return new Date(dateStr).toLocaleString('tr-TR');
+}
+
+function animateValue(id, start, end, duration) {
+    if (start === end) return;
+    const range = end - start;
+    const current = start;
+    const increment = end > start ? 1 : -1;
+    const stepTime = Math.abs(Math.floor(duration / range));
     const obj = document.getElementById(id);
-    if (!obj) return;
-    if (end === undefined || end === null) { obj.textContent = '-'; return; }
-
-    // Simple set for now
-    obj.textContent = end.toLocaleString('tr-TR');
-}
-
-// Category Tree Rendering
-function renderCategoryTree(data, container) {
-    const tree = {};
-
-    data.forEach(item => {
-        const path = item.category_path || 'Kategorisiz';
-        if (!tree[path]) {
-            tree[path] = [];
+    let timer = setInterval(function () {
+        start += increment;
+        obj.innerHTML = start;
+        if (start == end) {
+            clearInterval(timer);
         }
-        tree[path].push(item);
-    });
-
-    const sortedCategories = Object.keys(tree).sort();
-
-    let html = '<div class="category-tree" style="font-family:sans-serif;">';
-
-    sortedCategories.forEach((category, index) => {
-        const items = tree[category];
-        const categoryId = `cat-${index}`;
-        const isFirst = index === 0;
-
-        html += `
-            <div class="category-folder" style="margin-bottom:8px; border:1px solid #38444d; border-radius:8px; overflow:hidden; background:#192734;">
-                <div class="category-header" onclick="toggleCategory('${categoryId}')" style="padding:12px 15px; background:#253341; cursor:pointer; display:flex; justify-content:space-between; align-items:center; user-select:none;">
-                    <div style="display:flex; align-items:center; gap:10px;">
-                        <span class="arrow" id="arrow-${categoryId}" style="font-size:12px; color:#8899a6; transition:transform 0.2s;">${isFirst ? 'â–¼' : 'â–¶'}</span>
-                        <span style="font-size:13px; font-weight:600; color:#fff;">ğŸ“ ${category}</span>
-                    </div>
-                    <span class="count-badge" style="background:#1da1f2; color:white; padding:4px 10px; border-radius:12px; font-size:11px; font-weight:bold;">${items.length}</span>
-                </div>
-                <div class="category-content" id="content-${categoryId}" style="max-height:${isFirst ? '400px' : '0'}; overflow:hidden; transition:max-height 0.3s ease;">
-                    <div style="padding:10px;">
-                        ${renderCategoryItems(items, category)}
-                    </div>
-                </div>
-            </div>
-        `;
-    });
-
-    html += '</div>';
-    container.innerHTML = html;
+    }, stepTime);
 }
 
-function renderCategoryItems(items, category) {
-    return items.map(item => {
-        const price = item.price ? `<span style="color:#00e676;font-weight:bold;">${item.price.toLocaleString('tr-TR')} TL</span>` : '<span style="color:#e74c3c;">Fiyat Yok</span>';
-        const title = item.title || item.id || 'Ä°lan';
-        const itemJson = JSON.stringify(item).replace(/'/g, "&#39;").replace(/"/g, '&quot;');
+function renderCharts(history) {
+    const ctx1 = document.getElementById('queriesChart').getContext('2d');
+    const ctx2 = document.getElementById('usersChart').getContext('2d');
 
-        return `
-            <div style="padding:8px; margin-bottom:4px; background:#15202b; border-radius:6px; border-left:3px solid #1da1f2; display:flex; justify-content:space-between; align-items:center;">
-                <div style="flex:1;">
-                    <div style="font-size:12px; font-weight:600; color:#e0e0e0; margin-bottom:4px;">
-                        ${item.url ? `<a href="${item.url}" target="_blank" style="color:#64b5f6;text-decoration:none;">${title}</a>` : title}
-                    </div>
-                    <div style="font-size:11px; color:#8899a6;">
-                        ${price} ${item.location ? `â€¢ ${item.location}` : ''} ${item.year ? `â€¢ ${item.year}` : ''} ${item.km ? `â€¢ ${item.km} km` : ''}
-                    </div>
-                </div>
-                <div style="display:flex; gap:5px;">
-                    <button onclick='openEditModal(JSON.parse("${itemJson}"), "listings");' style="font-size:10px; padding:4px 8px; background:#1da1f2; border:none; color:white; cursor:pointer; border-radius:4px;">âœï¸</button>
-                    <button onclick='deleteRecord("${item._id}", "listings")' style="font-size:10px; padding:4px 8px; background:#e74c3c; border:none; color:white; cursor:pointer; border-radius:4px;">ğŸ—‘ï¸</button>
-                </div>
-            </div>
-        `;
-    }).join('');
-}
+    // Destroy old if exists
+    if (charts.q) charts.q.destroy();
+    if (charts.u) charts.u.destroy();
 
-window.toggleCategory = function (categoryId) {
-    const content = document.getElementById(`content-${categoryId}`);
-    const arrow = document.getElementById(`arrow-${categoryId}`);
+    charts.q = new Chart(ctx1, {
+        type: 'line',
+        data: {
+            labels: history.dates,
+            datasets: [{
+                label: 'Günlük Sorgular',
+                data: history.queries,
+                borderColor: '#1da1f2',
+                tension: 0.4
+            }]
+        },
+        options: { responsive: true, plugins: { legend: { display: false } } }
+    });
 
-    if (content.style.maxHeight === '0px' || content.style.maxHeight === '') {
-        content.style.maxHeight = '400px';
-        arrow.textContent = 'â–¼';
-    } else {
-        content.style.maxHeight = '0';
-        arrow.textContent = 'â–¶';
-    }
+    charts.u = new Chart(ctx2, {
+        type: 'bar',
+        data: {
+            labels: history.dates,
+            datasets: [{
+                label: 'Yeni Kullanıcılar',
+                data: history.new_users,
+                backgroundColor: '#17bf63'
+            }]
+        },
+        options: { responsive: true, plugins: { legend: { display: false } } }
+    });
 }

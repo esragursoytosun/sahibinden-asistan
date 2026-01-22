@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BAI BilmiÅŸ - YÃ¶netici Paneli</title>
+    <title>BAI Bilmiş - Yönetici Paneli</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/admin/style.css">
@@ -18,9 +18,9 @@
     <div id="loginScreen" class="login-wrapper">
         <div class="login-box">
             <div class="login-header">
-                <div class="logo-icon">ğŸ¤–</div>
-                <h1>YÃ¶netici GiriÅŸi</h1>
-                <p>Sahibinden AsistanÄ± Kontrol Merkezi</p>
+                <div class="logo-icon">🤖</div>
+                <h1>Yönetici Girişi</h1>
+                <p>Sahibinden Asistanı Kontrol Merkezi</p>
             </div>
             <div class="login-form">
                 <div class="input-group">
@@ -28,10 +28,10 @@
                     <input type="email" id="adminEmail" placeholder="admin@example.com">
                 </div>
                 <div class="input-group">
-                    <label>GÃ¼venlik AnahtarÄ±</label>
-                    <input type="password" id="adminKey" placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢">
+                    <label>Güvenlik Anahtarı</label>
+                    <input type="password" id="adminKey" placeholder="••••••••">
                 </div>
-                <button id="loginBtn" class="btn-primary">GiriÅŸ Yap</button>
+                <button id="loginBtn" class="btn-primary">Giriş Yap</button>
             </div>
         </div>
     </div>
@@ -43,23 +43,23 @@
         <aside class="sidebar">
             <div class="sidebar-header">
                 <div class="brand">
-                    <span class="logo">ğŸ¤–</span>
+                    <span class="logo">🤖</span>
                     <span>BAI Admin</span>
                 </div>
             </div>
 
             <nav class="sidebar-nav">
                 <a href="#" class="nav-item active" data-tab="dashboard">
-                    <span class="icon">ğŸ“Š</span> Genel BakÄ±ÅŸ
+                    <span class="icon">📊</span> Genel Bakış
                 </a>
                 <a href="#" class="nav-item" data-tab="users">
-                    <span class="icon">ğŸ‘¥</span> KullanÄ±cÄ±lar
+                    <span class="icon">👥</span> Kullanıcılar
                 </a>
                 <a href="#" class="nav-item" data-tab="data">
-                    <span class="icon">ğŸ’¾</span> Veri YÃ¶netimi
+                    <span class="icon">💾</span> Veri Yönetimi
                 </a>
                 <a href="#" class="nav-item" data-tab="settings">
-                    <span class="icon">âš™ï¸</span> Ayarlar
+                    <span class="icon">⚙️</span> Ayarlar
                 </a>
             </nav>
 
@@ -68,10 +68,10 @@
                     <div class="admin-avatar">A</div>
                     <div class="admin-info">
                         <span id="adminNameDisplay">Admin</span>
-                        <small>SÃ¼per YÃ¶netici</small>
+                        <small>Süper Yönetici</small>
                     </div>
                 </div>
-                <button id="logoutBtn" class="btn-logout">Ã‡Ä±kÄ±ÅŸ</button>
+                <button id="logoutBtn" class="btn-logout">Çıkış</button>
             </div>
         </aside>
 
@@ -81,41 +81,41 @@
             <!-- Dashboard Tab -->
             <div id="tab-dashboard" class="content-tab active">
                 <header class="top-bar">
-                    <h2>Genel BakÄ±ÅŸ</h2>
+                    <h2>Genel Bakış</h2>
                     <div class="actions">
-                        <span id="lastUpdated" class="last-updated">Son gÃ¼ncelleme: -</span>
-                        <button id="refreshStatsBtn" class="btn-icon">ğŸ”„</button>
+                        <span id="lastUpdated" class="last-updated">Son güncelleme: -</span>
+                        <button id="refreshStatsBtn" class="btn-icon">🔄</button>
                     </div>
                 </header>
 
                 <!-- KPI Cards -->
                 <div class="kpi-grid">
                     <div class="kpi-card">
-                        <div class="kpi-icon icon-users">ğŸ‘¥</div>
+                        <div class="kpi-icon icon-users">👥</div>
                         <div class="kpi-data">
                             <span class="kpi-value" id="totalUsers">-</span>
-                            <span class="kpi-label">Toplam KullanÄ±cÄ±</span>
+                            <span class="kpi-label">Toplam Kullanıcı</span>
                         </div>
                     </div>
                     <div class="kpi-card">
-                        <div class="kpi-icon icon-premium">â­</div>
+                        <div class="kpi-icon icon-premium">⭐</div>
                         <div class="kpi-data">
                             <span class="kpi-value" id="premiumUsers">-</span>
-                            <span class="kpi-label">Premium Ãœye</span>
+                            <span class="kpi-label">Premium Üye</span>
                         </div>
                     </div>
                     <div class="kpi-card">
-                        <div class="kpi-icon icon-active">âš¡</div>
+                        <div class="kpi-icon icon-active">⚡</div>
                         <div class="kpi-data">
                             <span class="kpi-value" id="activeToday">-</span>
-                            <span class="kpi-label">BugÃ¼n Aktif</span>
+                            <span class="kpi-label">Bugün Aktif</span>
                         </div>
                     </div>
                     <div class="kpi-card">
-                        <div class="kpi-icon icon-listings">ğŸ“‹</div>
+                        <div class="kpi-icon icon-listings">📋</div>
                         <div class="kpi-data">
                             <span class="kpi-value" id="totalListings">-</span>
-                            <span class="kpi-label">Veri TabanÄ±</span>
+                            <span class="kpi-label">Veri Tabanı</span>
                         </div>
                     </div>
                 </div>
@@ -123,13 +123,13 @@
                 <!-- Charts Section -->
                 <div class="charts-grid">
                     <div class="chart-card">
-                        <h3>ğŸ“ˆ Sorgu Trendi (Son 30 GÃ¼n)</h3>
+                        <h3>📈 Sorgu Trendi (Son 30 Gün)</h3>
                         <div class="chart-container">
                             <canvas id="queriesChart"></canvas>
                         </div>
                     </div>
                     <div class="chart-card">
-                        <h3>ğŸ‘¥ Aktif KullanÄ±cÄ± Trendi</h3>
+                        <h3>👥 Aktif Kullanıcı Trendi</h3>
                         <div class="chart-container">
                             <canvas id="usersChart"></canvas>
                         </div>
@@ -140,10 +140,10 @@
             <!-- Users Tab -->
             <div id="tab-users" class="content-tab" style="display: none;">
                 <header class="top-bar">
-                    <h2>KullanÄ±cÄ± YÃ¶netimi</h2>
+                    <h2>Kullanıcı Yönetimi</h2>
                     <div class="search-bar">
-                        <input type="text" id="userSearchInput" placeholder="Ä°sim veya e-posta ara...">
-                        <button id="userSearchBtn">ğŸ”</button>
+                        <input type="text" id="userSearchInput" placeholder="İsim veya e-posta ara...">
+                        <button id="userSearchBtn">🔍</button>
                     </div>
                 </header>
 
@@ -151,21 +151,21 @@
                     <table class="data-table">
                         <thead>
                             <tr>
-                                <th>KullanÄ±cÄ±</th>
+                                <th>Kullanıcı</th>
                                 <th>Paket</th>
-                                <th>KullanÄ±m</th>
-                                <th>Son GiriÅŸ</th>
-                                <th>Ä°ÅŸlemler</th>
+                                <th>Kullanım</th>
+                                <th>Son Giriş</th>
+                                <th>İşlemler</th>
                             </tr>
                         </thead>
                         <tbody id="usersTableBody">
                             <tr>
-                                <td colspan="5" class="text-center">YÃ¼kleniyor...</td>
+                                <td colspan="5" class="text-center">Yükleniyor...</td>
                             </tr>
                         </tbody>
                     </table>
                     <div class="pagination">
-                        <button id="prevPageBtn" disabled>Ã–nceki</button>
+                        <button id="prevPageBtn" disabled>Önceki</button>
                         <span id="pageIndicator">Sayfa 1</span>
                         <button id="nextPageBtn">Sonraki</button>
                     </div>
@@ -175,24 +175,24 @@
             <!-- Data Management Tab -->
             <div id="tab-data" class="content-tab" style="display: none;">
                 <header class="top-bar">
-                    <h2>Veri YÃ¶netimi</h2>
+                    <h2>Veri Yönetimi</h2>
                     <div class="actions">
                         <select id="dbCollectionSelect" class="settings-input"
                             style="width: 200px; padding: 10px; background: #192734; border: 1px solid #38444d; color: white; border-radius: 8px;">
-                            <option value="users">ğŸ‘¤ KullanÄ±cÄ±lar (users)</option>
-                            <option value="listings">ğŸ  Ä°lanlar (listings)</option>
-                            <option value="statistics">ğŸ“Š Ä°statistikler (statistics)</option>
-                            <option value="settings">âš™ï¸ Ayarlar (settings)</option>
+                            <option value="users">👤 Kullanıcılar (users)</option>
+                            <option value="listings">🏠 İlanlar (listings)</option>
+                            <option value="statistics">📊 İstatistikler (statistics)</option>
+                            <option value="settings">⚙️ Ayarlar (settings)</option>
                         </select>
 
                         <!-- View Mode Toggle -->
                         <div id="viewModeToggle" style="display:none; margin-left:10px;">
                             <button id="viewTableBtn" class="view-mode-btn active"
-                                style="background:#1da1f2; color:white; border:none; padding:10px 15px; border-radius:6px 0 0 6px; cursor:pointer; font-size:12px;">ğŸ“‹
+                                style="background:#1da1f2; color:white; border:none; padding:10px 15px; border-radius:6px 0 0 6px; cursor:pointer; font-size:12px;">📋
                                 Tablo</button>
                             <button id="viewTreeBtn" class="view-mode-btn"
-                                style="background:#253341; color:#8899a6; border:none; padding:10px 15px; border-radius:0 6px 6px 0; cursor:pointer; font-size:12px;">ğŸŒ³
-                                AÄŸaÃ§</button>
+                                style="background:#253341; color:#8899a6; border:none; padding:10px 15px; border-radius:0 6px 6px 0; cursor:pointer; font-size:12px;">🌳
+                                Ağaç</button>
                         </div>
 
                         <button id="refreshDbBtn" class="btn-primary" style="width: auto;">Verileri Getir</button>
@@ -204,19 +204,19 @@
                     style="display:none; padding: 10px 20px; background: #15202b; border-bottom: 1px solid #38444d;">
                     <span style="color:#8899a6; font-size:12px; margin-right:10px;">Filtrele:</span>
                     <button class="filter-btn active" data-filter="all"
-                        style="background:#1da1f2; color:white; border:none; padding:6px 12px; border-radius:4px; margin-right:5px; cursor:pointer;">TÃ¼mÃ¼</button>
+                        style="background:#1da1f2; color:white; border:none; padding:6px 12px; border-radius:4px; margin-right:5px; cursor:pointer;">Tümü</button>
                     <button class="filter-btn" data-filter="konut"
-                        style="background:#253341; color:#8899a6; border:none; padding:6px 12px; border-radius:4px; margin-right:5px; cursor:pointer;">ğŸ 
+                        style="background:#253341; color:#8899a6; border:none; padding:6px 12px; border-radius:4px; margin-right:5px; cursor:pointer;">🏠
                         Konut</button>
                     <button class="filter-btn" data-filter="araba"
-                        style="background:#253341; color:#8899a6; border:none; padding:6px 12px; border-radius:4px; margin-right:5px; cursor:pointer;">ğŸš—
-                        AraÃ§</button>
+                        style="background:#253341; color:#8899a6; border:none; padding:6px 12px; border-radius:4px; margin-right:5px; cursor:pointer;">🚗
+                        Araç</button>
                     <span id="filterCount" style="color:#8899a6; font-size:11px; margin-left:15px;"></span>
                 </div>
 
                 <div class="table-card" style="max-height: 600px; overflow-y: auto;">
                     <div id="jsonViewer" style="font-family: 'Consolas', monospace; color: #a8b3cf; font-size: 13px;">
-                        Verileri gÃ¶rmek iÃ§in seÃ§im yapÄ±p "Verileri Getir" butonuna basÄ±n.
+                        Verileri görmek için seçim yapıp "Verileri Getir" butonuna basın.
                     </div>
                 </div>
 
@@ -225,11 +225,11 @@
                     style="margin-top: 15px; display: flex; justify-content: center; gap: 15px; align-items: center;">
                     <button id="prevDbPage" class="btn-sm"
                         style="background:#253341; border:1px solid #38444d; color:white; padding:8px 15px; cursor:pointer;"
-                        disabled>Â« Ã–nceki</button>
+                        disabled>« Önceki</button>
                     <span id="dbPageIndicator" style="color:#8899a6; font-size:13px;">Sayfa 1</span>
                     <button id="nextDbPage" class="btn-sm"
                         style="background:#253341; border:1px solid #38444d; color:white; padding:8px 15px; cursor:pointer;"
-                        disabled>Sonraki Â»</button>
+                        disabled>Sonraki »</button>
                 </div>
             </div>
 
@@ -238,12 +238,12 @@
                 style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:9999; justify-content:center; align-items:center;">
                 <div
                     style="background:#192734; padding:20px; border-radius:12px; width:400px; border:1px solid #38444d; box-shadow:0 10px 40px rgba(0,0,0,0.5);">
-                    <h3 style="margin-top:0; color:#fff; border-bottom:1px solid #38444d; padding-bottom:10px;">KayÄ±t
-                        DÃ¼zenle</h3>
+                    <h3 style="margin-top:0; color:#fff; border-bottom:1px solid #38444d; padding-bottom:10px;">Kayıt
+                        Düzenle</h3>
                     <div id="editForm" style="display:flex; flex-direction:column; gap:10px; margin:20px 0;"></div>
                     <div style="display:flex; justify-content:flex-end; gap:10px;">
                         <button onclick="document.getElementById('editModal').style.display='none'"
-                            style="background:transparent; border:1px solid #8899a6; color:#8899a6; padding:8px 16px; border-radius:4px; cursor:pointer;">Ä°ptal</button>
+                            style="background:transparent; border:1px solid #8899a6; color:#8899a6; padding:8px 16px; border-radius:4px; cursor:pointer;">İptal</button>
                         <button id="saveEditBtn"
                             style="background:#1da1f2; border:none; color:white; padding:8px 16px; border-radius:4px; cursor:pointer;">Kaydet</button>
                     </div>
@@ -253,56 +253,56 @@
             <!-- Settings Tab -->
             <div id="tab-settings" class="content-tab" style="display: none;">
                 <header class="top-bar">
-                    <h2>Sistem AyarlarÄ±</h2>
+                    <h2>Sistem Ayarları</h2>
                 </header>
 
                 <div class="charts-grid">
                     <!-- Config Card -->
                     <div class="chart-card">
-                        <h3>âš™ï¸ Genel YapÄ±landÄ±rma</h3>
+                        <h3>⚙️ Genel Yapılandırma</h3>
                         <div class="input-group">
-                            <label>Ãœcretsiz Ãœye GÃ¼nlÃ¼k Limit</label>
+                            <label>Ücretsiz Üye Günlük Limit</label>
                             <input type="number" id="settingFreeLimit" value="5">
                         </div>
                         <div class="input-group" style="display: flex; align-items: center; gap: 10px;">
                             <input type="checkbox" id="settingMaintenance" style="width: 20px;">
-                            <label style="margin: 0;">BakÄ±m Modu (Servis DÄ±ÅŸÄ±)</label>
+                            <label style="margin: 0;">Bakım Modu (Servis Dışı)</label>
                         </div>
                         <button id="saveSettingsBtn" class="btn-primary">Kaydet</button>
                     </div>
 
                     <!-- Password Change Card -->
                     <div class="chart-card">
-                        <h3>ğŸ” Åifre DeÄŸiÅŸtir</h3>
+                        <h3>🔒 Şifre Değiştir</h3>
                         <div class="input-group">
-                            <label>Mevcut Åifre</label>
-                            <input type="password" id="currentPassword" placeholder="Mevcut ÅŸifrenizi girin">
+                            <label>Mevcut Şifre</label>
+                            <input type="password" id="currentPassword" placeholder="Mevcut şifrenizi girin">
                         </div>
                         <div class="input-group">
-                            <label>Yeni Åifre</label>
-                            <input type="password" id="newPassword" placeholder="Yeni ÅŸifrenizi girin">
+                            <label>Yeni Şifre</label>
+                            <input type="password" id="newPassword" placeholder="Yeni şifrenizi girin">
                         </div>
                         <div class="input-group">
-                            <label>Yeni Åifre (Tekrar)</label>
-                            <input type="password" id="confirmPassword" placeholder="Yeni ÅŸifrenizi tekrar girin">
+                            <label>Yeni Şifre (Tekrar)</label>
+                            <input type="password" id="confirmPassword" placeholder="Yeni şifrenizi tekrar girin">
                         </div>
-                        <button id="changePasswordBtn" class="btn-primary">Åifreyi DeÄŸiÅŸtir</button>
+                        <button id="changePasswordBtn" class="btn-primary">Şifreyi Değiştir</button>
                     </div>
 
                     <!-- Actions Card -->
                     <div class="chart-card">
-                        <h3>âš¡ Manuel Ä°ÅŸlemler</h3>
-                        <p style="color: #8899a6; font-size: 13px; margin-bottom: 20px;">ZamanlayÄ±cÄ±yÄ± beklemeden
-                            iÅŸlemleri tetikleyin.</p>
+                        <h3>⚡ Manuel İşlemler</h3>
+                        <p style="color: #8899a6; font-size: 13px; margin-bottom: 20px;">Zamanlayıcıyı beklemeden
+                            işlemleri tetikleyin.</p>
 
                         <div style="display: flex; flex-direction: column; gap: 10px;">
                             <button class="btn-logout" style="background: rgba(29, 161, 242, 0.15); color: #1da1f2;"
                                 onclick="triggerJob('check_prices')">
-                                ğŸ•µï¸ Fiyat KontrolÃ¼nÃ¼ BaÅŸlat
+                                🕵️ Fiyat Kontrolünü Başlat
                             </button>
                             <button class="btn-logout" style="background: rgba(234, 179, 8, 0.15); color: #eab308;"
                                 onclick="triggerJob('reset_limits')">
-                                ğŸ”„ GÃ¼nlÃ¼k Limitleri SÄ±fÄ±rla
+                                🔄 Günlük Limitleri Sıfırla
                             </button>
                         </div>
                     </div>
@@ -315,6 +315,7 @@
     <!-- Toast Notification -->
     <div id="toast" class="toast"></div>
 
+    <script src="/admin/tree_functions.js"></script>
     <script src="/admin/script.js"></script>
 </body>
 

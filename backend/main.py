@@ -1568,4 +1568,22 @@ async def search_area_news_persistent(location: str) -> dict:
     except Exception as e:
         print(f"RSS Analiz Hatası: {e}")
     
+
     return result
+
+@app.on_event("startup")
+async def startup_init():
+    """Sunucu başlatıldığında admin şifresini DB'ye kaydet"""
+    try:
+        existing = await settings_collection.find_one({"key": "admin_password"})
+        if not existing:
+            await settings_collection.insert_one({
+                "key": "admin_password",
+                "value": ADMIN_KEY,
+                "created_at": datetime.utcnow()
+            })
+            print(f"✅ Admin şifresi DB'ye kaydedildi")
+        else:
+            print(f"✅ Admin şifresi zaten mevcut: {existing.get('value', 'N/A')[:8]}...")
+    except Exception as e:
+        print(f"⚠️ Startup hatası: {e}")
