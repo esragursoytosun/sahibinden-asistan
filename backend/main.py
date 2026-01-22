@@ -1109,6 +1109,7 @@ async def admin_search_users(data: dict):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
+# Admin Stats Endpoint
 @app.get("/admin/stats")
 async def admin_get_stats(admin_email: str):
     """Genel istatistikleri ve geçmiş verileri döndürür (Admin only)"""
