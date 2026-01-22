@@ -1240,7 +1240,7 @@ async def upgrade_user(email: str, key: str):
 
 # --- ADMIN PANEL API'LERİ ---
 
-ADMIN_KEY = "UmutDeniz*21092025"  # Admin şifresi
+ADMIN_KEY = "UmutDeniz*21092025"  # Admin şifresi (güncellenebilir)
 
 class AdminAction(BaseModel):
     admin_email: str
@@ -1276,6 +1276,32 @@ async def admin_verify(data: dict):
     if await verify_admin(email):
         return {"status": "success", "is_admin": True}
     return {"status": "error", "is_admin": False, "message": "Yetkiniz yok!"}
+
+@app.post("/admin/change-password")
+async def admin_change_password(data: dict):
+    """Admin şifre değiştirme"""
+    admin_email = data.get("admin_email")
+    current_password = data.get("current_password")
+    new_password = data.get("new_password")
+    
+    if not await verify_admin(admin_email):
+        return {"status": "error", "message": "Yetkisiz erişim"}
+    
+    if not current_password or not new_password:
+        return {"status": "error", "message": "Mevcut ve yeni şifre gerekli"}
+    
+    # Verify current password
+    global ADMIN_KEY
+    if current_password != ADMIN_KEY:
+        return {"status": "error", "message": "Mevcut şifre yanlış"}
+    
+    if len(new_password) < 8:
+        return {"status": "error", "message": "Yeni şifre en az 8 karakter olmalı"}
+    
+    # Update password (in-memory only, persists until restart)
+    ADMIN_KEY = new_password
+    
+    return {"status": "success", "message": "Şifre başarıyla değiştirildi"}
 
 @app.post("/admin/users")
 async def admin_get_users(data: dict):
