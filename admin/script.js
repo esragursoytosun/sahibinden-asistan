@@ -695,91 +695,84 @@ function animateValue(id, end) {
     // Simple set for now
     obj.textContent = end.toLocaleString('tr-TR');
 }
-/ /   C a t e g o r y   T r e e   R e n d e r i n g  
- f u n c t i o n   r e n d e r C a t e g o r y T r e e ( d a t a ,   c o n t a i n e r )   {  
-         / /   G r o u p   b y   c a t e g o r y _ p a t h  
-         c o n s t   t r e e   =   { } ;  
-  
-         d a t a . f o r E a c h ( i t e m   = >   {  
-                 c o n s t   p a t h   =   i t e m . c a t e g o r y _ p a t h   | |   ' K a t e g o r i s i z ' ;  
-                 i f   ( ! t r e e [ p a t h ] )   {  
-                         t r e e [ p a t h ]   =   [ ] ;  
-                 }  
-                 t r e e [ p a t h ] . p u s h ( i t e m ) ;  
-         } ) ;  
-  
-         / /   S o r t   c a t e g o r i e s  
-         c o n s t   s o r t e d C a t e g o r i e s   =   O b j e c t . k e y s ( t r e e ) . s o r t ( ) ;  
-  
-         l e t   h t m l   =   ' < d i v   c l a s s = " c a t e g o r y - t r e e "   s t y l e = " f o n t - f a m i l y : s a n s - s e r i f ; " > ' ;  
-  
-         s o r t e d C a t e g o r i e s . f o r E a c h ( ( c a t e g o r y ,   i n d e x )   = >   {  
-                 c o n s t   i t e m s   =   t r e e [ c a t e g o r y ] ;  
-                 c o n s t   c a t e g o r y I d   =   ` c a t - $ { i n d e x } ` ;  
-                 c o n s t   i s F i r s t   =   i n d e x   = = =   0 ;  
-  
-                 / /   C a t e g o r y   h e a d e r   ( c o l l a p s i b l e )  
-                 h t m l   + =   `  
-                         < d i v   c l a s s = " c a t e g o r y - f o l d e r "   s t y l e = " m a r g i n - b o t t o m : 8 p x ;   b o r d e r : 1 p x   s o l i d   # 3 8 4 4 4 d ;   b o r d e r - r a d i u s : 8 p x ;   o v e r f l o w : h i d d e n ;   b a c k g r o u n d : # 1 9 2 7 3 4 ; " >  
-                                 < d i v   c l a s s = " c a t e g o r y - h e a d e r "   o n c l i c k = " t o g g l e C a t e g o r y ( ' $ { c a t e g o r y I d } ' ) "   s t y l e = " p a d d i n g : 1 2 p x   1 5 p x ;   b a c k g r o u n d : # 2 5 3 3 4 1 ;   c u r s o r : p o i n t e r ;   d i s p l a y : f l e x ;   j u s t i f y - c o n t e n t : s p a c e - b e t w e e n ;   a l i g n - i t e m s : c e n t e r ;   u s e r - s e l e c t : n o n e ; " >  
-                                         < d i v   s t y l e = " d i s p l a y : f l e x ;   a l i g n - i t e m s : c e n t e r ;   g a p : 1 0 p x ; " >  
-                                                 < s p a n   c l a s s = " a r r o w "   i d = " a r r o w - $ { c a t e g o r y I d } "   s t y l e = " f o n t - s i z e : 1 2 p x ;   c o l o r : # 8 8 9 9 a 6 ;   t r a n s i t i o n : t r a n s f o r m   0 . 2 s ; " > $ { i s F i r s t   ?   ' ‚  º '   :   ' ‚  ∂ ' } < / s p a n >  
-                                                 < s p a n   s t y l e = " f o n t - s i z e : 1 3 p x ;   f o n t - w e i g h t : 6 0 0 ;   c o l o r : # f f f ; " > x Å   $ { c a t e g o r y } < / s p a n >  
-                                         < / d i v >  
-                                         < s p a n   c l a s s = " c o u n t - b a d g e "   s t y l e = " b a c k g r o u n d : # 1 d a 1 f 2 ;   c o l o r : w h i t e ;   p a d d i n g : 4 p x   1 0 p x ;   b o r d e r - r a d i u s : 1 2 p x ;   f o n t - s i z e : 1 1 p x ;   f o n t - w e i g h t : b o l d ; " > $ { i t e m s . l e n g t h } < / s p a n >  
-                                 < / d i v >  
-                                 < d i v   c l a s s = " c a t e g o r y - c o n t e n t "   i d = " c o n t e n t - $ { c a t e g o r y I d } "   s t y l e = " m a x - h e i g h t : $ { i s F i r s t   ?   ' 4 0 0 p x '   :   ' 0 ' } ;   o v e r f l o w : h i d d e n ;   t r a n s i t i o n : m a x - h e i g h t   0 . 3 s   e a s e ; " >  
-                                         < d i v   s t y l e = " p a d d i n g : 1 0 p x ; " >  
-                                                 $ { r e n d e r C a t e g o r y I t e m s ( i t e m s ,   c a t e g o r y ) }  
-                                         < / d i v >  
-                                 < / d i v >  
-                         < / d i v >  
-                 ` ;  
-         } ) ;  
-  
-         h t m l   + =   ' < / d i v > ' ;  
-  
-         c o n t a i n e r . i n n e r H T M L   =   h t m l ;  
- }  
-  
- f u n c t i o n   r e n d e r C a t e g o r y I t e m s ( i t e m s ,   c a t e g o r y )   {  
-         r e t u r n   i t e m s . m a p ( i t e m   = >   {  
-                 c o n s t   p r i c e   =   i t e m . p r i c e   ?   ` < s p a n   s t y l e = " c o l o r : # 0 0 e 6 7 6 ; f o n t - w e i g h t : b o l d ; " > $ { i t e m . p r i c e . t o L o c a l e S t r i n g ( ' t r - T R ' ) }   T L < / s p a n > `   :   ' < s p a n   s t y l e = " c o l o r : # e 7 4 c 3 c ; " > F i y a t   Y o k < / s p a n > ' ;  
-                 c o n s t   t i t l e   =   i t e m . t i t l e   | |   i t e m . i d   | |   ' ƒ ∞ l a n ' ;  
-                 c o n s t   i t e m J s o n   =   J S O N . s t r i n g i f y ( i t e m ) . r e p l a c e ( / ' / g ,   " & # 3 9 ; " ) . r e p l a c e ( / " / g ,   ' & q u o t ; ' ) ;  
-  
-                 r e t u r n   `  
-                         < d i v   s t y l e = " p a d d i n g : 8 p x ;   m a r g i n - b o t t o m : 4 p x ;   b a c k g r o u n d : # 1 5 2 0 2 b ;   b o r d e r - r a d i u s : 6 p x ;   b o r d e r - l e f t : 3 p x   s o l i d   # 1 d a 1 f 2 ;   d i s p l a y : f l e x ;   j u s t i f y - c o n t e n t : s p a c e - b e t w e e n ;   a l i g n - i t e m s : c e n t e r ; " >  
-                                 < d i v   s t y l e = " f l e x : 1 ; " >  
-                                         < d i v   s t y l e = " f o n t - s i z e : 1 2 p x ;   f o n t - w e i g h t : 6 0 0 ;   c o l o r : # e 0 e 0 e 0 ;   m a r g i n - b o t t o m : 4 p x ; " >  
-                                                 $ { i t e m . u r l   ?   ` < a   h r e f = " $ { i t e m . u r l } "   t a r g e t = " _ b l a n k "   s t y l e = " c o l o r : # 6 4 b 5 f 6 ; t e x t - d e c o r a t i o n : n o n e ; " > $ { t i t l e } < / a > `   :   t i t l e }  
-                                         < / d i v >  
-                                         < d i v   s t y l e = " f o n t - s i z e : 1 1 p x ;   c o l o r : # 8 8 9 9 a 6 ; " >  
-                                                 $ { p r i c e }   $ { i t e m . l o c a t i o n   ?   ` ‚ ¨ ¢   $ { i t e m . l o c a t i o n } `   :   ' ' }   $ { i t e m . y e a r   ?   ` ‚ ¨ ¢   $ { i t e m . y e a r } `   :   ' ' }   $ { i t e m . k m   ?   ` ‚ ¨ ¢   $ { i t e m . k m }   k m `   :   ' ' }  
-                                         < / d i v >  
-                                 < / d i v >  
-                                 < d i v   s t y l e = " d i s p l a y : f l e x ;   g a p : 5 p x ; " >  
-                                         < b u t t o n   o n c l i c k = ' o p e n E d i t M o d a l ( J S O N . p a r s e ( " $ { i t e m J s o n } " ) ,   " l i s t i n g s " ) ; '   s t y l e = " f o n t - s i z e : 1 0 p x ;   p a d d i n g : 4 p x   8 p x ;   b a c k g r o u n d : # 1 d a 1 f 2 ;   b o r d e r : n o n e ;   c o l o r : w h i t e ;   c u r s o r : p o i n t e r ;   b o r d e r - r a d i u s : 4 p x ; " > ‚ Sè Ô ∏ è < / b u t t o n >  
-                                         < b u t t o n   o n c l i c k = ' d e l e t e R e c o r d ( " $ { i t e m . _ i d } " ,   " l i s t i n g s " ) '   s t y l e = " f o n t - s i z e : 1 0 p x ;   p a d d i n g : 4 p x   8 p x ;   b a c k g r o u n d : # e 7 4 c 3 c ;   b o r d e r : n o n e ;   c o l o r : w h i t e ;   c u r s o r : p o i n t e r ;   b o r d e r - r a d i u s : 4 p x ; " > x  Ô ∏ è < / b u t t o n >  
-                                 < / d i v >  
-                         < / d i v >  
-                 ` ;  
-         } ) . j o i n ( ' ' ) ;  
- }  
-  
- / /   T o g g l e   c a t e g o r y   e x p a n s i o n  
- w i n d o w . t o g g l e C a t e g o r y   =   f u n c t i o n   ( c a t e g o r y I d )   {  
-         c o n s t   c o n t e n t   =   d o c u m e n t . g e t E l e m e n t B y I d ( ` c o n t e n t - $ { c a t e g o r y I d } ` ) ;  
-         c o n s t   a r r o w   =   d o c u m e n t . g e t E l e m e n t B y I d ( ` a r r o w - $ { c a t e g o r y I d } ` ) ;  
-  
-         i f   ( c o n t e n t . s t y l e . m a x H e i g h t   = = =   ' 0 p x '   | |   c o n t e n t . s t y l e . m a x H e i g h t   = = =   ' ' )   {  
-                 c o n t e n t . s t y l e . m a x H e i g h t   =   ' 4 0 0 p x ' ;  
-                 a r r o w . t e x t C o n t e n t   =   ' ‚  º ' ;  
-                 a r r o w . s t y l e . t r a n s f o r m   =   ' r o t a t e ( 0 d e g ) ' ;  
-         }   e l s e   {  
-                 c o n t e n t . s t y l e . m a x H e i g h t   =   ' 0 ' ;  
-                 a r r o w . t e x t C o n t e n t   =   ' ‚  ∂ ' ;  
-                 a r r o w . s t y l e . t r a n s f o r m   =   ' r o t a t e ( - 9 0 d e g ) ' ;  
-         }  
- }  
- 
+
+// Category Tree Rendering
+function renderCategoryTree(data, container) {
+    const tree = {};
+
+    data.forEach(item => {
+        const path = item.category_path || 'Kategorisiz';
+        if (!tree[path]) {
+            tree[path] = [];
+        }
+        tree[path].push(item);
+    });
+
+    const sortedCategories = Object.keys(tree).sort();
+
+    let html = '<div class="category-tree" style="font-family:sans-serif;">';
+
+    sortedCategories.forEach((category, index) => {
+        const items = tree[category];
+        const categoryId = `cat-${index}`;
+        const isFirst = index === 0;
+
+        html += `
+            <div class="category-folder" style="margin-bottom:8px; border:1px solid #38444d; border-radius:8px; overflow:hidden; background:#192734;">
+                <div class="category-header" onclick="toggleCategory('${categoryId}')" style="padding:12px 15px; background:#253341; cursor:pointer; display:flex; justify-content:space-between; align-items:center; user-select:none;">
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <span class="arrow" id="arrow-${categoryId}" style="font-size:12px; color:#8899a6; transition:transform 0.2s;">${isFirst ? '√¢‚Äì¬º' : '√¢‚Äì¬∂'}</span>
+                        <span style="font-size:13px; font-weight:600; color:#fff;">ƒü≈∏‚Äú¬Å ${category}</span>
+                    </div>
+                    <span class="count-badge" style="background:#1da1f2; color:white; padding:4px 10px; border-radius:12px; font-size:11px; font-weight:bold;">${items.length}</span>
+                </div>
+                <div class="category-content" id="content-${categoryId}" style="max-height:${isFirst ? '400px' : '0'}; overflow:hidden; transition:max-height 0.3s ease;">
+                    <div style="padding:10px;">
+                        ${renderCategoryItems(items, category)}
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+function renderCategoryItems(items, category) {
+    return items.map(item => {
+        const price = item.price ? `<span style="color:#00e676;font-weight:bold;">${item.price.toLocaleString('tr-TR')} TL</span>` : '<span style="color:#e74c3c;">Fiyat Yok</span>';
+        const title = item.title || item.id || '√Ñ¬∞lan';
+        const itemJson = JSON.stringify(item).replace(/'/g, "&#39;").replace(/"/g, '&quot;');
+
+        return `
+            <div style="padding:8px; margin-bottom:4px; background:#15202b; border-radius:6px; border-left:3px solid #1da1f2; display:flex; justify-content:space-between; align-items:center;">
+                <div style="flex:1;">
+                    <div style="font-size:12px; font-weight:600; color:#e0e0e0; margin-bottom:4px;">
+                        ${item.url ? `<a href="${item.url}" target="_blank" style="color:#64b5f6;text-decoration:none;">${title}</a>` : title}
+                    </div>
+                    <div style="font-size:11px; color:#8899a6;">
+                        ${price} ${item.location ? `√¢‚Ç¨¬¢ ${item.location}` : ''} ${item.year ? `√¢‚Ç¨¬¢ ${item.year}` : ''} ${item.km ? `√¢‚Ç¨¬¢ ${item.km} km` : ''}
+                    </div>
+                </div>
+                <div style="display:flex; gap:5px;">
+                    <button onclick='openEditModal(JSON.parse("${itemJson}"), "listings");' style="font-size:10px; padding:4px 8px; background:#1da1f2; border:none; color:white; cursor:pointer; border-radius:4px;">√¢≈ì¬è√Ø¬∏¬è</button>
+                    <button onclick='deleteRecord("${item._id}", "listings")' style="font-size:10px; padding:4px 8px; background:#e74c3c; border:none; color:white; cursor:pointer; border-radius:4px;">ƒü≈∏‚Äî‚Äò√Ø¬∏¬è</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+window.toggleCategory = function (categoryId) {
+    const content = document.getElementById(`content-${categoryId}`);
+    const arrow = document.getElementById(`arrow-${categoryId}`);
+
+    if (content.style.maxHeight === '0px' || content.style.maxHeight === '') {
+        content.style.maxHeight = '400px';
+        arrow.textContent = '√¢‚Äì¬º';
+    } else {
+        content.style.maxHeight = '0';
+        arrow.textContent = '√¢‚Äì¬∂';
+    }
+}
