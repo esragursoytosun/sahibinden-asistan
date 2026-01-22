@@ -342,9 +342,15 @@ async function triggerJob(jobType) {
 }
 
 /* DATA INSPECTOR */
-async function loadDbData() {
+let allListingsData = []; // Store all data for filtering
+
+async function loadDbData(filterType = 'all') {
     const collection = document.getElementById('dbCollectionSelect').value;
-    const container = document.getElementById('jsonViewer'); // Using the same container but changing content
+    const container = document.getElementById('jsonViewer');
+    const filterBar = document.getElementById('listingFilters');
+
+    // Show/hide filter bar based on collection
+    filterBar.style.display = collection === 'listings' ? 'block' : 'none';
 
     container.innerHTML = '<div class="text-center" style="padding:20px;">Veriler yükleniyor...</div>';
 
@@ -355,7 +361,7 @@ async function loadDbData() {
             body: JSON.stringify({
                 admin_email: currentAdmin.email,
                 collection: collection,
-                limit: 50
+                limit: 500 // Increased limit
             })
         });
         const data = await res.json();
@@ -365,7 +371,9 @@ async function loadDbData() {
                 container.innerHTML = '<div class="text-center" style="padding:20px;">Veri bulunamadı.</div>';
                 return;
             }
-            renderDataTable(data.data, collection, container);
+
+            allListingsData = data.data; // Store for filtering
+            applyFilter(filterType);
         } else {
             container.innerHTML = `<div class="text-center text-danger" style="padding:20px;">Hata: ${data.message}</div>`;
         }
@@ -373,6 +381,53 @@ async function loadDbData() {
         container.innerHTML = '<div class="text-center text-danger" style="padding:20px;">Bağlantı hatası.</div>';
     }
 }
+
+function applyFilter(filterType) {
+    const collection = document.getElementById('dbCollectionSelect').value;
+    const container = document.getElementById('jsonViewer');
+
+    let filteredData = allListingsData;
+
+    if (collection === 'listings' && filterType !== 'all') {
+        filteredData = allListingsData.filter(item => {
+            const type = (item.listing_type || '').toLowerCase();
+            const category = (item.category_path || '').toLowerCase();
+
+            if (filterType === 'konut') {
+                return type.includes('konut') || category.includes('konut') || category.includes('daire') || category.includes('emlak');
+            } else if (filterType === 'araba') {
+                return type.includes('araba') || type === 'araba' || category.includes('vasıta') || category.includes('otomobil');
+            }
+            return true;
+        });
+    }
+
+    // Update filter count
+    const countEl = document.getElementById('filterCount');
+    if (countEl) {
+        countEl.textContent = `(${filteredData.length} / ${allListingsData.length} kayıt)`;
+    }
+
+    // Update active button style
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+        if (btn.dataset.filter === filterType) {
+            btn.style.background = '#1da1f2';
+            btn.style.color = 'white';
+        } else {
+            btn.style.background = '#253341';
+            btn.style.color = '#8899a6';
+        }
+    });
+
+    renderDataTable(filteredData, collection, container);
+}
+
+// Add filter button event listeners
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.addEventListener('click', () => applyFilter(btn.dataset.filter));
+    });
+});
 
 function renderDataTable(data, collection, container) {
     let columns = [];
