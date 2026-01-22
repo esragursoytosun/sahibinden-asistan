@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+requests
+python-dotenv
+pymongo
+motor
+google-genai
+google-auth
+google-auth-oauthlib
+apscheduler
