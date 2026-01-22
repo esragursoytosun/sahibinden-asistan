@@ -425,10 +425,10 @@ body {
 }
 
 .badge.premium {
-    background: rgba(255, 208, 0, 0.15);
-    color: #FFD000;
-    border: 1px solid rgba(255, 208, 0, 0.3);
-    box-shadow: 0 0 10px rgba(255, 208, 0, 0.1);
+    background: rgba(29, 161, 242, 0.15);
+    color: #1da1f2;
+    border: 1px solid rgba(29, 161, 242, 0.3);
+    box-shadow: 0 0 10px rgba(29, 161, 242, 0.1);
 }
 
 .badge.free {
