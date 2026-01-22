@@ -1,4 +1,4 @@
-﻿const API_URL = "https://sahiden.onrender.com";
+const API_URL = "https://sahiden.onrender.com";
 
 // State
 let currentAdmin = null;
