@@ -4,920 +4,188 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BAI Bilmiş - Admin Panel</title>
+    <title>BAI Bilmiş - Yönetici Paneli</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --primary: #293542;
-            --primary-light: #3a4a5c;
-            --accent: #FFD000;
-            --accent-hover: #e6bb00;
-            --success: #2ecc71;
-            --danger: #e74c3c;
-            --bg: #0f1419;
-            --bg-card: #1a2530;
-            --bg-input: #243447;
-            --text: #ffffff;
-            --text-muted: #8b98a5;
-            --border: #38444d;
-        }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: var(--bg);
-            color: var(--text);
-            min-height: 100vh;
-        }
-
-        /* Login Screen */
-        .login-screen {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-            background: linear-gradient(135deg, var(--bg) 0%, var(--primary) 100%);
-        }
-
-        .login-card {
-            background: var(--bg-card);
-            border-radius: 24px;
-            padding: 50px 45px;
-            text-align: center;
-            box-shadow: 0 25px 80px rgba(0, 0, 0, 0.5);
-            border: 1px solid var(--border);
-            max-width: 420px;
-            width: 90%;
-        }
-
-        .login-logo {
-            font-size: 72px;
-            margin-bottom: 20px;
-            animation: float 3s ease-in-out infinite;
-        }
-
-        @keyframes float {
-
-            0%,
-            100% {
-                transform: translateY(0);
-            }
-
-            50% {
-                transform: translateY(-10px);
-            }
-        }
-
-        .login-card h1 {
-            font-size: 32px;
-            font-weight: 800;
-            background: linear-gradient(135deg, var(--accent), #FFA500);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            margin-bottom: 8px;
-        }
-
-        .login-subtitle {
-            color: var(--text-muted);
-            font-size: 14px;
-            margin-bottom: 35px;
-            font-weight: 500;
-        }
-
-        .login-form {
-            display: flex;
-            flex-direction: column;
-            gap: 18px;
-            margin-bottom: 20px;
-        }
-
-        .form-group {
-            text-align: left;
-        }
-
-        .form-group label {
-            display: block;
-            font-size: 12px;
-            color: var(--text-muted);
-            margin-bottom: 8px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .form-group input {
-            width: 100%;
-            padding: 16px 18px;
-            background: var(--bg-input);
-            border: 2px solid var(--border);
-            border-radius: 12px;
-            color: var(--text);
-            font-size: 15px;
-            outline: none;
-            transition: all 0.3s ease;
-        }
-
-        .form-group input:focus {
-            border-color: var(--accent);
-            box-shadow: 0 0 0 4px rgba(255, 208, 0, 0.15);
-        }
-
-        .form-group input::placeholder {
-            color: var(--text-muted);
-        }
-
-        .login-btn {
-            width: 100%;
-            padding: 16px 28px;
-            background: linear-gradient(135deg, var(--accent), #FFA500);
-            color: var(--primary);
-            border: none;
-            border-radius: 12px;
-            font-size: 16px;
-            font-weight: 700;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            margin-top: 10px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-
-        .login-btn:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 12px 35px rgba(255, 208, 0, 0.4);
-        }
-
-        .login-btn:disabled {
-            opacity: 0.7;
-            cursor: not-allowed;
-            transform: none;
-        }
-
-        .login-note {
-            color: var(--text-muted);
-            font-size: 12px;
-            margin-top: 25px;
-        }
-
-        /* Admin Panel */
-        .admin-panel {
-            padding: 25px;
-            max-width: 1400px;
-            margin: 0 auto;
-        }
-
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 22px 28px;
-            background: linear-gradient(135deg, var(--bg-card) 0%, rgba(41, 53, 66, 0.95) 100%);
-            border-radius: 20px;
-            margin-bottom: 28px;
-            border: 1px solid var(--border);
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-        }
-
-        .header-left {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-        }
-
-        .logo {
-            font-size: 36px;
-        }
-
-        .header-left h1 {
-            font-size: 24px;
-            font-weight: 800;
-            background: linear-gradient(135deg, var(--accent), #FFA500);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        .badge {
-            background: linear-gradient(135deg, var(--accent), #FFA500);
-            color: var(--primary);
-            font-size: 10px;
-            padding: 5px 12px;
-            border-radius: 20px;
-            margin-left: 10px;
-            font-weight: 700;
-            text-transform: uppercase;
-        }
-
-        .header-right {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-        }
-
-        .admin-name {
-            font-weight: 600;
-            color: var(--text-muted);
-        }
-
-        .logout-btn {
-            background: linear-gradient(135deg, var(--danger), #c0392b);
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 10px;
-            font-size: 13px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .logout-btn:hover {
-            transform: scale(1.05);
-            box-shadow: 0 4px 15px rgba(231, 76, 60, 0.4);
-        }
-
-        /* Stats Cards */
-        .stats-container {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 22px;
-            margin-bottom: 28px;
-        }
-
-        .stat-card {
-            background: linear-gradient(135deg, var(--bg-card) 0%, rgba(26, 37, 48, 0.9) 100%);
-            border-radius: 18px;
-            padding: 26px;
-            display: flex;
-            align-items: center;
-            gap: 18px;
-            border: 1px solid var(--border);
-            transition: all 0.3s ease;
-        }
-
-        .stat-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3);
-        }
-
-        .stat-card.premium {
-            border-color: var(--accent);
-            background: linear-gradient(135deg, var(--bg-card) 0%, rgba(255, 208, 0, 0.08) 100%);
-        }
-
-        .stat-card.active {
-            border-color: var(--success);
-        }
-
-        .stat-icon {
-            font-size: 36px;
-            width: 68px;
-            height: 68px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: var(--bg-input);
-            border-radius: 16px;
-        }
-
-        .stat-info {
-            display: flex;
-            flex-direction: column;
-        }
-
-        .stat-value {
-            font-size: 32px;
-            font-weight: 800;
-            color: var(--text);
-        }
-
-        .stat-label {
-            font-size: 13px;
-            color: var(--text-muted);
-            margin-top: 4px;
-            font-weight: 500;
-        }
-
-        /* Actions Bar */
-        .actions-bar {
-            display: flex;
-            gap: 16px;
-            margin-bottom: 22px;
-            flex-wrap: wrap;
-        }
-
-        .search-box {
-            flex: 1;
-            min-width: 280px;
-            display: flex;
-            background: var(--bg-card);
-            border-radius: 14px;
-            border: 1px solid var(--border);
-            overflow: hidden;
-        }
-
-        .search-box input {
-            flex: 1;
-            padding: 16px 20px;
-            background: transparent;
-            border: none;
-            color: var(--text);
-            font-size: 14px;
-            outline: none;
-        }
-
-        .search-box input::placeholder {
-            color: var(--text-muted);
-        }
-
-        .search-box button {
-            padding: 16px 22px;
-            background: var(--primary-light);
-            border: none;
-            color: var(--text);
-            cursor: pointer;
-            transition: all 0.2s;
-            font-size: 16px;
-        }
-
-        .search-box button:hover {
-            background: var(--accent);
-            color: var(--primary);
-        }
-
-        .refresh-btn {
-            padding: 16px 26px;
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: 14px;
-            color: var(--text);
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .refresh-btn:hover {
-            background: var(--primary-light);
-        }
-
-        /* Table */
-        .table-container {
-            background: var(--bg-card);
-            border-radius: 18px;
-            border: 1px solid var(--border);
-            overflow: hidden;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-        }
-
-        .users-table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        .users-table th {
-            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
-            padding: 18px 22px;
-            text-align: left;
-            font-size: 11px;
-            font-weight: 700;
-            color: var(--text-muted);
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-
-        .users-table td {
-            padding: 18px 22px;
-            border-bottom: 1px solid var(--border);
-            font-size: 14px;
-        }
-
-        .users-table tr:last-child td {
-            border-bottom: none;
-        }
-
-        .users-table tr:hover td {
-            background: rgba(255, 255, 255, 0.03);
-        }
-
-        .loading-row {
-            text-align: center;
-            color: var(--text-muted);
-            padding: 50px !important;
-            font-size: 16px;
-        }
-
-        .user-cell {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-        }
-
-        .user-avatar {
-            width: 44px;
-            height: 44px;
-            border-radius: 50%;
-            object-fit: cover;
-            border: 2px solid var(--border);
-        }
-
-        .user-name {
-            font-weight: 600;
-        }
-
-        .admin-tag {
-            background: linear-gradient(135deg, var(--accent), #FFA500);
-            color: var(--primary);
-            font-size: 9px;
-            padding: 3px 8px;
-            border-radius: 6px;
-            font-weight: 700;
-            margin-left: 8px;
-        }
-
-        .plan-badge {
-            display: inline-block;
-            padding: 8px 16px;
-            border-radius: 25px;
-            font-size: 12px;
-            font-weight: 700;
-        }
-
-        .plan-badge.premium {
-            background: linear-gradient(135deg, #FFD700, #FFA500);
-            color: #000;
-        }
-
-        .plan-badge.free {
-            background: var(--bg-input);
-            color: var(--text-muted);
-        }
-
-        .action-btn {
-            padding: 10px 18px;
-            border: none;
-            border-radius: 10px;
-            font-size: 12px;
-            font-weight: 700;
-            cursor: pointer;
-            transition: all 0.2s;
-            margin-right: 8px;
-        }
-
-        .action-btn.premium-btn {
-            background: linear-gradient(135deg, #FFD700, #FFA500);
-            color: #000;
-        }
-
-        .action-btn.premium-btn:hover {
-            transform: scale(1.05);
-            box-shadow: 0 6px 20px rgba(255, 208, 0, 0.4);
-        }
-
-        .action-btn.free-btn {
-            background: var(--bg-input);
-            color: var(--text-muted);
-        }
-
-        .action-btn.free-btn:hover {
-            background: var(--danger);
-            color: white;
-        }
-
-        /* Pagination */
-        .pagination {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 22px;
-            margin-top: 28px;
-        }
-
-        .pagination button {
-            padding: 12px 24px;
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            color: var(--text);
-            font-size: 13px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .pagination button:hover:not(:disabled) {
-            background: var(--primary-light);
-        }
-
-        .pagination button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        #pageInfo {
-            color: var(--text-muted);
-            font-size: 14px;
-            font-weight: 500;
-        }
-
-        /* Toast */
-        .toast {
-            position: fixed;
-            bottom: 30px;
-            right: 30px;
-            padding: 18px 28px;
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: 14px;
-            color: var(--text);
-            font-size: 14px;
-            font-weight: 600;
-            box-shadow: 0 15px 50px rgba(0, 0, 0, 0.5);
-            transform: translateY(100px);
-            opacity: 0;
-            transition: all 0.3s ease;
-            z-index: 9999;
-        }
-
-        .toast.show {
-            transform: translateY(0);
-            opacity: 1;
-        }
-
-        .toast.success {
-            border-color: var(--success);
-            background: linear-gradient(135deg, var(--bg-card), rgba(46, 204, 113, 0.15));
-        }
-
-        .toast.error {
-            border-color: var(--danger);
-            background: linear-gradient(135deg, var(--bg-card), rgba(231, 76, 60, 0.15));
-        }
-
-        @media (max-width: 768px) {
-            .header {
-                flex-direction: column;
-                gap: 15px;
-            }
-
-            .stats-container {
-                grid-template-columns: repeat(2, 1fr);
-            }
-
-            .users-table th:nth-child(4),
-            .users-table td:nth-child(4),
-            .users-table th:nth-child(5),
-            .users-table td:nth-child(5) {
-                display: none;
-            }
-        }
-    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 
 <body>
-    <!-- Login Ekranı -->
-    <div id="loginScreen" class="login-screen">
-        <div class="login-card">
-            <div class="login-logo">🤖</div>
-            <h1>BAI BİLMİŞ</h1>
-            <p class="login-subtitle">Yönetim Paneli</p>
 
+    <!-- Login Screen -->
+    <div id="loginScreen" class="login-wrapper">
+        <div class="login-box">
+            <div class="login-header">
+                <div class="logo-icon">🤖</div>
+                <h1>Yönetici Girişi</h1>
+                <p>Sahibinden Asistanı Kontrol Merkezi</p>
+            </div>
             <div class="login-form">
-                <div class="form-group">
-                    <label>Admin Email</label>
-                    <input type="email" id="adminEmail" placeholder="admin@email.com">
+                <div class="input-group">
+                    <label>E-posta</label>
+                    <input type="email" id="adminEmail" placeholder="admin@example.com">
                 </div>
-                <div class="form-group">
-                    <label>Şifre</label>
-                    <input type="password" id="adminKey" placeholder="••••••••••••">
+                <div class="input-group">
+                    <label>Güvenlik Anahtarı</label>
+                    <input type="password" id="adminKey" placeholder="••••••••">
                 </div>
-                <button id="loginBtn" class="login-btn">
-                    🔐 Giriş Yap
-                </button>
+                <button id="loginBtn" class="btn-primary">Giriş Yap</button>
             </div>
-
-            <p class="login-note">🔒 Sadece yetkili yöneticiler erişebilir</p>
         </div>
     </div>
 
-    <!-- Admin Panel -->
-    <div id="adminPanel" class="admin-panel" style="display: none;">
-        <header class="header">
-            <div class="header-left">
-                <span class="logo">🤖</span>
-                <h1>BAI BİLMİŞ</h1>
-                <span class="badge">Admin</span>
-            </div>
-            <div class="header-right">
-                <span id="adminName" class="admin-name"></span>
-                <button id="logoutBtn" class="logout-btn">🚪 Çıkış</button>
-            </div>
-        </header>
+    <!-- Admin Dashboard -->
+    <div id="adminPanel" class="dashboard-wrapper" style="display: none;">
 
-        <div class="stats-container">
-            <div class="stat-card">
-                <div class="stat-icon">👥</div>
-                <div class="stat-info">
-                    <span class="stat-value" id="totalUsers">-</span>
-                    <span class="stat-label">Toplam Kullanıcı</span>
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="brand">
+                    <span class="logo">🤖</span>
+                    <span>BAI Admin</span>
                 </div>
             </div>
-            <div class="stat-card premium">
-                <div class="stat-icon">⭐</div>
-                <div class="stat-info">
-                    <span class="stat-value" id="premiumUsers">-</span>
-                    <span class="stat-label">Premium Üye</span>
+
+            <nav class="sidebar-nav">
+                <a href="#" class="nav-item active" data-tab="dashboard">
+                    <span class="icon">📊</span> Genel Bakış
+                </a>
+                <a href="#" class="nav-item" data-tab="users">
+                    <span class="icon">👥</span> Kullanıcılar
+                </a>
+                <a href="#" class="nav-item" data-tab="settings">
+                    <span class="icon">⚙️</span> Ayarlar
+                </a>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="admin-profile">
+                    <div class="admin-avatar">A</div>
+                    <div class="admin-info">
+                        <span id="adminNameDisplay">Admin</span>
+                        <small>Süper Yönetici</small>
+                    </div>
+                </div>
+                <button id="logoutBtn" class="btn-logout">Çıkış</button>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+
+            <!-- Dashboard Tab -->
+            <div id="tab-dashboard" class="content-tab active">
+                <header class="top-bar">
+                    <h2>Genel Bakış</h2>
+                    <div class="actions">
+                        <span id="lastUpdated" class="last-updated">Son güncelleme: -</span>
+                        <button id="refreshStatsBtn" class="btn-icon">🔄</button>
+                    </div>
+                </header>
+
+                <!-- KPI Cards -->
+                <div class="kpi-grid">
+                    <div class="kpi-card">
+                        <div class="kpi-icon icon-users">👥</div>
+                        <div class="kpi-data">
+                            <span class="kpi-value" id="totalUsers">-</span>
+                            <span class="kpi-label">Toplam Kullanıcı</span>
+                        </div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon icon-premium">⭐</div>
+                        <div class="kpi-data">
+                            <span class="kpi-value" id="premiumUsers">-</span>
+                            <span class="kpi-label">Premium Üye</span>
+                        </div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon icon-active">⚡</div>
+                        <div class="kpi-data">
+                            <span class="kpi-value" id="activeToday">-</span>
+                            <span class="kpi-label">Bugün Aktif</span>
+                        </div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon icon-listings">📋</div>
+                        <div class="kpi-data">
+                            <span class="kpi-value" id="totalListings">-</span>
+                            <span class="kpi-label">Veri Tabanı</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Charts Section -->
+                <div class="charts-grid">
+                    <div class="chart-card">
+                        <h3>📈 Sorgu Trendi (Son 30 Gün)</h3>
+                        <div class="chart-container">
+                            <canvas id="queriesChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-card">
+                        <h3>👥 Aktif Kullanıcı Trendi</h3>
+                        <div class="chart-container">
+                            <canvas id="usersChart"></canvas>
+                        </div>
+                    </div>
                 </div>
             </div>
-            <div class="stat-card">
-                <div class="stat-icon">📋</div>
-                <div class="stat-info">
-                    <span class="stat-value" id="totalListings">-</span>
-                    <span class="stat-label">Kayıtlı İlan</span>
+
+            <!-- Users Tab -->
+            <div id="tab-users" class="content-tab" style="display: none;">
+                <header class="top-bar">
+                    <h2>Kullanıcı Yönetimi</h2>
+                    <div class="search-bar">
+                        <input type="text" id="userSearchInput" placeholder="İsim veya e-posta ara...">
+                        <button id="userSearchBtn">🔍</button>
+                    </div>
+                </header>
+
+                <div class="table-card">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Kullanıcı</th>
+                                <th>Paket</th>
+                                <th>Kullanım</th>
+                                <th>Son Giriş</th>
+                                <th>İşlemler</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usersTableBody">
+                            <tr>
+                                <td colspan="5" class="text-center">Yükleniyor...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <div class="pagination">
+                        <button id="prevPageBtn" disabled>Önceki</button>
+                        <span id="pageIndicator">Sayfa 1</span>
+                        <button id="nextPageBtn">Sonraki</button>
+                    </div>
                 </div>
             </div>
-            <div class="stat-card active">
-                <div class="stat-icon">🟢</div>
-                <div class="stat-info">
-                    <span class="stat-value" id="activeToday">-</span>
-                    <span class="stat-label">Bugün Aktif</span>
+
+            <!-- Settings Tab -->
+            <div id="tab-settings" class="content-tab" style="display: none;">
+                <header class="top-bar">
+                    <h2>Sistem Ayarları</h2>
+                </header>
+                <div class="settings-card">
+                    <p>Şu an için yapılandırılabilir ayar bulunmuyor.</p>
                 </div>
             </div>
-        </div>
 
-        <div class="actions-bar">
-            <div class="search-box">
-                <input type="text" id="searchInput" placeholder="Kullanıcı ara (isim veya email)...">
-                <button id="searchBtn">🔍</button>
-            </div>
-            <button id="refreshBtn" class="refresh-btn">🔄 Yenile</button>
-        </div>
-
-        <div class="table-container">
-            <table class="users-table">
-                <thead>
-                    <tr>
-                        <th>Kullanıcı</th>
-                        <th>Email</th>
-                        <th>Plan</th>
-                        <th>Günlük Kullanım</th>
-                        <th>Son Giriş</th>
-                        <th>İşlemler</th>
-                    </tr>
-                </thead>
-                <tbody id="usersTableBody">
-                    <tr>
-                        <td colspan="6" class="loading-row">Yükleniyor...</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-
-        <div class="pagination">
-            <button id="prevPage" disabled>← Önceki</button>
-            <span id="pageInfo">Sayfa 1</span>
-            <button id="nextPage">Sonraki →</button>
-        </div>
+        </main>
     </div>
 
+    <!-- Toast Notification -->
     <div id="toast" class="toast"></div>
 
-    <script>
-        const API_URL = "https://sahiden.onrender.com";
-        let currentAdmin = null;
-        let currentPage = 1;
-        let totalUsers = 0;
-        const USERS_PER_PAGE = 20;
-
-        document.addEventListener('DOMContentLoaded', () => {
-            checkExistingLogin();
-            document.getElementById('loginBtn').addEventListener('click', login);
-            document.getElementById('logoutBtn').addEventListener('click', logout);
-            document.getElementById('searchBtn').addEventListener('click', searchUsers);
-            document.getElementById('refreshBtn').addEventListener('click', () => {
-                alert("Yenileniyor... (Kod: v1.1 Active)");
-                loadStats();
-                loadUsers(currentPage);
-            });
-            document.getElementById('prevPage').addEventListener('click', () => changePage(-1));
-            document.getElementById('nextPage').addEventListener('click', () => changePage(1));
-            document.getElementById('searchInput').addEventListener('keypress', (e) => { if (e.key === 'Enter') searchUsers(); });
-            document.getElementById('adminKey').addEventListener('keypress', (e) => { if (e.key === 'Enter') login(); });
-        });
-
-        function checkExistingLogin() {
-            const stored = localStorage.getItem('bai_admin');
-            if (stored) {
-                try { currentAdmin = JSON.parse(stored); showAdminPanel(); }
-                catch (e) { localStorage.removeItem('bai_admin'); }
-            }
-        }
-
-        async function login() {
-            const email = document.getElementById('adminEmail').value.trim();
-            const key = document.getElementById('adminKey').value.trim();
-            if (!email) { showToast('Email girin', 'error'); return; }
-            if (!key) { showToast('Şifre girin', 'error'); return; }
-
-            const btn = document.getElementById('loginBtn');
-            btn.innerHTML = '⏳ Kontrol ediliyor...';
-            btn.disabled = true;
-
-            try {
-                const res = await fetch(`${API_URL}/admin/login`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email, key })
-                });
-                const data = await res.json();
-
-                if (data.status === 'success' && data.is_admin) {
-                    currentAdmin = { email, name: email.split('@')[0] };
-                    localStorage.setItem('bai_admin', JSON.stringify(currentAdmin));
-                    showAdminPanel();
-                    showToast('Hoş geldin! 👋', 'success');
-                } else {
-                    showToast('❌ ' + (data.message || 'Giriş başarısız!'), 'error');
-                    btn.innerHTML = '🔐 Giriş Yap'; btn.disabled = false;
-                }
-            } catch (e) {
-                showToast('Sunucu hatası', 'error');
-                btn.innerHTML = '🔐 Giriş Yap'; btn.disabled = false;
-            }
-        }
-
-        function logout() {
-            if (confirm('Çıkış yapmak istediğinize emin misiniz?')) {
-                if (refreshInterval) { clearInterval(refreshInterval); refreshInterval = null; }
-                localStorage.removeItem('bai_admin');
-                currentAdmin = null;
-                document.getElementById('adminPanel').style.display = 'none';
-                document.getElementById('loginScreen').style.display = 'flex';
-                document.getElementById('adminEmail').value = '';
-                document.getElementById('adminKey').value = '';
-            }
-        }
-
-        let refreshInterval = null;
-
-        function showAdminPanel() {
-            document.getElementById('loginScreen').style.display = 'none';
-            document.getElementById('adminPanel').style.display = 'block';
-            document.getElementById('adminName').textContent = currentAdmin.email;
-            loadStats();
-            loadUsers(1);
-
-            // Otomatik Yenileme Başlat (30sn)
-            if (refreshInterval) clearInterval(refreshInterval);
-            refreshInterval = setInterval(() => {
-                loadStats();
-                // İsteğe bağlı: Tabloyu da yenilemek isterseniz: loadUsers(currentPage);
-            }, 30000);
-        }
-
-        async function loadStats() {
-            try {
-                // Debugging için alert (GEÇİCİ)
-                // alert("İstatistikler yükleniyor..."); 
-                const res = await fetch(`${API_URL}/admin/stats?admin_email=${encodeURIComponent(currentAdmin.email)}`);
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                const data = await res.json();
-
-                if (data.status === 'success') {
-                    document.getElementById('totalUsers').textContent = data.stats.total_users;
-                    document.getElementById('premiumUsers').textContent = data.stats.premium_users;
-                    document.getElementById('totalListings').textContent = data.stats.total_listings.toLocaleString('tr-TR');
-                    document.getElementById('activeToday').textContent = data.stats.active_today;
-                } else {
-                    console.error('Stats Hatası:', data.message);
-                    alert("Stats Hatası: " + data.message); // Kullanıcı görsün
-                    // Hata toast'ı gösterme (çok rahatsız etmesin diye, ama debug için açabiliriz)
-                    document.getElementById('totalUsers').textContent = "Hata";
-                }
-            } catch (e) {
-                console.error('Stats yüklenemedi:', e);
-                alert("Stats Yüklenemedi: " + e.message); // Kullanıcı görsün
-                document.getElementById('totalUsers').textContent = "Err";
-            }
-        }
-
-        async function loadUsers(page) {
-            const tbody = document.getElementById('usersTableBody');
-            tbody.innerHTML = '<tr><td colspan="6" class="loading-row">⏳ Yükleniyor...</td></tr>';
-            currentPage = page;
-
-            try {
-                const res = await fetch(`${API_URL}/admin/users`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ admin_email: currentAdmin.email, limit: USERS_PER_PAGE, skip: (page - 1) * USERS_PER_PAGE })
-                });
-                const data = await res.json();
-                if (data.status === 'success') { totalUsers = data.total; renderUsers(data.users); updatePagination(); }
-                else throw new Error(data.message);
-            } catch (e) {
-                tbody.innerHTML = `<tr><td colspan="6" class="loading-row">❌ Hata: ${e.message}</td></tr>`;
-                alert("Tablo Hatası: " + e.message);
-            }
-        }
-
-        async function searchUsers() {
-            const query = document.getElementById('searchInput').value.trim();
-            if (!query) { loadUsers(1); return; }
-            if (query.length < 2) { showToast('En az 2 karakter girin', 'error'); return; }
-
-            const tbody = document.getElementById('usersTableBody');
-            tbody.innerHTML = '<tr><td colspan="6" class="loading-row">🔍 Aranıyor...</td></tr>';
-
-            try {
-                const res = await fetch(`${API_URL}/admin/search`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ admin_email: currentAdmin.email, query })
-                });
-                const data = await res.json();
-                if (data.status === 'success') {
-                    renderUsers(data.users);
-                    document.getElementById('pageInfo').textContent = `${data.count} sonuç`;
-                    document.getElementById('prevPage').disabled = true;
-                    document.getElementById('nextPage').disabled = true;
-                } else throw new Error(data.message);
-            } catch (e) { tbody.innerHTML = `<tr><td colspan="6" class="loading-row">❌ Arama hatası: ${e.message}</td></tr>`; }
-        }
-
-        function renderUsers(users) {
-            const tbody = document.getElementById('usersTableBody');
-            if (!users || users.length === 0) { tbody.innerHTML = '<tr><td colspan="6" class="loading-row">Kullanıcı bulunamadı</td></tr>'; return; }
-
-            tbody.innerHTML = users.map(user => `
-                <tr>
-                    <td><div class="user-cell">
-                        <img src="${user.picture || 'https://via.placeholder.com/44'}" alt="" class="user-avatar">
-                        <span class="user-name">${escapeHtml(user.name)}${user.is_admin ? '<span class="admin-tag">ADMIN</span>' : ''}</span>
-                    </div></td>
-                    <td>${escapeHtml(user.email)}</td>
-                    <td><span class="plan-badge ${user.plan}">${user.plan === 'premium' ? '⭐ Premium' : 'Ücretsiz'}</span></td>
-                    <td>${user.daily_usage}/5</td>
-                    <td>${formatDate(user.last_login)}</td>
-                    <td>${user.plan === 'premium'
-                    ? `<button class="action-btn free-btn" onclick="changePlan('${user.id}', 'free')">Ücretsiz Yap</button>`
-                    : `<button class="action-btn premium-btn" onclick="changePlan('${user.id}', 'premium')">⭐ Premium Yap</button>`}</td>
-                </tr>
-            `).join('');
-        }
-
-        async function changePlan(userId, newPlan) {
-            if (!confirm(`Bu kullanıcıyı ${newPlan === 'premium' ? 'Premium' : 'Ücretsiz'} yapmak istediğinize emin misiniz?`)) return;
-            try {
-                const res = await fetch(`${API_URL}/admin/set-plan`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ admin_email: currentAdmin.email, user_id: userId, plan: newPlan })
-                });
-                const data = await res.json();
-                if (data.status === 'success') { showToast('✅ ' + data.message, 'success'); loadUsers(currentPage); loadStats(); }
-                else throw new Error(data.message);
-            } catch (e) { showToast('❌ Hata: ' + e.message, 'error'); }
-        }
-
-        function changePage(delta) {
-            const newPage = currentPage + delta;
-            const maxPage = Math.ceil(totalUsers / USERS_PER_PAGE);
-            if (newPage >= 1 && newPage <= maxPage) loadUsers(newPage);
-        }
-
-        function updatePagination() {
-            const maxPage = Math.ceil(totalUsers / USERS_PER_PAGE);
-            document.getElementById('prevPage').disabled = currentPage <= 1;
-            document.getElementById('nextPage').disabled = currentPage >= maxPage;
-            document.getElementById('pageInfo').textContent = `Sayfa ${currentPage} / ${maxPage} (${totalUsers} kullanıcı)`;
-        }
-
-        function escapeHtml(str) {
-            if (!str) return '';
-            return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-        }
-
-        function formatDate(dateStr) {
-            if (!dateStr) return '-';
-            try { return new Date(dateStr).toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
-            catch (e) { return dateStr; }
-        }
-
-        function showToast(message, type = 'success') {
-            const toast = document.getElementById('toast');
-            toast.textContent = message;
-            toast.className = 'toast show ' + type;
-            setTimeout(() => { toast.className = 'toast'; }, 3000);
-        }
-    </script>
+    <script src="script.js"></script>
 </body>
 
 </html>

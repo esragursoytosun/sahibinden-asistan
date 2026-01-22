@@ -51,9 +51,47 @@ async def keep_alive():
         print(f"❌ Keep-Alive Hatası: {e}")
 
 async def reset_daily_limits():
-    """Gece 00:00'da limitleri sıfırlar"""
-    await users_collection.update_many({}, {"$set": {"daily_usage": 0}})
-    print("✅ Günlük limitler sıfırlandı.")
+    """Gece 00:00'da limitleri sıfırlar ve istatistikleri kaydeder"""
+    try:
+        from backend.database import stats_collection
+        
+        # 1. GÜNLÜK İSTATİSTİKLERİ KAYDET (SNAPSHOT)
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        
+        # Toplam kullanıcı sayısı
+        total_users = await users_collection.count_documents({})
+        # Premium kullanıcı sayısı
+        premium_users = await users_collection.count_documents({"plan": "premium"})
+        # Bugün aktif olanlar (En az 1 işlem yapmış)
+        active_users_count = await users_collection.count_documents({"daily_usage": {"$gt": 0}})
+        # Toplam yapılan işlem sayısı (Usage toplamı)
+        pipeline = [{"$group": {"_id": None, "total_usage": {"$sum": "$daily_usage"}}}]
+        cursor = users_collection.aggregate(pipeline)
+        result = await cursor.to_list(length=1)
+        total_daily_usage = result[0]["total_usage"] if result else 0
+        
+        stat_doc = {
+            "date": today_str,
+            "total_users": total_users,
+            "premium_users": premium_users,
+            "active_users": active_users_count,
+            "total_queries": total_daily_usage,
+            "created_at": datetime.now()
+        }
+        
+        await stats_collection.update_one(
+            {"date": today_str}, 
+            {"$set": stat_doc}, 
+            upsert=True
+        )
+        print(f"📊 Günlük istatistikler kaydedildi: {today_str}")
+
+        # 2. LİMİTLERİ SIFIRLA
+        await users_collection.update_many({}, {"$set": {"daily_usage": 0}})
+        print("✅ Günlük limitler sıfırlandı.")
+        
+    except Exception as e:
+        print(f"❌ Günlük reset hatası: {e}")
 
 def start_scheduler():
     # 1. Fiyat Kontrolü (6 Saatte bir)
