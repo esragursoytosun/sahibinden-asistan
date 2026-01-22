@@ -751,6 +751,7 @@
 
         function logout() {
             if (confirm('Çıkış yapmak istediğinize emin misiniz?')) {
+                if (refreshInterval) { clearInterval(refreshInterval); refreshInterval = null; }
                 localStorage.removeItem('bai_admin');
                 currentAdmin = null;
                 document.getElementById('adminPanel').style.display = 'none';
@@ -760,12 +761,21 @@
             }
         }
 
+        let refreshInterval = null;
+
         function showAdminPanel() {
             document.getElementById('loginScreen').style.display = 'none';
             document.getElementById('adminPanel').style.display = 'block';
             document.getElementById('adminName').textContent = currentAdmin.email;
             loadStats();
             loadUsers(1);
+
+            // Otomatik Yenileme Başlat (30sn)
+            if (refreshInterval) clearInterval(refreshInterval);
+            refreshInterval = setInterval(() => {
+                loadStats();
+                // İsteğe bağlı: Tabloyu da yenilemek isterseniz: loadUsers(currentPage);
+            }, 30000);
         }
 
         async function loadStats() {

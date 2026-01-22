@@ -624,7 +624,15 @@ async def ask_ai(data: ListingData):
     if user:
         if user.get("plan") != "premium" and user.get("daily_usage", 0) >= FREE_DAILY_LIMIT:
             return {"status": "limit_reached", "message": "Günlük limit doldu."}
-        await users_collection.update_one({"_id": data.user_id}, {"$inc": {"daily_usage": 1}})
+        
+        # Kullanım miktarını artır VE son görülme zamanını güncelle (Admin istatistikleri için)
+        await users_collection.update_one(
+            {"_id": data.user_id}, 
+            {
+                "$inc": {"daily_usage": 1},
+                "$set": {"last_login": datetime.now()} 
+            }
+        )
 
     # 🟢 KATEGORİ ALGILAMA 🟢
     listing_type = detect_listing_type(data.category_path, data.listing_type)
