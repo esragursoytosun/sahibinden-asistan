@@ -703,6 +703,69 @@ async def admin_db_preview(data: dict):
         
     return {"status": "success", "data": documents, "total": total_count}
 
+@app.post("/admin/delete-record")
+async def admin_delete_record(data: dict):
+    admin_email = data.get("admin_email")
+    collection_name = data.get("collection")
+    record_id = data.get("id")
+    
+    if not await verify_admin(admin_email):
+        return {"status": "error", "message": "Yetkisiz erişim"}
+        
+    valid_collections = {
+        "users": users_collection,
+        "listings": listings_collection
+    }
+    
+    if collection_name not in valid_collections:
+        return {"status": "error", "message": "Geçersiz koleksiyon"}
+        
+    try:
+        # ID string veya ObjectId olabilir
+        query = {"_id": record_id}
+        result = await valid_collections[collection_name].delete_one(query)
+        
+        if result.deleted_count > 0:
+            return {"status": "success", "message": "Kayıt silindi"}
+        else:
+            return {"status": "error", "message": "Kayıt bulunamadı"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/admin/update-record")
+async def admin_update_record(data: dict):
+    admin_email = data.get("admin_email")
+    collection_name = data.get("collection")
+    record_id = data.get("id")
+    update_data = data.get("data", {})
+    
+    if not await verify_admin(admin_email):
+        return {"status": "error", "message": "Yetkisiz erişim"}
+        
+    valid_collections = {
+        "users": users_collection,
+        "listings": listings_collection
+    }
+    
+    if collection_name not in valid_collections:
+        return {"status": "error", "message": "Geçersiz koleksiyon"}
+        
+    try:
+        # Güvenlik: _id değiştirilemez
+        if "_id" in update_data: del update_data["_id"]
+        
+        result = await valid_collections[collection_name].update_one(
+            {"_id": record_id},
+            {"$set": update_data}
+        )
+        
+        if result.modified_count > 0:
+            return {"status": "success", "message": "Kayıt güncellendi"}
+        else:
+            return {"status": "warning", "message": "Değişiklik yapılmadı veya kayıt yok"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
 # 🟢 ADMIN PANEL STATIC FILES
 ADMIN_DIR = Path(__file__).parent.parent / "admin"
 
