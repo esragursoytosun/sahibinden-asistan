@@ -4,6 +4,7 @@ import requests
 import re
 from datetime import datetime, timedelta
 from typing import List
+import xml.etree.ElementTree as ET
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -47,7 +48,14 @@ class ListingData(BaseModel):
     km: str | None = None
     year: str | None = None
     user_id: str | None = None
-    category_path: str | None = None # <-- YENİ: Kategori Yolu
+    category_path: str | None = None
+    # --- YENİ ALANLAR ---
+    transmission: str | None = None      # Manuel/Otomatik (Araçlar için)
+    listing_type: str | None = None      # araba/konut_satilik/konut_kiralik
+    location: str | None = None          # İl/İlçe/Mahalle
+    room_count: str | None = None        # Oda sayısı (Konutlar için)
+    area_m2: str | None = None           # Metrekare (Konutlar için)
+    building_age: str | None = None      # Bina yaşı
 
 class CommentData(BaseModel):
     listing_id: str
@@ -73,20 +81,31 @@ def clean_number(value):
     clean_val = re.sub(r'[^\d]', '', str(value))
     return int(clean_val) if clean_val else 0
 
-async def calculate_valuation(title, current_price, current_id, current_year, category_path=None):
+async def calculate_valuation(title, current_price, current_id, current_year, category_path=None, listing_type=None, location=None, room_count=None, area_m2=None):
+    """Araç ve emlak ilanları için piyasa değerlemesi yapar"""
     if not title or not current_price: return None
     try:
-        # Daha geniş havuzdan (1000 ilan) tarama yap
-        cursor = listings_collection.find().sort("first_seen_at", -1).limit(1000)
-        all_listings = await cursor.to_list(length=1000)
+        # Daha geniş havuzdan (1500 ilan) tarama yap
+        cursor = listings_collection.find().sort("first_seen_at", -1).limit(1500)
+        all_listings = await cursor.to_list(length=1500)
         
         valid_prices = []
+        similar_listings = []  # Benzer ilanları sakla
         cutoff_date = datetime.now() - timedelta(days=60)
         
         target_year = clean_number(current_year)
+        target_area = clean_number(area_m2)
         
-        # Kategori filtresi kullanılacak mı? (En az 5 karakterse geçerli say)
+        # Kategori filtresi kullanılacak mı?
         use_category_filter = category_path and len(category_path) > 5
+        
+        # Emlak mı kontrol et
+        is_real_estate = listing_type and ("konut" in listing_type or "isyeri" in listing_type or "arsa" in listing_type)
+        
+        # Lokasyon parçalama (İstanbul > Kadıköy > Fenerbahçe gibi)
+        location_parts = []
+        if location and is_real_estate:
+            location_parts = [p.strip().lower() for p in location.replace(">", ",").split(",") if len(p.strip()) > 2]
         
         # Yedek plan için başlık kelimeleri
         keywords = [k.lower() for k in title.split() if len(k) > 2][:4]
@@ -106,29 +125,81 @@ async def calculate_valuation(title, current_price, current_id, current_year, ca
             t = item.get("title", "").lower()
             y = clean_number(item.get("year", 0))
             item_cat = item.get("category_path", "")
+            item_location = (item.get("location", "") or "").lower()
+            item_type = item.get("listing_type", "")
+            item_room = item.get("room_count", "")
+            item_area = clean_number(item.get("area_m2", 0))
             
-            # --- GELİŞMİŞ FİLTRELEME ---
-            
-            if use_category_filter and item_cat:
-                # KATEGORİ MODU: Kategori yolları eşleşiyor mu?
-                if category_path not in item_cat and item_cat not in category_path:
-                    continue # Eşleşmezse bu ilanı geç
-            else:
-                # BAŞLIK MODU (Eski Sistem): Başlık Benzerliği
-                match_count = sum(1 for k in keywords if k in t)
-                if match_count < 2: continue
+            # 🏠 EMLAK İÇİN SIKI FİLTRELEME (MAHALLE + ODA + m²) 🏠
+            if is_real_estate:
+                # 1. TİP KONTROLÜ
+                if listing_type and item_type and listing_type != item_type:
+                    continue
+                
+                # 2. ODA SAYISI KONTROLÜ (TAM EŞLEŞME İSTENDİ)
+                # İstisna: Eğer odasız (stüdyo) ise veya parse edilemiyorsa esnek davran
+                room_match = False
+                if room_count and item_room:
+                    # Rakamları al (2+1 -> 2, 3+1 -> 3)
+                    c_r = re.sub(r'[^\d]', '', room_count.split("+")[0])
+                    i_r = re.sub(r'[^\d]', '', item_room.split("+")[0])
+                    if c_r and i_r and c_r == i_r: # TAM EŞLEŞME
+                        room_match = True
+                else:
+                    room_match = True # Veri yoksa eleme
+                
+                if not room_match: continue
 
-            # 🟢 TAM YIL EŞLEŞMESİ (Strict Year Match) 🟢
-            # Hedef yıl varsa, SADECE o yılın araçlarını al. (±0 Yıl)
-            if target_year > 1900 and y > 1900:
-                if y != target_year: 
-                    continue 
+                # 3. LOKASYON KONTROLÜ (MAHALLE SEVİYESİNDE)
+                # location stringi genelde: İstanbul / Üsküdar / Küçüksu Mh.
+                location_match = False
+                
+                if location_parts and item_location:
+                    # En detaylı lokasyon (Mahalle) eşleşmeli
+                    # location_parts[-1] genelde mahalleyi verir
+                    target_spot = location_parts[-1] 
+                    if len(target_spot) > 2 and target_spot in item_location:
+                        location_match = True
+                
+                # KESİN LOKASYON ŞARTI (YANLIŞ EŞLEŞMEYİ ÖNLEMEK İÇİN)
+                # Eğer aradığımız spesifik bir mahalle varsa, lokasyon bilgisi olmayan ilanları DAHİL ETME.
+                if location_parts and not item_location:
+                    location_match = False
+                
+                # Eğer hedef lokasyon yoksa (genel arama), o zaman mecburen kabul et
+                elif not location_parts:
+                    location_match = True
+                    
+                if not location_match: continue
+                        
+            # 🚗 ARAÇ İÇİN KATEGORİ/BAŞLIK FİLTRELEME 🚗
+            else:
+                if use_category_filter and item_cat:
+                    if category_path not in item_cat and item_cat not in category_path:
+                        continue
+                else:
+                    match_count = sum(1 for k in keywords if k in t)
+                    if match_count < 2: continue
+
+                # TAM YIL EŞLEŞMESİ (Araçlar için)
+                if target_year > 1900 and y > 1900:
+                    if y != target_year: 
+                        continue 
 
             # Fiyat Mantık Kontrolü
             if p > 0:
-                if p < (current_price * 0.5) or p > (current_price * 3):
+                if p < (current_price * 0.3) or p > (current_price * 4):
                     continue
                 valid_prices.append(p)
+                
+                # Benzer ilanları sakla (en fazla 5 tane)
+                if len(similar_listings) < 5:
+                    similar_listings.append({
+                        "title": item.get("title", "")[:50],
+                        "price": p,
+                        "location": item.get("location", ""),
+                        "url": item.get("url", "")
+                    })
         
         if len(valid_prices) < 2: return None
         
@@ -139,13 +210,27 @@ async def calculate_valuation(title, current_price, current_id, current_year, ca
         
         status = "Piyasa Normali"
         color = "#f1c40f"
-        if ratio <= 0.90: status = "🔥 Fırsat (Kelepir)"; color = "#2ecc71"
-        elif ratio >= 1.10: status = "💸 Piyasa Üstü"; color = "#e74c3c"
+        if ratio <= 0.85: status = "🔥 Fırsat (Kelepir)"; color = "#2ecc71"
+        elif ratio <= 0.95: status = "✅ Uygun Fiyat"; color = "#27ae60"
+        elif ratio >= 1.15: status = "💸 Piyasa Üstü"; color = "#e74c3c"
+        elif ratio >= 1.05: status = "⚠️ Biraz Yüksek"; color = "#e67e22"
         
-        # Bilgi mesajı: Tam Yıl olduğunu belirtiyoruz
-        info_msg = f"{len(valid_prices)} benzer ilan ({target_year} Model)"
-        if use_category_filter: info_msg += " [Kategori]"
-            
+        # Bilgi mesajı oluştur
+        if is_real_estate:
+            location_info = location_parts[0] if location_parts else "Bölge"
+            info_msg = f"{len(valid_prices)} benzer ilan ({location_info.title()})"
+            if room_count:
+                info_msg += f" [{room_count}]"
+        else:
+            info_msg = f"{len(valid_prices)} benzer ilan ({target_year} Model)"
+            if use_category_filter: info_msg += " [Kategori]"
+        
+        # m² fiyatı ve benzer ilanlar GİZLENSİN (Kullanıcı talebi)
+        m2_price = None
+        avg_m2_price = None
+        # Benzer ilanlar listesi boş dönecek
+        similar_listings = []
+
         return {
             "average_price": int(avg_price),
             "min_price": int(min_price),
@@ -154,7 +239,11 @@ async def calculate_valuation(title, current_price, current_id, current_year, ca
             "status": status,
             "color": color,
             "ratio": ratio,
-            "info_msg": info_msg
+            "info_msg": info_msg,
+            "is_real_estate": is_real_estate,
+            "m2_price": None,
+            "avg_m2_price": None,
+            "similar_listings": [] 
         }
     except Exception as e:
         print(f"Valuation Hatası: {e}")
@@ -166,6 +255,280 @@ async def get_user_notes(listing_id):
         if not doc or "comments" not in doc: return ""
         return "\n".join([f"- {c.get('user')}: {c.get('text')}" for c in doc["comments"]])
     except: return ""
+
+# 🟢 KATEGORİ ALGILAMA FONKSİYONU 🟢
+def detect_listing_type(category_path: str, listing_type: str = None) -> str:
+    """Kategori yolundan ilan tipini algılar"""
+    if listing_type:
+        return listing_type
+    
+    if not category_path:
+        return "araba"  # Varsayılan
+    
+    path_lower = category_path.lower()
+    
+    # Emlak kategorileri
+    if "konut" in path_lower or "daire" in path_lower or "ev" in path_lower:
+        if "kiralık" in path_lower:
+            return "konut_kiralik"
+        elif "satılık" in path_lower:
+            return "konut_satilik"
+        return "konut_satilik"  # Varsayılan emlak
+    
+    # İşyeri kategorileri
+    if "işyeri" in path_lower or "ofis" in path_lower:
+        if "kiralık" in path_lower:
+            return "isyeri_kiralik"
+        return "isyeri_satilik"
+    
+    # Arsa
+    if "arsa" in path_lower or "tarla" in path_lower:
+        return "arsa"
+    
+    # Vasıta (varsayılan)
+    return "araba"
+
+# 🟢 BÖLGE ANALİZİ (HABER + GELİŞİM + ULAŞIM) 🟢
+async def search_area_news(location: str) -> dict:
+    """Belirtilen lokasyon hakkında kapsamlı bilgi toplar"""
+    if not location or len(location) < 3:
+        return {}
+    
+    result = {
+        "safety": "",
+        "development": "",
+        "transport": "",
+        "general": ""
+    }
+    
+    # Lokasyonun ana kısmını al (İstanbul > Üsküdar > Küçüksu -> Üsküdar Küçüksu)
+    loc_parts = [p.strip() for p in location.replace(">", ",").split(",") if len(p.strip()) > 2]
+    search_loc = " ".join(loc_parts[-2:]) if len(loc_parts) >= 2 else location
+    
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    
+    try:
+        # 1. GÜVENLİK ANALİZİ
+        safety_query = f"{search_loc} asayiş olay suç haber"
+        safety_url = f"https://www.google.com/search?q={requests.utils.quote(safety_query)}&tbm=nws"
+        resp = requests.get(safety_url, headers=headers, timeout=5)
+        if resp.status_code == 200:
+            text = resp.text.lower()
+            negative = ["cinayet", "hırsızlık", "gasp", "uyuşturucu", "kavga", "silahlı", "bıçaklı", "taciz"]
+            found = [kw for kw in negative if kw in text]
+            if len(found) >= 3:
+                result["safety"] = f"⚠️ GÜVENLİK: Bu bölgede son dönemde güvenlik olayları haberlere yansımış. Dikkatli olun."
+            elif len(found) >= 1:
+                result["safety"] = f"ℹ️ GÜVENLİK: Nadiren güvenlik haberi var, genel olarak sakin bölge."
+            else:
+                result["safety"] = "✅ GÜVENLİK: Ciddi güvenlik sorunu tespit edilmedi."
+        
+        # 2. GELİŞİM / YATIRIM ANALİZİ
+        dev_query = f"{search_loc} yeni proje inşaat metro kentsel dönüşüm"
+        dev_url = f"https://www.google.com/search?q={requests.utils.quote(dev_query)}&tbm=nws"
+        resp = requests.get(dev_url, headers=headers, timeout=5)
+        if resp.status_code == 200:
+            text = resp.text.lower()
+            positive = ["metro", "tramvay", "hastane", "avm", "okul", "park", "dönüşüm", "yatırım", "proje"]
+            found = [kw for kw in positive if kw in text]
+            if len(found) >= 2:
+                result["development"] = f"📈 GELİŞİM: Bölgede yeni projeler/yatırımlar planlanıyor ({', '.join(found[:3])}). Değer artışı bekleniyor."
+            else:
+                result["development"] = "📊 GELİŞİM: Bölgede büyük yatırım haberi bulunmadı."
+        
+        # 3. ULAŞIM ANALİZİ
+        transport_query = f"{search_loc} ulaşım metro otobüs toplu taşıma"
+        transport_url = f"https://www.google.com/search?q={requests.utils.quote(transport_query)}"
+        resp = requests.get(transport_url, headers=headers, timeout=5)
+        if resp.status_code == 200:
+            text = resp.text.lower()
+            transport_kw = ["metro", "metrobüs", "marmaray", "tramvay", "vapur", "minibüs"]
+            found = [kw for kw in transport_kw if kw in text]
+            if found:
+                result["transport"] = f"🚇 ULAŞIM: Bölgede {', '.join(found[:3])} erişimi mevcut."
+        
+        # 4. GENEL BÖLGE BİLGİSİ
+        result["general"] = f"📍 {search_loc} bölgesi analiz edildi."
+        
+    except Exception as e:
+        print(f"Bölge analiz hatası: {e}")
+    
+    return result
+
+# 🟢 ARAÇ PROMPT OLUŞTURUCU 🟢
+def create_car_prompt(data, market_context: str, user_notes: str) -> str:
+    """Araç ilanları için AI prompt oluşturur"""
+    transmission_info = data.transmission or "Belirtilmemiş"
+    desc = (data.description or "")[:500]
+    
+    return f"""Sen BAI Bilmiş - akıllı araç danışmanısın.
+
+ARAÇ: {data.title}
+FİYAT: {data.price:,} TL | YIL: {data.year} | KM: {data.km} | VİTES: {transmission_info}
+AÇIKLAMA: {desc}
+
+{market_context}
+
+KULLANICI YORUMLARI: {user_notes or 'Yok'}
+
+CEVABINI TAMAMEN AŞAĞIDAKİ HTML ŞABLONUNDA VER (sadece HTML, başka bir şey yazma):
+
+<div style="font-family:sans-serif;font-size:13px;line-height:1.6;">
+<h3 style="color:#2c3e50;margin:0 0 10px;font-size:15px;">🎯 GENEL DEĞERLENDİRME</h3>
+<p style="background:#f8f9fa;padding:10px;border-radius:6px;margin:0 0 12px;">[2-3 cümle genel değerlendirme]</p>
+
+<h3 style="color:#27ae60;margin:0 0 8px;font-size:14px;">✅ ARTILARI</h3>
+<ul style="margin:0 0 12px;padding-left:20px;">
+<li>[Artı 1]</li>
+<li>[Artı 2]</li>
+</ul>
+
+<h3 style="color:#e74c3c;margin:0 0 8px;font-size:14px;">⚠️ EKSİLERİ</h3>
+<ul style="margin:0 0 12px;padding-left:20px;">
+<li>[Eksi 1]</li>
+<li>[Eksi 2]</li>
+</ul>
+
+<h3 style="color:#3498db;margin:0 0 8px;font-size:14px;">💡 ÖNERİLER</h3>
+<p style="background:#e8f4f8;padding:10px;border-radius:6px;border-left:3px solid #3498db;">[Alıcıya öneriler]</p>
+</div>
+"""
+
+# 🟢 KİRALIK KONUT PROMPT OLUŞTURUCU 🟢
+def create_rental_prompt(data, market_context: str, user_notes: str, area_info: dict = None) -> str:
+    """Kiralık konut ilanları için AI prompt oluşturur"""
+    desc = (data.description or "")[:400]
+    location = data.location or "Belirtilmemiş"
+    room_count = data.room_count or "?"
+    area_m2 = data.area_m2 or "?"
+    building_age = data.building_age or "?"
+    
+    # Bölge bilgilerini formatla
+    area_news = ""
+    if area_info:
+        # Haber başlıklarını al
+        news_headlines = ""
+        if area_info.get("news_items"):
+            news_headlines = "\nSON HABER BAŞLIKLARI:\n" + "\n".join([f"- {n['title']}" for n in area_info['news_items'][:5]])
+            
+        area_news = f"""
+🔍 BÖLGE ANALİZİ:
+{area_info.get('safety', '')}
+{area_info.get('development', '')}
+{area_info.get('transport', '')}
+
+{news_headlines}
+"""
+    
+    return f"""Sen BAI Bilmiş - akıllı emlak danışmanısın.
+
+KİRALIK: {data.title}
+KİRA: {data.price:,} TL/ay | LOKASYON: {location} | ODA: {room_count} | m²: {area_m2} | BİNA YAŞI: {building_age}
+AÇIKLAMA: {desc}
+
+{market_context}
+{area_news}
+KULLANICI YORUMLARI: {user_notes or 'Yok'}
+
+CEVABINI TAMAMEN AŞAĞIDAKİ HTML ŞABLONUNDA VER (sadece HTML, başka bir şey yazma):
+
+<div style="font-family:sans-serif;font-size:13px;line-height:1.6;">
+<h3 style="color:#2c3e50;margin:0 0 10px;font-size:15px;">🏠 KİRA DEĞERLENDİRMESİ</h3>
+<p style="background:#f8f9fa;padding:10px;border-radius:6px;margin:0 0 12px;">[Bu kira bölge ortalamasına göre nasıl? 2-3 cümle]</p>
+
+<h3 style="color:#27ae60;margin:0 0 8px;font-size:14px;">✅ AVANTAJLARI</h3>
+<ul style="margin:0 0 12px;padding-left:20px;">
+<li>[Lokasyon avantajı]</li>
+<li>[Ev özelliği avantajı]</li>
+</ul>
+
+<h3 style="color:#e74c3c;margin:0 0 8px;font-size:14px;">⚠️ DİKKAT EDİLECEKLER</h3>
+<ul style="margin:0 0 12px;padding-left:20px;">
+<li>[Dikkat 1]</li>
+<li>[Dikkat 2]</li>
+</ul>
+
+<h3 style="color:#9b59b6;margin:0 0 8px;font-size:14px;">📍 BÖLGE BİLGİSİ</h3>
+<p style="background:#f5f0ff;padding:10px;border-radius:6px;margin:0 0 12px;">[Güvenlik, ulaşım, gelişim bilgileri - yukarıdaki bölge analizini kullan]</p>
+
+<h3 style="color:#3498db;margin:0 0 8px;font-size:14px;">💡 ÖNERİM</h3>
+<p style="background:#e8f4f8;padding:10px;border-radius:6px;border-left:3px solid #3498db;">[Pazarlık ve karar önerisi]</p>
+</div>
+"""
+
+# 🟢 SATILIK KONUT PROMPT OLUŞTURUCU 🟢
+def create_home_sale_prompt(data, market_context: str, user_notes: str, area_info: dict = None) -> str:
+    """Satılık konut ilanları için AI prompt oluşturur"""
+    desc = (data.description or "")[:400]
+    location = data.location or "Belirtilmemiş"
+    room_count = data.room_count or "?"
+    area_m2 = data.area_m2 or "?"
+    building_age = data.building_age or "?"
+    
+    # m² fiyatı hesapla
+    m2_price = ""
+    try:
+        if data.area_m2 and data.price:
+            area_num = int(re.sub(r'[^\d]', '', str(data.area_m2)))
+            if area_num > 0:
+                m2_price = f"{int(data.price / area_num):,} TL/m²"
+    except: pass
+    
+    # Bölge bilgilerini formatla
+    area_news = ""
+    if area_info:
+        # Haber başlıklarını al
+        news_headlines = ""
+        if area_info.get("news_items"):
+            news_headlines = "\nSON HABER BAŞLIKLARI:\n" + "\n".join([f"- {n['title']}" for n in area_info['news_items'][:5]])
+            
+        area_news = f"""
+🔍 BÖLGE ANALİZİ:
+{area_info.get('safety', '')}
+{area_info.get('development', '')}
+{area_info.get('transport', '')}
+
+{news_headlines}
+"""
+    
+    return f"""Sen BAI Bilmiş - akıllı emlak danışmanısın.
+
+SATILIK: {data.title}
+FİYAT: {data.price:,} TL | m² FİYATI: {m2_price or '?'} | LOKASYON: {location} | ODA: {room_count} | m²: {area_m2} | BİNA: {building_age}
+AÇIKLAMA: {desc}
+
+{market_context}
+{area_news}
+KULLANICI YORUMLARI: {user_notes or 'Yok'}
+
+CEVABINI TAMAMEN AŞAĞIDAKİ HTML ŞABLONUNDA VER (sadece HTML, başka bir şey yazma):
+
+<div style="font-family:sans-serif;font-size:13px;line-height:1.6;">
+<h3 style="color:#2c3e50;margin:0 0 10px;font-size:15px;">🏡 FİYAT DEĞERLENDİRMESİ</h3>
+<p style="background:#f8f9fa;padding:10px;border-radius:6px;margin:0 0 12px;">[Bu fiyat bölge ortalamasına göre nasıl? m² fiyatı değerlendirmesi. 2-3 cümle]</p>
+
+<h3 style="color:#27ae60;margin:0 0 8px;font-size:14px;">✅ AVANTAJLARI</h3>
+<ul style="margin:0 0 12px;padding-left:20px;">
+<li>[Lokasyon avantajı]</li>
+<li>[Ev özelliği avantajı]</li>
+</ul>
+
+<h3 style="color:#e74c3c;margin:0 0 8px;font-size:14px;">⚠️ RİSKLER</h3>
+<ul style="margin:0 0 12px;padding-left:20px;">
+<li>[Bina yaşı riski varsa]</li>
+<li>[Diğer riskler]</li>
+</ul>
+
+<h3 style="color:#9b59b6;margin:0 0 8px;font-size:14px;">📍 BÖLGE BİLGİSİ</h3>
+<p style="background:#f5f0ff;padding:10px;border-radius:6px;margin:0 0 12px;">[Güvenlik, ulaşım, gelişim - yukarıdaki bölge analizini kullan]</p>
+
+<h3 style="color:#f39c12;margin:0 0 8px;font-size:14px;">📈 YATIRIM POTANSİYELİ</h3>
+<p style="background:#fef9e7;padding:10px;border-radius:6px;margin:0 0 12px;">[Kira getirisi, değer artış potansiyeli]</p>
+
+<h3 style="color:#3498db;margin:0 0 8px;font-size:14px;">💡 ÖNERİM</h3>
+<p style="background:#e8f4f8;padding:10px;border-radius:6px;border-left:3px solid #3498db;">[Pazarlık ve karar önerisi, ekspertiz uyarısı]</p>
+</div>
+"""
 
 # --- ENDPOINTLER ---
 
@@ -261,31 +624,81 @@ async def ask_ai(data: ListingData):
     if user:
         if user.get("plan") != "premium" and user.get("daily_usage", 0) >= FREE_DAILY_LIMIT:
             return {"status": "limit_reached", "message": "Günlük limit doldu."}
-        await users_collection.update_one({"_id": data.user_id}, {"$inc": {"daily_usage": 1}})
+        
+        # Kullanım miktarını artır VE son görülme zamanını güncelle (Admin istatistikleri için)
+        await users_collection.update_one(
+            {"_id": data.user_id}, 
+            {
+                "$inc": {"daily_usage": 1},
+                "$set": {"last_login": datetime.now()} 
+            }
+        )
 
-    # Valuation'a kategori yolunu da gönder
-    valuation = await calculate_valuation(data.title, data.price, data.id, data.year, data.category_path)
+    # 🟢 KATEGORİ ALGILAMA 🟢
+    listing_type = detect_listing_type(data.category_path, data.listing_type)
+
+    # Valuation'a tüm parametreleri gönder (emlak için lokasyon bazlı karşılaştırma)
+    valuation = await calculate_valuation(
+        title=data.title, 
+        current_price=data.price, 
+        current_id=data.id, 
+        current_year=data.year, 
+        category_path=data.category_path,
+        listing_type=listing_type,
+        location=data.location,
+        room_count=data.room_count,
+        area_m2=data.area_m2
+    )
     user_notes = await get_user_notes(data.id)
     
     market_context = "Veri yok"
     if valuation:
-        market_context = (
-            f"VERİTABANI ANALİZİ:\n"
-            f"- Kategori: {data.category_path or 'Genel'}\n"
-            f"- Benzer İlan: {valuation['listing_count']} adet\n"
-            f"- Ort: {valuation['average_price']} TL | Min: {valuation['min_price']} TL | Max: {valuation['max_price']} TL\n"
-            f"- Durum: {valuation['status']}"
-        )
+        # Emlak için özel market context
+        if valuation.get("is_real_estate"):
+            m2_info = ""
+            if valuation.get("m2_price"):
+                m2_info = f"\n- Bu İlan m² Fiyatı: {valuation['m2_price']:,} TL/m²"
+                if valuation.get("avg_m2_price"):
+                    m2_info += f" | Bölge Ort: {valuation['avg_m2_price']:,} TL/m²"
+            
+            similar_info = ""
+            if valuation.get("similar_listings"):
+                similar_info = "\n- Benzer İlanlar: " + ", ".join([
+                    f"{s['title'][:30]}... ({s['price']:,} TL)" 
+                    for s in valuation['similar_listings'][:2]
+                ])
+            
+            market_context = (
+                f"VERİTABANI ANALİZİ (EMLAK):\n"
+                f"- Lokasyon: {data.location or 'Belirtilmemiş'}\n"
+                f"- Benzer İlan: {valuation['listing_count']} adet (aynı bölge, benzer m²)\n"
+                f"- Ort: {valuation['average_price']:,} TL | Min: {valuation['min_price']:,} TL | Max: {valuation['max_price']:,} TL\n"
+                f"- Durum: {valuation['status']}"
+                f"{m2_info}{similar_info}"
+            )
+        else:
+            # Araç için mevcut format
+            market_context = (
+                f"VERİTABANI ANALİZİ:\n"
+                f"- Kategori: {data.category_path or 'Genel'}\n"
+                f"- Benzer İlan: {valuation['listing_count']} adet\n"
+                f"- Ort: {valuation['average_price']:,} TL | Min: {valuation['min_price']:,} TL | Max: {valuation['max_price']:,} TL\n"
+                f"- Durum: {valuation['status']}"
+            )
 
-    prompt = f"""
-    Sen uzman bir araç alım-satım danışmanısın (BAI Bilmiş).
-    ARAÇ: {data.title}, {data.price} TL, {data.year}, {data.km}
-    KATEGORİ: {data.category_path}
-    AÇIKLAMA: {data.description[:600]}...
-    {market_context}
-    NOTLAR: {user_notes}
-    GÖREV: Fiyat/Performans analizi yap. HTML ile cevap ver.
-    """
+    # 🟢 BÖLGE HABERLERİNİ GETİR (Emlak için) 🟢
+    area_info = {}
+    if listing_type in ["konut_kiralik", "konut_satilik"]:
+        area_info = await search_area_news_persistent(data.location)
+
+    # 🟢 KATEGORİYE GÖRE PROMPT OLUŞTUR 🟢
+    if listing_type == "konut_kiralik":
+        prompt = create_rental_prompt(data, market_context, user_notes, area_info)
+    elif listing_type == "konut_satilik":
+        prompt = create_home_sale_prompt(data, market_context, user_notes, area_info)
+    else:
+        # Varsayılan: Araç
+        prompt = create_car_prompt(data, market_context, user_notes)
     
     # 🟢 GOOGLE AI REST API (v1beta) 🟢
     import asyncio
@@ -324,6 +737,27 @@ async def ask_ai(data: ListingData):
                             text = "".join([part.get("text", "") for part in candidate["content"]["parts"]])
                             if text:
                                 print(f"✅ Başarılı: {model_name}")
+                                
+                                # 🟢 HABER FEED (Twitter Tarzı) EKLE 🟢
+                                if area_info.get("news_items"):
+                                    news_html = "<div style='margin-top:25px;padding-top:15px;border-top:2px solid #eee;'>"
+                                    news_html += "<h3 style='font-size:14px;color:#293542;margin-bottom:12px;display:flex;align-items:center;'>🗞️ BÖLGE HABER AKIŞI <span style='font-size:10px;background:#eee;padding:2px 6px;border-radius:10px;margin-left:8px;color:#666;'>Canlı</span></h3>"
+                                    for item in area_info['news_items'][:5]:
+                                        source_name = item.get('source', 'Haber')
+                                        date_str = item.get('date', '')[:16]
+                                        news_html += f"""
+                                        <div style="margin-bottom:10px;padding:10px;background:#fff;border:1px solid #e1e8ed;border-radius:8px;transition:all 0.2s;">
+                                            <div style="display:flex;align-items:center;margin-bottom:5px;">
+                                                <div style="width:20px;height:20px;background:#1da1f2;border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-size:10px;font-weight:bold;margin-right:8px;">{source_name[0]}</div>
+                                                <div style="font-size:11px;font-weight:bold;color:#14171a;">{source_name}</div>
+                                                <div style="font-size:10px;color:#657786;margin-left:5px;">• {date_str}</div>
+                                            </div>
+                                            <a href="{item['link']}" target="_blank" style="text-decoration:none;color:#14171a;font-size:12px;line-height:1.4;display:block;">{item['title']}</a>
+                                        </div>
+                                        """
+                                    news_html += "</div>"
+                                    text += news_html
+                                
                                 return {"status": "success", "ai_response": text}
                 
                 # Hata yönetimi
@@ -366,7 +800,14 @@ async def analyze_listing(data: ListingData):
             "url": data.url,
             "year": data.year,
             "km": data.km,
-            "category_path": data.category_path # <-- Kategori Kaydı
+            "category_path": data.category_path,
+            # Yeni alanlar
+            "transmission": data.transmission,
+            "listing_type": data.listing_type,
+            "location": data.location,
+            "room_count": data.room_count,
+            "area_m2": data.area_m2,
+            "building_age": data.building_age
         }
         
         existing = await listings_collection.find_one({"_id": data.id})
@@ -377,7 +818,22 @@ async def analyze_listing(data: ListingData):
             await listings_collection.update_one({"_id": data.id}, {"$set": update_doc}, upsert=True)
             
         doc = await listings_collection.find_one({"_id": data.id})
-        valuation = await calculate_valuation(data.title, data.price, data.id, data.year, data.category_path)
+        
+        # Kategori tipini algıla
+        listing_type = detect_listing_type(data.category_path, data.listing_type)
+        
+        # Valuation hesapla (emlak için lokasyon bazlı karşılaştırma)
+        valuation = await calculate_valuation(
+            title=data.title, 
+            current_price=data.price, 
+            current_id=data.id, 
+            current_year=data.year, 
+            category_path=data.category_path,
+            listing_type=listing_type,
+            location=data.location,
+            room_count=data.room_count,
+            area_m2=data.area_m2
+        )
         
         return {"status": "success", "valuation": valuation, "history": doc.get("history", []), "comments": doc.get("comments", [])}
     except Exception as e:
@@ -684,7 +1140,7 @@ async def admin_get_stats(admin_email: str):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
-# --- BULK UPLOAD (Kategori Destekli & Tarih Düzeltmeli) ---
+# --- BULK UPLOAD (Kategori Destekli & Tüm Alanlar) ---
 @app.post("/bulk-upload")
 async def bulk_upload(listings: List[ListingData]):
     if not listings: return {"status": "empty"}
@@ -703,9 +1159,16 @@ async def bulk_upload(listings: List[ListingData]):
                     "title": item.title, 
                     "year": item.year, 
                     "km": item.km,
-                    "category_path": item.category_path # <-- Kategori Kaydı
+                    "category_path": item.category_path,
+                    # Yeni alanlar
+                    "transmission": item.transmission,
+                    "listing_type": item.listing_type,
+                    "location": item.location,
+                    "room_count": item.room_count,
+                    "area_m2": item.area_m2,
+                    "building_age": item.building_age
                 },
-                "$min": { "first_seen_at": now }, # Eksik tarihleri düzeltir
+                "$min": { "first_seen_at": now },
                 "$setOnInsert": { "history": [], "comments": [] }
             },
             upsert=True
@@ -720,3 +1183,111 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run("backend.main:app", host="0.0.0.0", port=port)
+
+# 🟢 BÖLGE ANALİZİ (PERSISTENT - RSS) 🟢
+async def search_area_news_persistent(location: str) -> dict:
+    """Belirtilen lokasyon hakkında kapsamlı bilgi toplar (RSS) ve veritabanına kaydeder"""
+    if not location or len(location) < 3: return {}
+    
+    # Lokasyon temizleme
+    loc_parts = [p.strip() for p in location.replace(">", ",").split(",") if len(p.strip()) > 2]
+    # En detaylı kısmı al (Örn: Üsküdar Küçüksu)
+    if len(loc_parts) >= 2:
+        search_loc_full = " ".join(loc_parts[-2:])
+    elif len(loc_parts) == 1:
+        search_loc_full = loc_parts[0]
+    else:
+        search_loc_full = location
+        
+    search_loc_slug = search_loc_full.lower().replace(" ", "-").replace("ı", "i").replace("ü", "u").replace("ö", "o").replace("ş", "s").replace("ç", "c").replace("ğ", "g")
+    
+    # 1. ÖNCE DB KONTROL ET (Son 24 saat - Haberler güncel olmalı)
+    try:
+        from backend.database import area_insights_collection
+        existing_data = await area_insights_collection.find_one({"_id": search_loc_slug})
+        
+        if existing_data:
+            last_date = existing_data.get("updated_at")
+            if last_date:
+                # 24 saat geçti mi? (Haber akışı için kısa tut)
+                last_dt = datetime.strptime(last_date, "%Y-%m-%d %H:%M:%S")
+                if (datetime.now() - last_dt).days < 1:
+                    return existing_data.get("data", {})
+    except Exception as e:
+        print(f"DB Read Error: {e}")
+    
+    # 2. RSS ARAMA (Google News)
+    rss_url = f"https://news.google.com/rss/search?q={search_loc_full}+haber&hl=tr-TR&gl=TR&ceid=TR:tr"
+    
+    result = {
+        "safety": "",
+        "development": "",
+        "transport": "",
+        "general": f"📍 {search_loc_full} Bölgesi Haber Özeti",
+        "news_items": []
+    }
+    
+    try:
+        resp = requests.get(rss_url, timeout=5)
+        if resp.status_code == 200:
+            root = ET.fromstring(resp.content)
+            items = root.findall(".//item")
+            
+            # Anahtar Kelimeler
+            neg_kw = ["cinayet", "silahlı", "kavga", "hırsızlık", "uyuşturucu", "gasp", "ölü", "yaralı", "yangın", "kaza", "operasyon", "çete"]
+            pos_kw = ["yatırım", "proje", "metro", "tören", "hizmet", "park", "okul", "hastane", "açılış", "değer", "konut"]
+            trans_kw = ["metro", "otobüs", "sefer", "durak", "marmaray", "ulaşım", "yol", "köprü", "tünel"]
+            
+            safety_hits = []
+            dev_hits = []
+            trans_hits = []
+            
+            for item in items[:15]: # Son 15 haber
+                title = item.find("title").text if item.find("title") is not None else ""
+                link = item.find("link").text if item.find("link") is not None else ""
+                pubDate = item.find("pubDate").text if item.find("pubDate") is not None else ""
+                source = item.find("source").text if item.find("source") is not None else "Google Haberler"
+                
+                # Listeye ekle
+                result["news_items"].append({
+                    "title": title,
+                    "link": link,
+                    "date": pubDate,
+                    "source": source
+                })
+                
+                t_low = title.lower()
+                if any(k in t_low for k in neg_kw): safety_hits.append(title)
+                if any(k in t_low for k in pos_kw): dev_hits.append(title)
+                if any(k in t_low for k in trans_kw): trans_hits.append(title)
+            
+            # Analiz Metinlerini Oluştur
+            if safety_hits:
+                result["safety"] = f"⚠️ GÜVENLİK: Güncel haberlerde bazı asayiş olayları ({len(safety_hits)} adet) göze çarpıyor. Örn: {safety_hits[0]}"
+            else:
+                result["safety"] = "✅ GÜVENLİK: Güncel haber akışında bölgeyle ilgili olumsuz bir asayiş olayı öne çıkmıyor."
+                
+            if dev_hits:
+                result["development"] = f"📈 GELİŞİM: Bölge hareketli, yeni projeler ve yatırımlar gündemde: {dev_hits[0]}"
+            else:
+                result["development"] = "📊 GELİŞİM: Son dönemde bölgeyle ilgili büyük bir yatırım haberi akışa düşmedi."
+
+            if trans_hits:
+                result["transport"] = f"🚇 ULAŞIM: Ulaşım ve altyapı ile ilgili haberler mevcut: {trans_hits[0]}"
+        
+        # DB'ye KAYDET
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        await area_insights_collection.update_one(
+            {"_id": search_loc_slug},
+            {"$set": {
+                "updated_at": now_str,
+                "location_name": search_loc_full,
+                "data": result
+            }},
+            upsert=True
+        )
+
+    except Exception as e:
+        print(f"RSS Analiz Hatası: {e}")
+    
+    return result

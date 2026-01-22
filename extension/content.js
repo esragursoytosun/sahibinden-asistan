@@ -37,36 +37,108 @@ function getCategoryPath() {
     return null;
 }
 
-// 🟢 2. HIZLI TARAMA MODU (Liste Sayfası)
+// 🟢 2. HIZLI TARAMA MODU (Liste Sayfası - DOĞRU SÜTUN OKUMA)
 async function runSweepMode() {
     const searchTable = document.querySelector('table#searchResultsTable');
 
     if (searchTable) {
-        // 1. Sayfanın genel kategorisini TEPEDEN al (Her satır için tekrar arama, tek seferde al)
+        // 1. Sayfanın genel kategorisini ve lokasyonunu TEPEDEN al
         const pageCategory = getCategoryPath();
+        const listingType = detectListingType(pageCategory);
+
+        // 🏠 LOKASYON: Breadcrumb'dan sayfa lokasyonunu al (İstanbul > Beylikdüzü > Yakuplu gibi)
+        const pageLocation = getPageLocation();
+
+        console.log(`🔍 BAI BILMIS: Tarama başlıyor - Tip: ${listingType}, Lokasyon: ${pageLocation}`);
 
         let rows = document.querySelectorAll('tr.searchResultsItem');
         let batchData = [];
 
-        rows.forEach(row => {
+        rows.forEach((row, index) => {
             try {
                 let id = row.getAttribute('data-id');
                 let priceText = row.querySelector('.searchResultsPriceValue span')?.innerText;
 
                 let titleElement = row.querySelector('.searchResultsTitleValue a');
-                let title = titleElement?.innerText || "Liste İlanı";
+                let title = titleElement?.innerText?.trim() || "Liste İlanı";
                 let url = titleElement?.href || "";
 
-                // --- SÜTUN AYRIŞTIRMA (RENK HARİÇ) ---
-                // Tabloda AttributeValue sınıfına sahip sütunlar sırasıyla: [0]=Yıl, [1]=KM, [2]=Renk
-                let attributes = row.querySelectorAll('.searchResultsAttributeValue');
-                let year = null;
-                let km = null;
+                // --- TÜM SÜTUNLARI TARA (td hücrelerinden) ---
+                let allCells = row.querySelectorAll('td');
+                let year = null, km = null, roomCount = null, areaM2 = null, buildingAge = null, transmission = null;
+                let rowLocation = pageLocation;
 
-                if (attributes.length >= 2) {
-                    year = attributes[0].innerText.trim(); // İlk sütun: Yıl
-                    km = attributes[1].innerText.trim();   // İkinci sütun: KM
-                    // attributes[2] Renk sütunudur, onu bilerek almıyoruz ki kategoriye karışmasın.
+                // Tablo başlıklarını kontrol et ve sütun indekslerini bul
+                const headerRow = searchTable.querySelector('thead tr');
+                if (headerRow) {
+                    const headers = Array.from(headerRow.querySelectorAll('th')).map(h => h.innerText.toLowerCase().trim());
+
+                    allCells.forEach((cell, cellIndex) => {
+                        const cellText = cell.innerText?.trim() || "";
+                        const header = headers[cellIndex] || "";
+
+                        // Emlak sütunları
+                        if (header.includes("m²") || header.includes("brüt") || header.includes("net")) {
+                            areaM2 = cellText;
+                        }
+                        if (header.includes("oda")) {
+                            roomCount = cellText;
+                        }
+                        if (header.includes("mahalle") || header.includes("semt") || header.includes("ilçe")) {
+                            if (cellText.length > 1) rowLocation = pageLocation + " > " + cellText;
+                        }
+                        if (header.includes("bina") || header.includes("yaş")) {
+                            buildingAge = cellText;
+                        }
+
+                        // Araç sütunları
+                        if (header.includes("yıl") || header.includes("model")) {
+                            year = cellText;
+                        }
+                        if (header.includes("km")) {
+                            km = cellText;
+                        }
+                        if (header.includes("vites")) {
+                            transmission = cellText;
+                        }
+                    });
+                }
+
+                // Alternatif: Eski yöntem (AttributeValue sınıfı)
+                if (!areaM2 && !roomCount && !year) {
+                    let attributes = row.querySelectorAll('.searchResultsAttributeValue');
+                    if (listingType === "araba" && attributes.length >= 2) {
+                        year = attributes[0]?.innerText?.trim();
+                        km = attributes[1]?.innerText?.trim();
+                    }
+                    if ((listingType.includes("konut") || listingType.includes("isyeri")) && attributes.length >= 2) {
+                        // Sahibinden'de emlak için: [0]=m², [1]=Oda Sayısı veya tam tersi
+                        const attr0 = attributes[0]?.innerText?.trim() || "";
+                        const attr1 = attributes[1]?.innerText?.trim() || "";
+
+                        // m² genelde rakam içerir, oda sayısı + içerir
+                        if (attr0.includes("+") || attr0.match(/^\d\+/)) {
+                            roomCount = attr0;
+                            areaM2 = attr1;
+                        } else {
+                            areaM2 = attr0;
+                            roomCount = attr1;
+                        }
+
+                        if (attributes.length >= 3) buildingAge = attributes[2]?.innerText?.trim();
+                    }
+                }
+
+                // Mahalle sütunu (en sağdaki hücre genelde)
+                const lastCells = row.querySelectorAll('td');
+                if (lastCells.length > 0) {
+                    const lastCell = lastCells[lastCells.length - 1];
+                    const lastText = lastCell?.innerText?.trim() || "";
+                    if (lastText.includes("Mah") || lastText.includes("mah") || lastText.length < 20) {
+                        if (lastText.length > 2 && !lastText.includes("TL") && !lastText.includes("2026") && !lastText.includes("2025")) {
+                            rowLocation = pageLocation + " > " + lastText;
+                        }
+                    }
                 }
 
                 if (id && priceText) {
@@ -79,28 +151,64 @@ async function runSweepMode() {
                             url,
                             year,
                             km,
-                            category_path: pageCategory // Sayfanın tepesinden aldığımız net kategori
+                            transmission,
+                            category_path: pageCategory,
+                            listing_type: listingType,
+                            location: rowLocation,
+                            room_count: roomCount,
+                            area_m2: areaM2,
+                            building_age: buildingAge
                         });
+
+                        // İlk 3 kaydı logla (debug için)
+                        if (index < 3) {
+                            console.log(`📝 İlan ${index + 1}: ${title.substring(0, 30)}... | ${areaM2} m² | ${roomCount} oda | ${rowLocation}`);
+                        }
                     }
                 }
-            } catch (e) { }
+            } catch (e) { console.log("Satır okuma hatası:", e); }
         });
 
         // Toplanan verileri backend'e gönder
         if (batchData.length > 0) {
             try {
-                await fetch(`${API_URL}/bulk-upload`, {
+                const response = await fetch(`${API_URL}/bulk-upload`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(batchData)
                 });
-                console.log(`BAI BILMIS: ${batchData.length} ilan başarıyla işlendi.`);
-            } catch (e) { }
+                const result = await response.json();
+                console.log(`✅ BAI BILMIS: ${batchData.length} ${listingType} ilanı kaydedildi!`);
+                console.log(`📍 Lokasyon: ${pageLocation} | m² ve oda bilgisi: ${batchData.filter(d => d.area_m2).length} ilan`);
+            } catch (e) { console.log("Bulk upload hatası:", e); }
+        } else {
+            console.log("⚠️ BAI BILMIS: Bu sayfada kayıt edilecek ilan bulunamadı.");
         }
     }
 }
 
-// 🟢 3. TEKİL İLAN VERİSİ
+// 🟢 2.1. SAYFA LOKASYONUNU AL (Breadcrumb'dan)
+function getPageLocation() {
+    try {
+        const bcItems = document.querySelectorAll('li.bc-item > a > span');
+        const allItems = Array.from(bcItems).map(s => s.innerText.trim());
+
+        // Kategori kelimelerini filtrele, sadece lokasyon kalsın
+        const categoryWords = ['Satılık', 'Kiralık', 'Konut', 'Vasıta', 'Emlak', 'Daire', 'Araba', 'Otomobil', 'İlan', 'Sahibinden'];
+        const locationParts = allItems.filter(item => {
+            if (item.length < 2) return false;
+            return !categoryWords.some(cat => item.toLowerCase().includes(cat.toLowerCase()));
+        });
+
+        // Son 3 parçayı al (genelde İl > İlçe > Mahalle)
+        if (locationParts.length > 0) {
+            return locationParts.slice(-3).join(" > ");
+        }
+    } catch (e) { console.log("Lokasyon okuma hatası:", e); }
+    return "";
+}
+
+// 🟢 3. TEKİL İLAN VERİSİ (GENİŞLETİLMİŞ)
 function getListingData() {
     try {
         let priceElem = document.querySelector('.classifiedInfo h3') || document.querySelector('div.price-info');
@@ -111,16 +219,58 @@ function getListingData() {
         const title = document.querySelector('.classifiedDetailTitle h1')?.innerText.trim() || document.title;
         const desc = document.querySelector('#classifiedDescription')?.innerText || "";
 
-        let km = "Bilinmiyor", year = "Bilinmiyor";
-        document.querySelectorAll('.classifiedInfoList li').forEach(li => {
-            const lbl = li.querySelector('strong')?.innerText;
-            const val = li.querySelector('span')?.innerText;
-            if (lbl?.includes("KM")) km = val;
-            if (lbl?.includes("Yıl")) year = val;
-        });
-
         // Detay sayfasında da aynı kategori yolunu alıyoruz
         const categoryPath = getCategoryPath();
+
+        // 🟢 KATEGORİ TİPİNİ ALGILAMA 🟢
+        const listingType = detectListingType(categoryPath);
+
+        // 🟢 ORTAK BİLGİLER 🟢
+        let km = "Bilinmiyor", year = "Bilinmiyor", transmission = "Bilinmiyor";
+        let roomCount = "Bilinmiyor", areaM2 = "Bilinmiyor", buildingAge = "Bilinmiyor";
+        let location = "";
+
+        // Tüm bilgi listelerini tara
+        document.querySelectorAll('.classifiedInfoList li').forEach(li => {
+            const lbl = li.querySelector('strong')?.innerText?.toLowerCase() || "";
+            const val = li.querySelector('span')?.innerText?.trim() || "";
+
+            // Araç bilgileri
+            if (lbl.includes("km")) km = val;
+            if (lbl.includes("yıl") || lbl.includes("model yılı")) year = val;
+            if (lbl.includes("vites")) transmission = val;
+
+            // Emlak bilgileri
+            if (lbl.includes("oda sayısı") || lbl.includes("oda")) roomCount = val;
+            if (lbl.includes("m²") || lbl.includes("brüt") || lbl.includes("net m")) areaM2 = val;
+            if (lbl.includes("bina yaşı") || lbl.includes("yaş")) buildingAge = val;
+        });
+
+        // 🟢 LOKASYON BİLGİSİ 🟢
+        // Sahibinden'de lokasyon genelde breadcrumb veya info bölümünde
+        try {
+            // Lokasyon bilgisini al (İl > İlçe > Mahalle formatında)
+            const locationEl = document.querySelector('.classifiedInfo h2') ||
+                document.querySelector('[class*="location"]') ||
+                document.querySelector('.classifiedInfoList li:last-child span');
+            if (locationEl) {
+                location = locationEl.innerText.trim();
+            }
+
+            // Alternatif: Breadcrumb'dan lokasyon
+            if (!location || location.length < 3) {
+                const bcItems = document.querySelectorAll('li.bc-item > a > span');
+                const allItems = Array.from(bcItems).map(s => s.innerText.trim());
+                // Son 2-3 eleman genelde lokasyon (İstanbul > Kadıköy gibi)
+                const locationParts = allItems.slice(-3).filter(t =>
+                    !t.includes("Satılık") && !t.includes("Kiralık") &&
+                    !t.includes("Konut") && !t.includes("Vasıta") && t.length > 2
+                );
+                if (locationParts.length > 0) {
+                    location = locationParts.join(" > ");
+                }
+            }
+        } catch (e) { console.log("Lokasyon okuma hatası:", e); }
 
         return {
             id,
@@ -130,9 +280,40 @@ function getListingData() {
             km,
             year,
             url: window.location.href,
-            category_path: categoryPath // Kategoriyi ekle
+            category_path: categoryPath,
+            // Yeni alanlar
+            transmission,
+            listing_type: listingType,
+            location,
+            room_count: roomCount,
+            area_m2: areaM2,
+            building_age: buildingAge
         };
     } catch (e) { return null; }
+}
+
+// 🟢 4. KATEGORİ TİPİ ALGILAMA 🟢
+function detectListingType(categoryPath) {
+    if (!categoryPath) return "araba";
+
+    const path = categoryPath.toLowerCase();
+
+    if (path.includes("konut") || path.includes("daire") || path.includes("ev") || path.includes("residence")) {
+        if (path.includes("kiralık")) return "konut_kiralik";
+        if (path.includes("satılık")) return "konut_satilik";
+        return "konut_satilik";
+    }
+
+    if (path.includes("işyeri") || path.includes("ofis") || path.includes("dükkan")) {
+        if (path.includes("kiralık")) return "isyeri_kiralik";
+        return "isyeri_satilik";
+    }
+
+    if (path.includes("arsa") || path.includes("tarla") || path.includes("arazi")) {
+        return "arsa";
+    }
+
+    return "araba";
 }
 
 // --- STANDART FONKSİYONLAR (Arayüz vb.) ---
@@ -154,16 +335,192 @@ function handleTelegramClick() {
     window.open(`https://t.me/BAIBilmisBot?start=${user.id}`, '_blank');
 }
 
+// 🟢 AI SONUÇ YAN PANEL FONKSİYONU (SOLA AÇILIR) 🟢
+function showAiSidePanel(htmlContent) {
+    // Varsa eski paneli kaldır
+    const existingPanel = document.getElementById('bai-ai-side-panel');
+    if (existingPanel) existingPanel.remove();
+
+    // Yana açılan panel oluştur
+    const sidePanel = document.createElement('div');
+    sidePanel.id = 'bai-ai-side-panel';
+    sidePanel.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 420px;
+        height: 100vh;
+        background: linear-gradient(180deg, #293542 0%, #1a2530 100%);
+        z-index: 2147483647;
+        box-shadow: 5px 0 30px rgba(0,0,0,0.3);
+        display: flex;
+        flex-direction: column;
+        font-family: 'Open Sans', sans-serif;
+        animation: slideIn 0.3s ease;
+    `;
+
+    // CSS animasyonu ekle
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes slideIn {
+            from { transform: translateX(-100%); }
+            to { transform: translateX(0); }
+        }
+        @keyframes slideOut {
+            from { transform: translateX(0); }
+            to { transform: translateX(-100%); }
+        }
+    `;
+    document.head.appendChild(style);
+
+    sidePanel.innerHTML = `
+        <div style="padding:15px 20px;background:rgba(255,208,0,0.1);border-bottom:1px solid rgba(255,255,255,0.1);display:flex;justify-content:space-between;align-items:center;">
+            <div>
+                <div style="font-size:16px;font-weight:900;color:#FFD000;">🤖 AI ANALİZ RAPORU</div>
+                <div style="font-size:10px;color:#888;margin-top:2px;">BAI Bilmiş Detaylı Değerlendirme</div>
+            </div>
+            <button id="closeSidePanel" style="background:none;border:none;color:#fff;font-size:24px;cursor:pointer;padding:5px 10px;opacity:0.7;">&times;</button>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:20px;background:#fff;">
+            <div id="sidePanelContent" style="font-size:13px;line-height:1.7;color:#333;">
+                ${htmlContent}
+            </div>
+        </div>
+        <div style="padding:12px 20px;background:#293542;border-top:1px solid rgba(255,255,255,0.1);text-align:center;">
+            <div style="font-size:10px;color:#888;">💡 İpucu: Paneli kapatmak için sağ üstteki X'e tıklayın</div>
+        </div>
+    `;
+
+    document.body.appendChild(sidePanel);
+
+    // Kapatma butonu
+    document.getElementById('closeSidePanel').onclick = () => {
+        sidePanel.style.animation = 'slideOut 0.3s ease forwards';
+        setTimeout(() => sidePanel.remove(), 300);
+    };
+}
+
+// 🟢 AI SONUÇ ACCORDION FONKSİYONU (AÇILIR-KAPANIR BÖLÜMLER) 🟢
+function showAiCarousel(container, htmlContent) {
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = htmlContent;
+
+    const sections = [];
+    let currentSection = { title: '📊 Özet', content: '' };
+
+    const allElements = tempDiv.querySelectorAll('h3, p, ul, div');
+    allElements.forEach(el => {
+        if (el.tagName === 'H3') {
+            if (currentSection.content) {
+                sections.push({ ...currentSection });
+            }
+            currentSection = {
+                title: el.innerText.trim(),
+                content: ''
+            };
+        } else {
+            currentSection.content += el.outerHTML;
+        }
+    });
+
+    if (currentSection.content) {
+        sections.push(currentSection);
+    }
+
+    if (sections.length === 0) {
+        container.innerHTML = htmlContent;
+        return;
+    }
+
+    // Accordion HTML oluştur
+    let accordionHTML = '<div style="font-family:sans-serif;">';
+
+    sections.forEach((section, index) => {
+        const isFirst = index === 0;
+        accordionHTML += `
+            <div style="margin-bottom:6px;border:1px solid #e0e0e0;border-radius:8px;overflow:hidden;background:#fff;">
+                <div class="ai-acc-hdr" data-idx="${index}" style="padding:10px 12px;background:${isFirst ? '#293542' : '#f8f9fa'};cursor:pointer;display:flex;justify-content:space-between;align-items:center;">
+                    <span style="font-weight:bold;font-size:12px;color:${isFirst ? '#FFD000' : '#333'};">${section.title}</span>
+                    <span class="ai-acc-arr" style="font-size:10px;color:${isFirst ? '#FFD000' : '#888'};">${isFirst ? '▼' : '▶'}</span>
+                </div>
+                <div class="ai-acc-cnt" data-idx="${index}" style="padding:${isFirst ? '10px 12px' : '0 12px'};max-height:${isFirst ? '200px' : '0'};overflow-y:auto;font-size:11px;line-height:1.5;color:#444;transition:all 0.2s;">
+                    ${section.content}
+                </div>
+            </div>
+        `;
+    });
+
+    accordionHTML += '</div>';
+    container.innerHTML = accordionHTML;
+
+    // Accordion eventleri
+    container.querySelectorAll('.ai-acc-hdr').forEach(header => {
+        header.onclick = function () {
+            const idx = this.getAttribute('data-idx');
+            const content = container.querySelector(`.ai-acc-cnt[data-idx="${idx}"]`);
+            const arrow = this.querySelector('.ai-acc-arr');
+            const isOpen = content.style.maxHeight !== '0px' && content.style.maxHeight !== '';
+
+            if (isOpen) {
+                content.style.maxHeight = '0';
+                content.style.padding = '0 12px';
+                arrow.textContent = '▶';
+                this.style.background = '#f8f9fa';
+                this.querySelector('span').style.color = '#333';
+            } else {
+                content.style.maxHeight = '200px';
+                content.style.padding = '10px 12px';
+                arrow.textContent = '▼';
+                this.style.background = '#293542';
+                this.querySelector('span').style.color = '#FFD000';
+            }
+        };
+    });
+}
+
 function createValuationBar(val) {
     if (!val) return `<div style="font-size:11px; color:#999; text-align:center; margin-top:10px; background:#fff; padding:10px; border-radius:8px;">📉 <b>Yetersiz Veri</b><br>Bu kategoride yeterli veri yok. Listelerde gezerek sistemi eğitebilirsin.</div>`;
     let percent = ((val.ratio - 0.7) / (1.3 - 0.7)) * 100;
     if (percent < 0) percent = 5; if (percent > 100) percent = 95;
+
+    // Emlak için m² fiyatı gösterimi
+    let m2PriceHtml = '';
+    if (val.is_real_estate && val.m2_price) {
+        const m2Comparison = val.avg_m2_price ?
+            `<span style="color:#666;"> (Bölge Ort: ${val.avg_m2_price.toLocaleString('tr-TR')} TL/m²)</span>` : '';
+        m2PriceHtml = `
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; padding-top:8px; border-top:1px dashed #eee;">
+                <span style="font-size:10px; color:#666;">📐 m² Fiyatı:</span>
+                <span style="font-size:11px; font-weight:bold; color:#333;">${val.m2_price.toLocaleString('tr-TR')} TL/m²${m2Comparison}</span>
+            </div>
+        `;
+    }
+
+    // Benzer ilanlar gösterimi (emlak için)
+    let similarHtml = '';
+    if (val.is_real_estate && val.similar_listings && val.similar_listings.length > 0) {
+        const similarItems = val.similar_listings.slice(0, 2).map(s =>
+            `<div style="font-size:9px; color:#555; padding:3px 0; border-bottom:1px dotted #eee;">
+                🏠 ${s.title.substring(0, 35)}... - <b>${s.price.toLocaleString('tr-TR')} TL</b>
+            </div>`
+        ).join('');
+        similarHtml = `
+            <div style="margin-top:8px; padding-top:8px; border-top:1px dashed #eee;">
+                <div style="font-size:9px; color:#888; margin-bottom:4px;">📋 Bölgedeki Benzer İlanlar:</div>
+                ${similarItems}
+            </div>
+        `;
+    }
+
+    // Ana gösterim
+    const priceLabel = val.is_real_estate ? 'Bölge Ortalaması' : 'Piyasa Ortalaması';
+
     return `
         <div style="margin-top:15px; padding:12px; background:white; border-radius:8px; border:1px solid #e0e0e0; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
                 <span style="font-size:13px; font-weight:800; color:${val.color};">${val.status}</span>
                 <div style="text-align:right;">
-                    <div style="font-size:10px; color:#999;">Piyasa Ortalaması</div>
+                    <div style="font-size:10px; color:#999;">${priceLabel}</div>
                     <div style="font-size:12px; font-weight:bold; color:#333;">${val.average_price.toLocaleString('tr-TR')} TL</div>
                 </div>
             </div>
@@ -176,6 +533,8 @@ function createValuationBar(val) {
             <div style="display:flex; align-items:center; gap:5px; margin-top:8px; font-size:9px; color:#777;">
                 <span>📊</span><span>${val.info_msg}</span>
             </div>
+            ${m2PriceHtml}
+            ${similarHtml}
         </div>
     `;
 }
@@ -283,7 +642,7 @@ function showOverlay(data, result) {
                 ${valuationHtml} 
                 ${chartHtml}
                 <button id="askAiBtn" style="width:100%;background:linear-gradient(135deg,#293542,#1a2530);color:#FFD000;border:none;padding:14px;border-radius:8px;font-weight:bold;margin-top:15px;font-size:13px;cursor:pointer;">✨ DETAYLI AI ANALİZ</button>
-                <div id="aiResult" style="display:none;font-size:13px;margin-top:15px;background:#fff;padding:15px;border:1px solid #ddd;border-radius:8px;max-height:400px;overflow-y:auto;line-height:1.6;color:#333;box-shadow:inset 0 2px 4px rgba(0,0,0,0.05);"></div>
+                <div id="aiResult" style="display:none;font-size:12px;margin-top:12px;background:#fff;padding:12px;border:1px solid #ddd;border-radius:8px;max-height:500px;overflow-y:scroll;line-height:1.5;color:#333;box-shadow:inset 0 1px 3px rgba(0,0,0,0.08);"></div>
             </div>
             <div id="viewYorumlar" style="display:none;">
                 <div id="commentList" style="height:220px;overflow-y:auto;margin-bottom:10px;background:#fff;padding:8px;border-radius:6px;">${renderComments(result?.comments)}</div>
@@ -305,7 +664,7 @@ function showOverlay(data, result) {
                         <div id="usageBar" style="background:linear-gradient(90deg,#2ecc71,#27ae60);height:100%;width:${isPremium ? '100' : Math.min((currentUser.daily_usage || 0) / 5 * 100, 100)}%;transition:width 0.3s;"></div>
                     </div>
                     <div style="display:flex;justify-content:space-between;font-size:10px;color:#666;margin-top:5px;">
-                        <span>${isPremium ? '∞ Sınırsız' : `${currentUser.daily_usage || 0}/5 AI Analiz`}</span>
+                        <span id="userUsageText">${isPremium ? '∞ Sınırsız' : `${currentUser.daily_usage || 0}/5 AI Analiz`}</span>
                         <span>${isPremium ? 'Premium Aktif' : 'Ücretsiz Plan'}</span>
                     </div>
                 </div>
@@ -372,8 +731,31 @@ function showOverlay(data, result) {
                 resBox.innerHTML = `<div style="text-align:center;">Analiz için giriş yapmalısınız.</div>`;
             }
             else if (j.status === "success") {
-                resBox.innerHTML = j.ai_response;
+                // 1. Kullanım hakkını yerel olarak güncelle ve kaydet
+                const currentUser = getUser();
+                if (currentUser && currentUser.plan !== 'premium') {
+                    currentUser.daily_usage = (currentUser.daily_usage || 0) + 1;
+                    localStorage.setItem("sahibinden_user_profile", JSON.stringify(currentUser));
+
+                    // UI Güncelleme (Eğer profil sekmesi o an açıksa veya sonra açılacaksa)
+                    const uBar = document.getElementById('usageBar');
+                    const uText = document.getElementById('userUsageText');
+                    if (uBar && uText) {
+                        const usage = currentUser.daily_usage;
+                        uBar.style.width = Math.min((usage / 5) * 100, 100) + '%';
+                        uText.innerText = `${usage}/5 AI Analiz`;
+                    }
+                }
+
+                // 2. Yana açılan panelde göster
+                showAiSidePanel(j.ai_response);
                 btn.innerHTML = "✅ Analiz Tamamlandı";
+                resBox.innerHTML = `<div style="text-align:center;padding:15px;background:#e8f5e9;border-radius:8px;">
+                    <div style="font-size:20px;margin-bottom:5px;">✅</div>
+                    <div style="font-size:12px;color:#2e7d32;font-weight:bold;">Analiz hazır! Sol panelde görüntüleniyor.</div>
+                    <button id="reopenAiPanel" style="margin-top:10px;padding:8px 15px;background:#293542;color:#FFD000;border:none;border-radius:6px;cursor:pointer;font-size:11px;">📖 Tekrar Aç</button>
+                </div>`;
+                document.getElementById('reopenAiPanel').onclick = () => showAiSidePanel(j.ai_response);
             }
             else {
                 // Hata durumu - meşgul uyarısı veya diğer hatalar
