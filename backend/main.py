@@ -15,7 +15,7 @@ from pathlib import Path
 
 # --- AYARLAR ---
 load_dotenv()
-from backend.database import listings_collection, users_collection
+from backend.database import listings_collection, users_collection, stats_collection, settings_collection
 from backend.scheduler import start_scheduler
 
 app = FastAPI()
