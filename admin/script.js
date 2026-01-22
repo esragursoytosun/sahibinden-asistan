@@ -33,12 +33,20 @@ function setupEventListeners() {
     document.getElementById('refreshStatsBtn').addEventListener('click', loadStats);
 
     document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
-    document.getElementById('refreshDbBtn').addEventListener('click', loadDbData);
+    document.getElementById('refreshDbBtn').addEventListener('click', () => loadDbData(1));
 
     // Login on Enter
     document.getElementById('adminKey').addEventListener('keypress', (e) => {
         if (e.key === 'Enter') login();
     });
+
+    // Filter buttons
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.addEventListener('click', () => applyFilter(btn.dataset.filter));
+    });
+
+    // Save Edit button
+    document.getElementById('saveEditBtn').addEventListener('click', saveEditRecord);
 }
 
 function switchTab(tabId) {
@@ -52,6 +60,7 @@ function switchTab(tabId) {
 
     if (tabId === 'users') loadUsers(1);
     if (tabId === 'settings') loadSettings();
+    if (tabId === 'data') loadDbData(1);
 }
 
 // AUTH FUNCTIONS
@@ -341,10 +350,16 @@ async function triggerJob(jobType) {
     }
 }
 
-/* DATA INSPECTOR */
-let allListingsData = []; // Store all data for filtering
+/* DATA INSPECTOR - COMPLETE REWRITE WITH CRUD */
+let allListingsData = [];
+let currentDbPage = 1;
+let totalDbRecords = 0;
+const DB_PAGE_LIMIT = 50;
+let currentEditId = null;
+let currentEditCollection = null;
 
-async function loadDbData(filterType = 'all') {
+async function loadDbData(page = 1) {
+    currentDbPage = page;
     const collection = document.getElementById('dbCollectionSelect').value;
     const container = document.getElementById('jsonViewer');
     const filterBar = document.getElementById('listingFilters');
@@ -361,19 +376,25 @@ async function loadDbData(filterType = 'all') {
             body: JSON.stringify({
                 admin_email: currentAdmin.email,
                 collection: collection,
-                limit: 500 // Increased limit
+                limit: DB_PAGE_LIMIT,
+                skip: (page - 1) * DB_PAGE_LIMIT
             })
         });
         const data = await res.json();
 
         if (data.status === 'success') {
+            totalDbRecords = data.total || 0;
+
             if (!data.data || data.data.length === 0) {
                 container.innerHTML = '<div class="text-center" style="padding:20px;">Veri bulunamadı.</div>';
+                updatePaginationControls(0, page);
                 return;
             }
 
-            allListingsData = data.data; // Store for filtering
-            applyFilter(filterType);
+            allListingsData = data.data;
+            applyFilter('all');
+            updatePaginationControls(totalDbRecords, page);
+
         } else {
             container.innerHTML = `<div class="text-center text-danger" style="padding:20px;">Hata: ${data.message}</div>`;
         }
@@ -382,9 +403,40 @@ async function loadDbData(filterType = 'all') {
     }
 }
 
+function updatePaginationControls(total, page) {
+    const totalPages = Math.ceil(total / DB_PAGE_LIMIT);
+    const indicator = document.getElementById('dbPageIndicator');
+    if (indicator) indicator.textContent = `Sayfa ${page} / ${totalPages || 1} (Toplam: ${total})`;
+
+    const prevBtn = document.getElementById('prevDbPage');
+    const nextBtn = document.getElementById('nextDbPage');
+
+    if (prevBtn) {
+        prevBtn.disabled = page <= 1;
+        prevBtn.onclick = () => loadDbData(page - 1);
+    }
+    if (nextBtn) {
+        nextBtn.disabled = page >= totalPages;
+        nextBtn.onclick = () => loadDbData(page + 1);
+    }
+}
+
 function applyFilter(filterType) {
     const collection = document.getElementById('dbCollectionSelect').value;
     const container = document.getElementById('jsonViewer');
+
+    // Update active button style
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+        if (btn.dataset.filter === filterType) {
+            btn.style.background = '#1da1f2';
+            btn.style.color = 'white';
+            btn.classList.add('active');
+        } else {
+            btn.style.background = '#253341';
+            btn.style.color = '#8899a6';
+            btn.classList.remove('active');
+        }
+    });
 
     let filteredData = allListingsData;
 
@@ -402,80 +454,178 @@ function applyFilter(filterType) {
         });
     }
 
-    // Update filter count
     const countEl = document.getElementById('filterCount');
     if (countEl) {
         countEl.textContent = `(${filteredData.length} / ${allListingsData.length} kayıt)`;
     }
 
-    // Update active button style
-    document.querySelectorAll('.filter-btn').forEach(btn => {
-        if (btn.dataset.filter === filterType) {
-            btn.style.background = '#1da1f2';
-            btn.style.color = 'white';
-        } else {
-            btn.style.background = '#253341';
-            btn.style.color = '#8899a6';
-        }
-    });
-
     renderDataTable(filteredData, collection, container);
 }
 
-// Add filter button event listeners
-document.addEventListener('DOMContentLoaded', () => {
-    document.querySelectorAll('.filter-btn').forEach(btn => {
-        btn.addEventListener('click', () => applyFilter(btn.dataset.filter));
+// DELETE RECORD
+window.deleteRecord = async function (id, collection) {
+    if (!confirm("Bu kaydı kalıcı olarak silmek istediğinize emin misiniz?")) return;
+
+    try {
+        const res = await fetch(`${API_URL}/admin/delete-record`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                admin_email: currentAdmin.email,
+                collection: collection,
+                id: id
+            })
+        });
+        const data = await res.json();
+        if (data.status === 'success') {
+            showToast('Kayıt silindi.', 'success');
+            loadDbData(currentDbPage); // Reload
+        } else {
+            showToast(data.message, 'error');
+        }
+    } catch (e) {
+        showToast('Silme hatası', 'error');
+    }
+}
+
+// EDIT RECORD
+window.openEditModal = function (row, collection) {
+    currentEditId = row._id;
+    currentEditCollection = collection;
+
+    const form = document.getElementById('editForm');
+    form.innerHTML = '';
+
+    const fields = collection === 'listings' ? ['title', 'price', 'year', 'km', 'category_path', 'location'] : ['name', 'email', 'plan'];
+
+    fields.forEach(field => {
+        const val = row[field] !== undefined && row[field] !== null ? row[field] : '';
+        const displayVal = String(val).replace(/"/g, '&quot;');
+        form.innerHTML += `
+            <div style="display:flex; flex-direction:column;">
+                <label style="color:#8899a6; font-size:11px; margin-bottom:4px;">${field.toUpperCase()}</label>
+                <input id="edit_${field}" value="${displayVal}" style="padding:8px; background:#253341; border:1px solid #38444d; color:white; border-radius:4px;">
+            </div>
+        `;
     });
-});
+
+    document.getElementById('editModal').style.display = 'flex';
+}
+
+async function saveEditRecord() {
+    const fields = currentEditCollection === 'listings' ? ['title', 'price', 'year', 'km', 'category_path', 'location'] : ['name', 'email', 'plan'];
+    const updateData = {};
+
+    fields.forEach(f => {
+        let val = document.getElementById(`edit_${f}`).value;
+        if ((f === 'price' || f === 'year') && val !== '') val = parseInt(val) || 0;
+        updateData[f] = val;
+    });
+
+    try {
+        const res = await fetch(`${API_URL}/admin/update-record`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                admin_email: currentAdmin.email,
+                collection: currentEditCollection,
+                id: currentEditId,
+                data: updateData
+            })
+        });
+        const data = await res.json();
+        if (data.status === 'success') {
+            showToast('Başarıyla güncellendi.', 'success');
+            document.getElementById('editModal').style.display = 'none';
+            loadDbData(currentDbPage);
+        } else {
+            showToast(data.message, 'error');
+        }
+    } catch (e) {
+        showToast('Güncelleme hatası', 'error');
+    }
+}
 
 function renderDataTable(data, collection, container) {
     let columns = [];
 
-    // Koleksiyona göre özel sütunlar belirle
+    const formatCategory = (path) => {
+        if (!path || path === "Tümü" || path === "null") return '<span style="color:#e74c3c;">(Boş)</span>';
+        const parts = path.split(' > ');
+        return parts.length > 2 ? `...${parts.slice(-2).join(' > ')}` : path;
+    };
+
+    const formatTitle = (row) => {
+        let text = row.title ? row.title.trim() : '';
+        if (!text && row.category_path) {
+            const parts = row.category_path.split(' > ');
+            text = parts[parts.length - 1] || 'İlan';
+        }
+        if (!text) text = `İlan #${row._id}`;
+
+        if (row.url) return `<a href="${row.url}" target="_blank" style="color:#64b5f6;text-decoration:none;font-weight:600;">${text}</a>`;
+        return `<span style="color:#e0e0e0;font-weight:600;">${text}</span>`;
+    };
+
     if (collection === 'listings') {
         columns = [
-            { key: 'title', label: 'Başlık', render: val => `<span style="font-weight:600; color:white;">${val || '-'}</span>` },
-            { key: 'price', label: 'Fiyat', render: val => val ? `${val.toLocaleString()} TL` : '-' },
-            { key: 'location', label: 'Konum' },
-            { key: 'year', label: 'Yıl' },
-            { key: 'last_update', label: 'Tarih', render: val => val ? new Date(val).toLocaleDateString() : '-' }
+            { key: 'title', label: 'Başlık', render: (val, row) => formatTitle(row) },
+            {
+                key: 'price', label: 'Fiyat', render: val => {
+                    if (!val || val === 0) return '<span style="color:#e74c3c;">Fiyat Yok</span>';
+                    return `<span style="color:#00e676;font-weight:bold;">${val.toLocaleString('tr-TR')} TL</span>`;
+                }
+            },
+            { key: 'category_path', label: 'Kategori', render: val => `<span style="font-size:11px;color:#aaa;">${formatCategory(val)}</span>` },
+            { key: 'location', label: 'Konum', render: val => `<span style="font-size:11px;">${val || '-'}</span>` },
+            { key: 'year', label: 'Yıl/Km', render: (val, row) => `<span style="font-size:11px;">${row.year || '-'} / ${row.km || '-'}</span>` }
         ];
     } else if (collection === 'users') {
         columns = [
-            { key: 'name', label: 'İsim' },
+            {
+                key: 'name', label: 'İsim', render: (val, row) => `
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <img src="${row.picture || ''}" style="width:24px;height:24px;border-radius:50%;">
+                    <span>${val}</span>
+                </div>`
+            },
             { key: 'email', label: 'E-posta' },
             { key: 'plan', label: 'Paket', render: val => `<span class="badge ${val}">${val}</span>` },
             { key: 'daily_usage', label: 'Kullanım' }
         ];
     } else {
-        // Genel (Generic) Tablo: İlk kaydın anahtarlarını al (ID hariç)
-        const keys = Object.keys(data[0]).filter(k => k !== '_id' && typeof data[0][k] !== 'object');
+        const keys = Object.keys(data[0] || {}).filter(k => k !== '_id' && typeof data[0][k] !== 'object');
         columns = keys.slice(0, 5).map(k => ({ key: k, label: k.charAt(0).toUpperCase() + k.slice(1) }));
     }
 
     let html = `
-        <table class="data-table" style="width:100%;">
+        <table class="data-table" style="width:100%; border-collapse: separate; border-spacing: 0 4px;">
             <thead>
-                <tr>
-                    ${columns.map(col => `<th>${col.label}</th>`).join('')}
-                    <th>JSON</th>
+                <tr style="text-align:left; color:#8899a6; font-size:12px;">
+                    ${columns.map(col => `<th style="padding:10px;">${col.label}</th>`).join('')}
+                    <th style="padding:10px; text-align:right;">İşlem</th>
                 </tr>
             </thead>
             <tbody>
-                ${data.map(row => `
-                    <tr>
+                ${data.map(row => {
+        const rowJson = JSON.stringify(row).replace(/'/g, "&#39;").replace(/"/g, '&quot;');
+        return `
+                    <tr style="background:#192734; transition:background 0.2s;">
                         ${columns.map(col => {
-        const val = row[col.key];
-        return `<td>${col.render ? col.render(val) : (val || '-')}</td>`;
-    }).join('')}
-                        <td>
-                            <button class="btn-sm" onclick='alert(${JSON.stringify(JSON.stringify(row, null, 2))})' style="font-size:10px; padding:4px 8px;">
-                                🔍 Detay
+            const val = row[col.key];
+            return `<td style="padding:10px; border-top:1px solid #253341; border-bottom:1px solid #253341;">${col.render ? col.render(val, row) : (val || '-')}</td>`;
+        }).join('')}
+                        <td style="padding:10px; text-align:right; border-top:1px solid #253341; border-bottom:1px solid #253341; width:90px;">
+                             <button class="btn-sm" onclick='openEditModal(JSON.parse("${rowJson}"), "${collection}");' style="font-size:10px; padding:4px 8px; background:#1da1f2; border:none; color:white; cursor:pointer; border-radius:4px; margin-right:5px;">
+                                ✏️
+                            </button>
+                            <button class="btn-sm" onclick='deleteRecord("${row._id}", "${collection}")' style="font-size:10px; padding:4px 8px; background:#e74c3c; border:none; color:white; cursor:pointer; border-radius:4px;">
+                                🗑️
                             </button>
                         </td>
                     </tr>
-                `).join('')}
+                `;
+    }).join('')}
             </tbody>
         </table>
     `;

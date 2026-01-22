@@ -169,22 +169,29 @@ async function runSweepMode() {
             } catch (e) { console.log("Satır okuma hatası:", e); }
         });
 
-        // Toplanan verileri backend'e gönder
-        if (batchData.length > 0) {
+        // Toplanan verileri backend'e gönder - FİYAT VALİDASYONU EKLE
+        const validData = batchData.filter(d => d.price && d.price > 0 && d.title && d.title.length > 3);
+
+        if (validData.length > 0) {
             try {
                 const response = await fetch(`${API_URL}/bulk-upload`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(batchData)
+                    body: JSON.stringify(validData)
                 });
                 const result = await response.json();
-                console.log(`✅ BAI BILMIS: ${batchData.length} ${listingType} ilanı kaydedildi!`);
 
-                // KULLANICIYA GÖRSEL BİLDİRİM (TOAST)
+                // Sayfa numarasını al (URL'den)
+                const currentPageNum = new URLSearchParams(window.location.search).get('pagingOffset') || '1';
+
+                console.log(`✅ BAI BILMIS [Sayfa ${currentPageNum}]: ${validData.length}/${batchData.length} geçerli ilan kaydedildi!`);
+
+                // KULLANICIYA GÖRSEL BİLDİRİM (HER SAYFADA GÖZ) - SAYFA NUMARASINI GÖSTER
                 const toast = document.createElement('div');
                 toast.innerHTML = `
                     <div style="font-weight:bold; font-size:14px; margin-bottom:2px;">🚀 Hızlı Tarama Aktif</div>
-                    <div style="font-size:12px; opacity:0.9;">${batchData.length} yeni ilan veritabanına eklendi.</div>
+                    <div style="font-size:12px; opacity:0.9;">Sayfa ${currentPageNum}: ${validData.length} ilan toplandı</div>
+                    <div style="font-size:10px; margin-top:4px; opacity:0.7;">${listingType} • ${pageCategory.split('>').pop()?.trim()}</div>
                 `;
                 toast.style.cssText = `
                     position: fixed;
@@ -211,16 +218,45 @@ async function runSweepMode() {
                     toast.style.opacity = '0';
                     toast.style.transform = 'translateY(20px)';
                     setTimeout(() => toast.remove(), 500);
-                }, 4000);
+                }, 3500);
 
-            } catch (e) { console.log("Bulk upload hatası:", e); }
+            } catch (e) {
+                console.error("❌ BAI BILMIS: Bulk upload hatası:", e);
+                showErrorToast("Veri gönderme hatası. Lütfen tekrar deneyin.");
+            }
         } else {
-            console.log("⚠️ BAI BILMIS: Bu sayfada kayıt edilecek ilan bulunamadı.");
+            console.log("⚠️ BAI BILMIS: Bu sayfada geçerli ilan bulunamadı (toplam satır: " + batchData.length + ")");
+            if (batchData.length > 0) {
+                showErrorToast(`${batchData.length} ilan bulundu ama fiyat bilgisi eksik`);
+            }
         }
     }
 }
 
-// 🟢 2.1. SAYFA LOKASYONUNU AL (Breadcrumb'dan)
+// 🟢 2.2. HATA TOASTI GÖSTER
+function showErrorToast(message) {
+    const toast = document.createElement('div');
+    toast.innerHTML = `
+        <div style="font-weight:bold; font-size:14px; margin-bottom:2px;">⚠️ Uyarı</div>
+        <div style="font-size:12px; opacity:0.9;">${message}</div>
+    `;
+    toast.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        left: 20px;
+        background: #e74c3c;
+        color: white;
+        padding: 12px 20px;
+        border-radius: 8px;
+        z-index: 2147483647;
+        font-family: 'Open Sans', sans-serif;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    `;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+}
+
+// 🟢 2.3. SAYFA LOKASYONUNU AL (Breadcrumb'dan)
 function getPageLocation() {
     try {
         const bcItems = document.querySelectorAll('li.bc-item > a > span');
