@@ -236,7 +236,7 @@ async function loadUsers(page) {
                     <td>${u.daily_usage}</td>
                     <td>${u.last_login ? new Date(u.last_login).toLocaleDateString() : '-'}</td>
                     <td>
-                        <button class="btn-sm" onclick="togglePlan('${u.id}', '${u.plan}')">
+                        <button class="btn-sm ${u.plan === 'premium' ? 'btn-downgrade' : 'btn-upgrade'}" onclick="togglePlan('${u.id}', '${u.plan}')">
                             ${u.plan === 'premium' ? 'Free Yap' : 'Premium Yap'}
                         </button>
                     </td>

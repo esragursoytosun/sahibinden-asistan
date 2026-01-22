@@ -469,6 +469,41 @@ body {
     color: white;
 }
 
+/* ACTION BUTTONS */
+.btn-sm {
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+}
+
+.btn-upgrade {
+    background: linear-gradient(135deg, rgba(255, 208, 0, 0.1), rgba(255, 208, 0, 0.2));
+    color: #FFD000;
+    border-color: rgba(255, 208, 0, 0.3);
+}
+
+.btn-upgrade:hover {
+    background: linear-gradient(135deg, rgba(255, 208, 0, 0.2), rgba(255, 208, 0, 0.3));
+    box-shadow: 0 0 10px rgba(255, 208, 0, 0.2);
+    transform: translateY(-1px);
+}
+
+.btn-downgrade {
+    background: rgba(136, 153, 166, 0.1);
+    color: #8899a6;
+    border-color: rgba(136, 153, 166, 0.3);
+}
+
+.btn-downgrade:hover {
+    background: rgba(136, 153, 166, 0.2);
+    color: #fff;
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
 /* RESPONSIVE */
 @media (max-width: 1024px) {
     .charts-grid {
