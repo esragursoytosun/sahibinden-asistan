@@ -184,6 +184,17 @@
                             <option value="statistics">📊 İstatistikler (statistics)</option>
                             <option value="settings">⚙️ Ayarlar (settings)</option>
                         </select>
+
+                        <!-- View Mode Toggle -->
+                        <div id="viewModeToggle" style="display:none; margin-left:10px;">
+                            <button id="viewTableBtn" class="view-mode-btn active"
+                                style="background:#1da1f2; color:white; border:none; padding:10px 15px; border-radius:6px 0 0 6px; cursor:pointer; font-size:12px;">📋
+                                Tablo</button>
+                            <button id="viewTreeBtn" class="view-mode-btn"
+                                style="background:#253341; color:#8899a6; border:none; padding:10px 15px; border-radius:0 6px 6px 0; cursor:pointer; font-size:12px;">🌳
+                                Ağaç</button>
+                        </div>
+
                         <button id="refreshDbBtn" class="btn-primary" style="width: auto;">Verileri Getir</button>
                     </div>
                 </header>

@@ -1,4 +1,4 @@
-const API_URL = "https://sahiden.onrender.com";
+﻿const API_URL = "https://sahiden.onrender.com";
 
 // State
 let currentAdmin = null;
@@ -80,9 +80,9 @@ async function login() {
     const email = document.getElementById('adminEmail').value.trim();
     const key = document.getElementById('adminKey').value.trim();
 
-    if (!email || !key) return showToast('Tüm alanları doldurun', 'error');
+    if (!email || !key) return showToast('TÃ¼m alanlarÄ± doldurun', 'error');
 
-    loginBtn.innerHTML = '🔄 Kontrol ediliyor...';
+    loginBtn.innerHTML = 'ğŸ”„ Kontrol ediliyor...';
     loginBtn.disabled = true;
 
     try {
@@ -96,15 +96,15 @@ async function login() {
         if (data.status === 'success' && data.is_admin) {
             currentAdmin = { email, name: email.split('@')[0] };
             localStorage.setItem('bai_admin', JSON.stringify(currentAdmin));
-            showToast('Giriş başarılı!', 'success');
+            showToast('GiriÅŸ baÅŸarÄ±lÄ±!', 'success');
             showAdminPanel();
         } else {
-            showToast(data.message || 'Giriş başarısız', 'error');
+            showToast(data.message || 'GiriÅŸ baÅŸarÄ±sÄ±z', 'error');
         }
     } catch (e) {
-        showToast('Sunucu hatası', 'error');
+        showToast('Sunucu hatasÄ±', 'error');
     } finally {
-        loginBtn.innerHTML = 'Giriş Yap';
+        loginBtn.innerHTML = 'GiriÅŸ Yap';
         loginBtn.disabled = false;
     }
 }
@@ -136,7 +136,7 @@ async function loadStats() {
 
             // Check Last Updated
             const now = new Date();
-            document.getElementById('lastUpdated').textContent = `Son güncelleme: ${now.toLocaleTimeString()}`;
+            document.getElementById('lastUpdated').textContent = `Son gÃ¼ncelleme: ${now.toLocaleTimeString()}`;
 
             // Render Charts
             if (data.charts) {
@@ -145,7 +145,7 @@ async function loadStats() {
         }
     } catch (e) {
         console.error(e);
-        showToast('Veriler yüklenemedi', 'error');
+        showToast('Veriler yÃ¼klenemedi', 'error');
     }
 }
 
@@ -183,7 +183,7 @@ function renderCharts(chartData) {
         data: {
             labels: chartData.labels,
             datasets: [{
-                label: 'Günlük Sorgu',
+                label: 'GÃ¼nlÃ¼k Sorgu',
                 data: chartData.queries,
                 borderColor: '#1da1f2',
                 backgroundColor: 'rgba(29, 161, 242, 0.1)',
@@ -201,7 +201,7 @@ function renderCharts(chartData) {
         data: {
             labels: chartData.labels,
             datasets: [{
-                label: 'Aktif Kullanıcı',
+                label: 'Aktif KullanÄ±cÄ±',
                 data: chartData.active_users,
                 backgroundColor: '#00ba7c',
                 borderRadius: 4
@@ -214,7 +214,7 @@ function renderCharts(chartData) {
 // USERS TABLE (Simplified implementation)
 async function loadUsers(page) {
     const tbody = document.getElementById('usersTableBody');
-    tbody.innerHTML = '<tr><td colspan="5" class="text-center">Yükleniyor...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center">YÃ¼kleniyor...</td></tr>';
 
     try {
         const res = await fetch(`${API_URL}/admin/users`, {
@@ -230,7 +230,7 @@ async function loadUsers(page) {
 
         if (data.status === 'success') {
             if (data.users.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" class="text-center">Kullanıcı bulunamadı.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center">KullanÄ±cÄ± bulunamadÄ±.</td></tr>';
                 return;
             }
 
@@ -259,14 +259,14 @@ async function loadUsers(page) {
             document.getElementById('pageIndicator').textContent = `Sayfa ${page}`;
         }
     } catch (e) {
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger">Hata oluştu.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger">Hata oluÅŸtu.</td></tr>';
     }
 }
 
 // ACTIONS
 async function togglePlan(userId, currentPlan) {
     const newPlan = currentPlan === 'premium' ? 'free' : 'premium';
-    if (!confirm(`Kullanıcıyı ${newPlan} paketine geçirmek istiyor musunuz?`)) return;
+    if (!confirm(`KullanÄ±cÄ±yÄ± ${newPlan} paketine geÃ§irmek istiyor musunuz?`)) return;
 
     try {
         const res = await fetch(`${API_URL}/admin/set-plan`, {
@@ -280,12 +280,12 @@ async function togglePlan(userId, currentPlan) {
         });
         const data = await res.json();
         if (data.status === 'success') {
-            showToast('Paket güncellendi', 'success');
+            showToast('Paket gÃ¼ncellendi', 'success');
             loadUsers(1); // Reload table
             loadStats();  // Reload KPIs
         }
     } catch (e) {
-        showToast('İşlem başarısız', 'error');
+        showToast('Ä°ÅŸlem baÅŸarÄ±sÄ±z', 'error');
     }
 }
 
@@ -300,7 +300,7 @@ async function loadSettings() {
             document.getElementById('settingMaintenance').checked = data.settings.maintenance_mode;
         }
     } catch (e) {
-        showToast('Ayarlar yüklenemedi', 'error');
+        showToast('Ayarlar yÃ¼klenemedi', 'error');
     }
 }
 
@@ -332,7 +332,7 @@ async function saveSettings() {
 }
 
 async function triggerJob(jobType) {
-    if (!confirm('Bu işlemi manuel başlatmak istediğinize emin misiniz?')) return;
+    if (!confirm('Bu iÅŸlemi manuel baÅŸlatmak istediÄŸinize emin misiniz?')) return;
 
     try {
         const res = await fetch(`${API_URL}/admin/trigger-job`, {
@@ -346,7 +346,7 @@ async function triggerJob(jobType) {
         const data = await res.json();
         showToast(data.message, data.status === 'success' ? 'success' : 'error');
     } catch (e) {
-        showToast('İşlem hatası', 'error');
+        showToast('Ä°ÅŸlem hatasÄ±', 'error');
     }
 }
 
@@ -357,17 +357,57 @@ let totalDbRecords = 0;
 const DB_PAGE_LIMIT = 50;
 let currentEditId = null;
 let currentEditCollection = null;
+let currentViewMode = 'table'; // 'table' or 'tree'
+
+// View Mode Switcher
+function switchViewMode(mode) {
+    currentViewMode = mode;
+    const tableBtn = document.getElementById('viewTableBtn');
+    const treeBtn = document.getElementById('viewTreeBtn');
+
+    if (mode === 'table') {
+        tableBtn.style.background = '#1da1f2';
+        tableBtn.style.color = 'white';
+        tableBtn.classList.add('active');
+        treeBtn.style.background = '#253341';
+        treeBtn.style.color = '#8899a6';
+        treeBtn.classList.remove('active');
+    } else {
+        treeBtn.style.background = '#1da1f2';
+        treeBtn.style.color = 'white';
+        treeBtn.classList.add('active');
+        tableBtn.style.background = '#253341';
+        tableBtn.style.color = '#8899a6';
+        tableBtn.classList.remove('active');
+    }
+
+    // Re-render with current data
+    const collection = document.getElementById('dbCollectionSelect').value;
+    const container = document.getElementById('jsonViewer');
+
+    if (mode === 'tree' && collection === 'listings') {
+        renderCategoryTree(allListingsData, container);
+    } else {
+        const activeFilter = document.querySelector('.filter-btn.active')?.dataset.filter || 'all';
+        applyFilter(activeFilter);
+    }
+}
+
 
 async function loadDbData(page = 1) {
     currentDbPage = page;
     const collection = document.getElementById('dbCollectionSelect').value;
     const container = document.getElementById('jsonViewer');
     const filterBar = document.getElementById('listingFilters');
+    const viewModeToggle = document.getElementById('viewModeToggle');
 
-    // Show/hide filter bar based on collection
+    // Show/hide filter bar and view toggle based on collection
     filterBar.style.display = collection === 'listings' ? 'block' : 'none';
+    if (viewModeToggle) {
+        viewModeToggle.style.display = collection === 'listings' ? 'inline-block' : 'none';
+    }
 
-    container.innerHTML = '<div class="text-center" style="padding:20px;">Veriler yükleniyor...</div>';
+    container.innerHTML = '<div class="text-center" style="padding:20px;">Veriler yÃ¼kleniyor...</div>';
 
     try {
         const res = await fetch(`${API_URL}/admin/db-preview`, {
@@ -386,20 +426,27 @@ async function loadDbData(page = 1) {
             totalDbRecords = data.total || 0;
 
             if (!data.data || data.data.length === 0) {
-                container.innerHTML = '<div class="text-center" style="padding:20px;">Veri bulunamadı.</div>';
+                container.innerHTML = '<div class="text-center" style="padding:20px;">Veri bulunamadÄ±.</div>';
                 updatePaginationControls(0, page);
                 return;
             }
 
             allListingsData = data.data;
-            applyFilter('all');
+
+            // Render based on current view mode
+            if (currentViewMode === 'tree' && collection === 'listings') {
+                renderCategoryTree(allListingsData, container);
+            } else {
+                applyFilter('all');
+            }
+
             updatePaginationControls(totalDbRecords, page);
 
         } else {
             container.innerHTML = `<div class="text-center text-danger" style="padding:20px;">Hata: ${data.message}</div>`;
         }
     } catch (e) {
-        container.innerHTML = '<div class="text-center text-danger" style="padding:20px;">Bağlantı hatası.</div>';
+        container.innerHTML = '<div class="text-center text-danger" style="padding:20px;">BaÄŸlantÄ± hatasÄ±.</div>';
     }
 }
 
@@ -448,7 +495,7 @@ function applyFilter(filterType) {
             if (filterType === 'konut') {
                 return type.includes('konut') || category.includes('konut') || category.includes('daire') || category.includes('emlak');
             } else if (filterType === 'araba') {
-                return type.includes('araba') || type === 'araba' || category.includes('vasıta') || category.includes('otomobil');
+                return type.includes('araba') || type === 'araba' || category.includes('vasÄ±ta') || category.includes('otomobil');
             }
             return true;
         });
@@ -456,7 +503,7 @@ function applyFilter(filterType) {
 
     const countEl = document.getElementById('filterCount');
     if (countEl) {
-        countEl.textContent = `(${filteredData.length} / ${allListingsData.length} kayıt)`;
+        countEl.textContent = `(${filteredData.length} / ${allListingsData.length} kayÄ±t)`;
     }
 
     renderDataTable(filteredData, collection, container);
@@ -464,7 +511,7 @@ function applyFilter(filterType) {
 
 // DELETE RECORD
 window.deleteRecord = async function (id, collection) {
-    if (!confirm("Bu kaydı kalıcı olarak silmek istediğinize emin misiniz?")) return;
+    if (!confirm("Bu kaydÄ± kalÄ±cÄ± olarak silmek istediÄŸinize emin misiniz?")) return;
 
     try {
         const res = await fetch(`${API_URL}/admin/delete-record`, {
@@ -478,13 +525,13 @@ window.deleteRecord = async function (id, collection) {
         });
         const data = await res.json();
         if (data.status === 'success') {
-            showToast('Kayıt silindi.', 'success');
+            showToast('KayÄ±t silindi.', 'success');
             loadDbData(currentDbPage); // Reload
         } else {
             showToast(data.message, 'error');
         }
     } catch (e) {
-        showToast('Silme hatası', 'error');
+        showToast('Silme hatasÄ±', 'error');
     }
 }
 
@@ -535,14 +582,14 @@ async function saveEditRecord() {
         });
         const data = await res.json();
         if (data.status === 'success') {
-            showToast('Başarıyla güncellendi.', 'success');
+            showToast('BaÅŸarÄ±yla gÃ¼ncellendi.', 'success');
             document.getElementById('editModal').style.display = 'none';
             loadDbData(currentDbPage);
         } else {
             showToast(data.message, 'error');
         }
     } catch (e) {
-        showToast('Güncelleme hatası', 'error');
+        showToast('GÃ¼ncelleme hatasÄ±', 'error');
     }
 }
 
@@ -550,7 +597,7 @@ function renderDataTable(data, collection, container) {
     let columns = [];
 
     const formatCategory = (path) => {
-        if (!path || path === "Tümü" || path === "null") return '<span style="color:#e74c3c;">(Boş)</span>';
+        if (!path || path === "TÃ¼mÃ¼" || path === "null") return '<span style="color:#e74c3c;">(BoÅŸ)</span>';
         const parts = path.split(' > ');
         return parts.length > 2 ? `...${parts.slice(-2).join(' > ')}` : path;
     };
@@ -559,9 +606,9 @@ function renderDataTable(data, collection, container) {
         let text = row.title ? row.title.trim() : '';
         if (!text && row.category_path) {
             const parts = row.category_path.split(' > ');
-            text = parts[parts.length - 1] || 'İlan';
+            text = parts[parts.length - 1] || 'Ä°lan';
         }
-        if (!text) text = `İlan #${row._id}`;
+        if (!text) text = `Ä°lan #${row._id}`;
 
         if (row.url) return `<a href="${row.url}" target="_blank" style="color:#64b5f6;text-decoration:none;font-weight:600;">${text}</a>`;
         return `<span style="color:#e0e0e0;font-weight:600;">${text}</span>`;
@@ -569,7 +616,7 @@ function renderDataTable(data, collection, container) {
 
     if (collection === 'listings') {
         columns = [
-            { key: 'title', label: 'Başlık', render: (val, row) => formatTitle(row) },
+            { key: 'title', label: 'BaÅŸlÄ±k', render: (val, row) => formatTitle(row) },
             {
                 key: 'price', label: 'Fiyat', render: val => {
                     if (!val || val === 0) return '<span style="color:#e74c3c;">Fiyat Yok</span>';
@@ -578,12 +625,12 @@ function renderDataTable(data, collection, container) {
             },
             { key: 'category_path', label: 'Kategori', render: val => `<span style="font-size:11px;color:#aaa;">${formatCategory(val)}</span>` },
             { key: 'location', label: 'Konum', render: val => `<span style="font-size:11px;">${val || '-'}</span>` },
-            { key: 'year', label: 'Yıl/Km', render: (val, row) => `<span style="font-size:11px;">${row.year || '-'} / ${row.km || '-'}</span>` }
+            { key: 'year', label: 'YÄ±l/Km', render: (val, row) => `<span style="font-size:11px;">${row.year || '-'} / ${row.km || '-'}</span>` }
         ];
     } else if (collection === 'users') {
         columns = [
             {
-                key: 'name', label: 'İsim', render: (val, row) => `
+                key: 'name', label: 'Ä°sim', render: (val, row) => `
                 <div style="display:flex;align-items:center;gap:8px;">
                     <img src="${row.picture || ''}" style="width:24px;height:24px;border-radius:50%;">
                     <span>${val}</span>
@@ -591,7 +638,7 @@ function renderDataTable(data, collection, container) {
             },
             { key: 'email', label: 'E-posta' },
             { key: 'plan', label: 'Paket', render: val => `<span class="badge ${val}">${val}</span>` },
-            { key: 'daily_usage', label: 'Kullanım' }
+            { key: 'daily_usage', label: 'KullanÄ±m' }
         ];
     } else {
         const keys = Object.keys(data[0] || {}).filter(k => k !== '_id' && typeof data[0][k] !== 'object');
@@ -603,7 +650,7 @@ function renderDataTable(data, collection, container) {
             <thead>
                 <tr style="text-align:left; color:#8899a6; font-size:12px;">
                     ${columns.map(col => `<th style="padding:10px;">${col.label}</th>`).join('')}
-                    <th style="padding:10px; text-align:right;">İşlem</th>
+                    <th style="padding:10px; text-align:right;">Ä°ÅŸlem</th>
                 </tr>
             </thead>
             <tbody>
@@ -617,10 +664,10 @@ function renderDataTable(data, collection, container) {
         }).join('')}
                         <td style="padding:10px; text-align:right; border-top:1px solid #253341; border-bottom:1px solid #253341; width:90px;">
                              <button class="btn-sm" onclick='openEditModal(JSON.parse("${rowJson}"), "${collection}");' style="font-size:10px; padding:4px 8px; background:#1da1f2; border:none; color:white; cursor:pointer; border-radius:4px; margin-right:5px;">
-                                ✏️
+                                âœï¸
                             </button>
                             <button class="btn-sm" onclick='deleteRecord("${row._id}", "${collection}")' style="font-size:10px; padding:4px 8px; background:#e74c3c; border:none; color:white; cursor:pointer; border-radius:4px;">
-                                🗑️
+                                ğŸ—‘ï¸
                             </button>
                         </td>
                     </tr>
@@ -648,3 +695,91 @@ function animateValue(id, end) {
     // Simple set for now
     obj.textContent = end.toLocaleString('tr-TR');
 }
+/ /   C a t e g o r y   T r e e   R e n d e r i n g  
+ f u n c t i o n   r e n d e r C a t e g o r y T r e e ( d a t a ,   c o n t a i n e r )   {  
+         / /   G r o u p   b y   c a t e g o r y _ p a t h  
+         c o n s t   t r e e   =   { } ;  
+  
+         d a t a . f o r E a c h ( i t e m   = >   {  
+                 c o n s t   p a t h   =   i t e m . c a t e g o r y _ p a t h   | |   ' K a t e g o r i s i z ' ;  
+                 i f   ( ! t r e e [ p a t h ] )   {  
+                         t r e e [ p a t h ]   =   [ ] ;  
+                 }  
+                 t r e e [ p a t h ] . p u s h ( i t e m ) ;  
+         } ) ;  
+  
+         / /   S o r t   c a t e g o r i e s  
+         c o n s t   s o r t e d C a t e g o r i e s   =   O b j e c t . k e y s ( t r e e ) . s o r t ( ) ;  
+  
+         l e t   h t m l   =   ' < d i v   c l a s s = " c a t e g o r y - t r e e "   s t y l e = " f o n t - f a m i l y : s a n s - s e r i f ; " > ' ;  
+  
+         s o r t e d C a t e g o r i e s . f o r E a c h ( ( c a t e g o r y ,   i n d e x )   = >   {  
+                 c o n s t   i t e m s   =   t r e e [ c a t e g o r y ] ;  
+                 c o n s t   c a t e g o r y I d   =   ` c a t - $ { i n d e x } ` ;  
+                 c o n s t   i s F i r s t   =   i n d e x   = = =   0 ;  
+  
+                 / /   C a t e g o r y   h e a d e r   ( c o l l a p s i b l e )  
+                 h t m l   + =   `  
+                         < d i v   c l a s s = " c a t e g o r y - f o l d e r "   s t y l e = " m a r g i n - b o t t o m : 8 p x ;   b o r d e r : 1 p x   s o l i d   # 3 8 4 4 4 d ;   b o r d e r - r a d i u s : 8 p x ;   o v e r f l o w : h i d d e n ;   b a c k g r o u n d : # 1 9 2 7 3 4 ; " >  
+                                 < d i v   c l a s s = " c a t e g o r y - h e a d e r "   o n c l i c k = " t o g g l e C a t e g o r y ( ' $ { c a t e g o r y I d } ' ) "   s t y l e = " p a d d i n g : 1 2 p x   1 5 p x ;   b a c k g r o u n d : # 2 5 3 3 4 1 ;   c u r s o r : p o i n t e r ;   d i s p l a y : f l e x ;   j u s t i f y - c o n t e n t : s p a c e - b e t w e e n ;   a l i g n - i t e m s : c e n t e r ;   u s e r - s e l e c t : n o n e ; " >  
+                                         < d i v   s t y l e = " d i s p l a y : f l e x ;   a l i g n - i t e m s : c e n t e r ;   g a p : 1 0 p x ; " >  
+                                                 < s p a n   c l a s s = " a r r o w "   i d = " a r r o w - $ { c a t e g o r y I d } "   s t y l e = " f o n t - s i z e : 1 2 p x ;   c o l o r : # 8 8 9 9 a 6 ;   t r a n s i t i o n : t r a n s f o r m   0 . 2 s ; " > $ { i s F i r s t   ?   ' �  � '   :   ' �  � ' } < / s p a n >  
+                                                 < s p a n   s t y l e = " f o n t - s i z e : 1 3 p x ;   f o n t - w e i g h t : 6 0 0 ;   c o l o r : # f f f ; " > x �   $ { c a t e g o r y } < / s p a n >  
+                                         < / d i v >  
+                                         < s p a n   c l a s s = " c o u n t - b a d g e "   s t y l e = " b a c k g r o u n d : # 1 d a 1 f 2 ;   c o l o r : w h i t e ;   p a d d i n g : 4 p x   1 0 p x ;   b o r d e r - r a d i u s : 1 2 p x ;   f o n t - s i z e : 1 1 p x ;   f o n t - w e i g h t : b o l d ; " > $ { i t e m s . l e n g t h } < / s p a n >  
+                                 < / d i v >  
+                                 < d i v   c l a s s = " c a t e g o r y - c o n t e n t "   i d = " c o n t e n t - $ { c a t e g o r y I d } "   s t y l e = " m a x - h e i g h t : $ { i s F i r s t   ?   ' 4 0 0 p x '   :   ' 0 ' } ;   o v e r f l o w : h i d d e n ;   t r a n s i t i o n : m a x - h e i g h t   0 . 3 s   e a s e ; " >  
+                                         < d i v   s t y l e = " p a d d i n g : 1 0 p x ; " >  
+                                                 $ { r e n d e r C a t e g o r y I t e m s ( i t e m s ,   c a t e g o r y ) }  
+                                         < / d i v >  
+                                 < / d i v >  
+                         < / d i v >  
+                 ` ;  
+         } ) ;  
+  
+         h t m l   + =   ' < / d i v > ' ;  
+  
+         c o n t a i n e r . i n n e r H T M L   =   h t m l ;  
+ }  
+  
+ f u n c t i o n   r e n d e r C a t e g o r y I t e m s ( i t e m s ,   c a t e g o r y )   {  
+         r e t u r n   i t e m s . m a p ( i t e m   = >   {  
+                 c o n s t   p r i c e   =   i t e m . p r i c e   ?   ` < s p a n   s t y l e = " c o l o r : # 0 0 e 6 7 6 ; f o n t - w e i g h t : b o l d ; " > $ { i t e m . p r i c e . t o L o c a l e S t r i n g ( ' t r - T R ' ) }   T L < / s p a n > `   :   ' < s p a n   s t y l e = " c o l o r : # e 7 4 c 3 c ; " > F i y a t   Y o k < / s p a n > ' ;  
+                 c o n s t   t i t l e   =   i t e m . t i t l e   | |   i t e m . i d   | |   ' � � l a n ' ;  
+                 c o n s t   i t e m J s o n   =   J S O N . s t r i n g i f y ( i t e m ) . r e p l a c e ( / ' / g ,   " & # 3 9 ; " ) . r e p l a c e ( / " / g ,   ' & q u o t ; ' ) ;  
+  
+                 r e t u r n   `  
+                         < d i v   s t y l e = " p a d d i n g : 8 p x ;   m a r g i n - b o t t o m : 4 p x ;   b a c k g r o u n d : # 1 5 2 0 2 b ;   b o r d e r - r a d i u s : 6 p x ;   b o r d e r - l e f t : 3 p x   s o l i d   # 1 d a 1 f 2 ;   d i s p l a y : f l e x ;   j u s t i f y - c o n t e n t : s p a c e - b e t w e e n ;   a l i g n - i t e m s : c e n t e r ; " >  
+                                 < d i v   s t y l e = " f l e x : 1 ; " >  
+                                         < d i v   s t y l e = " f o n t - s i z e : 1 2 p x ;   f o n t - w e i g h t : 6 0 0 ;   c o l o r : # e 0 e 0 e 0 ;   m a r g i n - b o t t o m : 4 p x ; " >  
+                                                 $ { i t e m . u r l   ?   ` < a   h r e f = " $ { i t e m . u r l } "   t a r g e t = " _ b l a n k "   s t y l e = " c o l o r : # 6 4 b 5 f 6 ; t e x t - d e c o r a t i o n : n o n e ; " > $ { t i t l e } < / a > `   :   t i t l e }  
+                                         < / d i v >  
+                                         < d i v   s t y l e = " f o n t - s i z e : 1 1 p x ;   c o l o r : # 8 8 9 9 a 6 ; " >  
+                                                 $ { p r i c e }   $ { i t e m . l o c a t i o n   ?   ` � � �   $ { i t e m . l o c a t i o n } `   :   ' ' }   $ { i t e m . y e a r   ?   ` � � �   $ { i t e m . y e a r } `   :   ' ' }   $ { i t e m . k m   ?   ` � � �   $ { i t e m . k m }   k m `   :   ' ' }  
+                                         < / d i v >  
+                                 < / d i v >  
+                                 < d i v   s t y l e = " d i s p l a y : f l e x ;   g a p : 5 p x ; " >  
+                                         < b u t t o n   o n c l i c k = ' o p e n E d i t M o d a l ( J S O N . p a r s e ( " $ { i t e m J s o n } " ) ,   " l i s t i n g s " ) ; '   s t y l e = " f o n t - s i z e : 1 0 p x ;   p a d d i n g : 4 p x   8 p x ;   b a c k g r o u n d : # 1 d a 1 f 2 ;   b o r d e r : n o n e ;   c o l o r : w h i t e ;   c u r s o r : p o i n t e r ;   b o r d e r - r a d i u s : 4 p x ; " > � S� � � � < / b u t t o n >  
+                                         < b u t t o n   o n c l i c k = ' d e l e t e R e c o r d ( " $ { i t e m . _ i d } " ,   " l i s t i n g s " ) '   s t y l e = " f o n t - s i z e : 1 0 p x ;   p a d d i n g : 4 p x   8 p x ;   b a c k g r o u n d : # e 7 4 c 3 c ;   b o r d e r : n o n e ;   c o l o r : w h i t e ;   c u r s o r : p o i n t e r ;   b o r d e r - r a d i u s : 4 p x ; " > x  � � � < / b u t t o n >  
+                                 < / d i v >  
+                         < / d i v >  
+                 ` ;  
+         } ) . j o i n ( ' ' ) ;  
+ }  
+  
+ / /   T o g g l e   c a t e g o r y   e x p a n s i o n  
+ w i n d o w . t o g g l e C a t e g o r y   =   f u n c t i o n   ( c a t e g o r y I d )   {  
+         c o n s t   c o n t e n t   =   d o c u m e n t . g e t E l e m e n t B y I d ( ` c o n t e n t - $ { c a t e g o r y I d } ` ) ;  
+         c o n s t   a r r o w   =   d o c u m e n t . g e t E l e m e n t B y I d ( ` a r r o w - $ { c a t e g o r y I d } ` ) ;  
+  
+         i f   ( c o n t e n t . s t y l e . m a x H e i g h t   = = =   ' 0 p x '   | |   c o n t e n t . s t y l e . m a x H e i g h t   = = =   ' ' )   {  
+                 c o n t e n t . s t y l e . m a x H e i g h t   =   ' 4 0 0 p x ' ;  
+                 a r r o w . t e x t C o n t e n t   =   ' �  � ' ;  
+                 a r r o w . s t y l e . t r a n s f o r m   =   ' r o t a t e ( 0 d e g ) ' ;  
+         }   e l s e   {  
+                 c o n t e n t . s t y l e . m a x H e i g h t   =   ' 0 ' ;  
+                 a r r o w . t e x t C o n t e n t   =   ' �  � ' ;  
+                 a r r o w . s t y l e . t r a n s f o r m   =   ' r o t a t e ( - 9 0 d e g ) ' ;  
+         }  
+ }  
+ 
