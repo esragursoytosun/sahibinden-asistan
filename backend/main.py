@@ -538,6 +538,74 @@ CEVABINI TAMAMEN AŞAĞIDAKİ HTML ŞABLONUNDA VER (sadece HTML, başka bir şey
 async def root():
     return {"status": "active", "message": "Sahiden Asistan Uyanık! ☕"}
 
+# 🟢 ADMIN STATS API (MUST BE BEFORE STATIC HANDLER) 🟢
+@app.get("/admin/stats")
+async def admin_get_stats(admin_email: str):
+    """Genel istatistikleri ve geçmiş verileri döndürür (Admin only)"""
+    if not await verify_admin(admin_email):
+        return {"status": "error", "message": "Yetkiniz yok!"}
+    
+    try:
+        from backend.database import stats_collection
+        
+        # ANLIK HEADER DATALARI
+        total_users = await users_collection.count_documents({})
+        premium_users = await users_collection.count_documents({"plan": "premium"})
+        free_users = total_users - premium_users
+        total_listings = await listings_collection.count_documents({})
+        
+        # Bugün giriş yapanlar (Last login bugün olanlar)
+        today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        active_today = await users_collection.count_documents({
+            "last_login": {"$gte": today_start}
+        })
+        
+        # GRAFİK VERİLERİ (Son 7 gün)
+        # Eğer henüz geçmiş veri yoksa boş liste döner, frontend bunu handle etmeli
+        cursor = stats_collection.find().sort("date", 1).limit(30) # Son 30 gün
+        history_data = await cursor.to_list(length=30)
+        
+        # Veriyi frontend'in seveceği formata çevir
+        labels = []
+        queries_data = []
+        active_users_data = []
+        
+        for h in history_data:
+            d_obj = datetime.strptime(h["date"], "%Y-%m-%d")
+            labels.append(d_obj.strftime("%d %b")) # Örn: 22 Jan
+            queries_data.append(h.get("total_queries", 0))
+            active_users_data.append(h.get("active_users", 0))
+            
+        # BUGÜNÜN TAHMİNİ VERİSİNİ DE EKLE (Canlı hissi vermesi için)
+        # Henüz gece 00:00 olmadı, o yüzden bugünün şu anki verisini manual hesaplayıp grafiğin ucuna ekleyelim
+        pipeline = [{"$group": {"_id": None, "total_usage": {"$sum": "$daily_usage"}}}]
+        res = await users_collection.aggregate(pipeline).to_list(length=1)
+        curr_usage = res[0]["total_usage"] if res else 0
+        curr_active = await users_collection.count_documents({"daily_usage": {"$gt": 0}})
+        
+        labels.append("Bugün")
+        queries_data.append(curr_usage)
+        active_users_data.append(curr_active)
+        
+        return {
+            "status": "success",
+            "stats": {
+                "total_users": total_users,
+                "premium_users": premium_users,
+                "free_users": free_users,
+                "total_listings": total_listings,
+                "active_today": active_today
+            },
+            "charts": {
+                "labels": labels,
+                "queries": queries_data,
+                "active_users": active_users_data
+            }
+        }
+    except Exception as e:
+        print(f"Stats Error: {e}")
+        return {"status": "error", "message": str(e)}
+
 # 🟢 ADMIN PANEL STATIC FILES
 ADMIN_DIR = Path(__file__).parent.parent / "admin"
 
@@ -1109,73 +1177,7 @@ async def admin_search_users(data: dict):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
-# Admin Stats Endpoint
-@app.get("/admin/stats")
-async def admin_get_stats(admin_email: str):
-    """Genel istatistikleri ve geçmiş verileri döndürür (Admin only)"""
-    if not await verify_admin(admin_email):
-        return {"status": "error", "message": "Yetkiniz yok!"}
-    
-    try:
-        from backend.database import stats_collection
-        
-        # ANLIK HEADER DATALARI
-        total_users = await users_collection.count_documents({})
-        premium_users = await users_collection.count_documents({"plan": "premium"})
-        free_users = total_users - premium_users
-        total_listings = await listings_collection.count_documents({})
-        
-        # Bugün giriş yapanlar (Last login bugün olanlar)
-        today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-        active_today = await users_collection.count_documents({
-            "last_login": {"$gte": today_start}
-        })
-        
-        # GRAFİK VERİLERİ (Son 7 gün)
-        # Eğer henüz geçmiş veri yoksa boş liste döner, frontend bunu handle etmeli
-        cursor = stats_collection.find().sort("date", 1).limit(30) # Son 30 gün
-        history_data = await cursor.to_list(length=30)
-        
-        # Veriyi frontend'in seveceği formata çevir
-        labels = []
-        queries_data = []
-        active_users_data = []
-        
-        for h in history_data:
-            d_obj = datetime.strptime(h["date"], "%Y-%m-%d")
-            labels.append(d_obj.strftime("%d %b")) # Örn: 22 Jan
-            queries_data.append(h.get("total_queries", 0))
-            active_users_data.append(h.get("active_users", 0))
-            
-        # BUGÜNÜN TAHMİNİ VERİSİNİ DE EKLE (Canlı hissi vermesi için)
-        # Henüz gece 00:00 olmadı, o yüzden bugünün şu anki verisini manual hesaplayıp grafiğin ucuna ekleyelim
-        pipeline = [{"$group": {"_id": None, "total_usage": {"$sum": "$daily_usage"}}}]
-        res = await users_collection.aggregate(pipeline).to_list(length=1)
-        curr_usage = res[0]["total_usage"] if res else 0
-        curr_active = await users_collection.count_documents({"daily_usage": {"$gt": 0}})
-        
-        labels.append("Bugün")
-        queries_data.append(curr_usage)
-        active_users_data.append(curr_active)
-        
-        return {
-            "status": "success",
-            "stats": {
-                "total_users": total_users,
-                "premium_users": premium_users,
-                "free_users": free_users,
-                "total_listings": total_listings,
-                "active_today": active_today
-            },
-            "charts": {
-                "labels": labels,
-                "queries": queries_data,
-                "active_users": active_users_data
-            }
-        }
-    except Exception as e:
-        print(f"Stats Error: {e}")
-        return {"status": "error", "message": str(e)}
+
 
 # --- BULK UPLOAD (Kategori Destekli & Tüm Alanlar) ---
 @app.post("/bulk-upload")
