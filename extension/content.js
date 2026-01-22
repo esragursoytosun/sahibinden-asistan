@@ -179,7 +179,40 @@ async function runSweepMode() {
                 });
                 const result = await response.json();
                 console.log(`✅ BAI BILMIS: ${batchData.length} ${listingType} ilanı kaydedildi!`);
-                console.log(`📍 Lokasyon: ${pageLocation} | m² ve oda bilgisi: ${batchData.filter(d => d.area_m2).length} ilan`);
+
+                // KULLANICIYA GÖRSEL BİLDİRİM (TOAST)
+                const toast = document.createElement('div');
+                toast.innerHTML = `
+                    <div style="font-weight:bold; font-size:14px; margin-bottom:2px;">🚀 Hızlı Tarama Aktif</div>
+                    <div style="font-size:12px; opacity:0.9;">${batchData.length} yeni ilan veritabanına eklendi.</div>
+                `;
+                toast.style.cssText = `
+                    position: fixed;
+                    bottom: 20px;
+                    left: 20px;
+                    background: #27ae60;
+                    color: white;
+                    padding: 12px 20px;
+                    border-radius: 8px;
+                    z-index: 2147483647;
+                    font-family: 'Open Sans', sans-serif;
+                    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+                    animation: slideUp 0.5s ease;
+                `;
+
+                // Animation Keyframes
+                const style = document.createElement('style');
+                style.innerHTML = `@keyframes slideUp { from { transform: translateY(100px); opacity:0; } to { transform: translateY(0); opacity:1; } }`;
+                document.head.appendChild(style);
+                document.body.appendChild(toast);
+
+                setTimeout(() => {
+                    toast.style.transition = 'all 0.5s ease';
+                    toast.style.opacity = '0';
+                    toast.style.transform = 'translateY(20px)';
+                    setTimeout(() => toast.remove(), 500);
+                }, 4000);
+
             } catch (e) { console.log("Bulk upload hatası:", e); }
         } else {
             console.log("⚠️ BAI BILMIS: Bu sayfada kayıt edilecek ilan bulunamadı.");

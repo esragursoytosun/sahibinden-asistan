@@ -1104,6 +1104,36 @@ async def google_login(data: GoogleLoginData):
         }
     except Exception as e: raise HTTPException(status_code=401, detail=str(e))
 
+# --- BULK UPLOAD (Toplu Veri Kaydı) ---
+@app.post("/bulk-upload")
+async def bulk_upload(listings: List[dict]):
+    """Extension'dan gelen toplu ilan verilerini kaydeder."""
+    if not listings: return {"status": "error", "message": "Boş liste"}
+    
+    inserted_count = 0
+    for item in listings:
+        try:
+            if not item.get("id"): continue
+            
+            # Veri temizliği
+            item["_id"] = item["id"] # MongoDB ID olarak kullan
+            if "id" in item: del item["id"]
+            
+            item["last_update"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            
+            # Upsert işlemi (varsa güncelle, yoksa ekle)
+            await listings_collection.update_one(
+                {"_id": item["_id"]},
+                {"$set": item},
+                upsert=True
+            )
+            inserted_count += 1
+        except Exception as e:
+            print(f"Bulk insert error: {e}")
+            continue
+            
+    return {"status": "success", "count": inserted_count}
+
 # 🟢 KULLANICI PROFİL BİLGİLERİ (Güncel usage ve plan)
 @app.get("/user/profile/{user_id}")
 async def get_user_profile(user_id: str):
