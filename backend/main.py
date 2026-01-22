@@ -1261,7 +1261,10 @@ async def admin_login(data: dict):
     if not email or not key:
         return {"status": "error", "is_admin": False, "message": "Email ve şifre gerekli!"}
     
-    if key != ADMIN_KEY:
+    # Get current password from database (persistent)
+    current_password = await get_admin_password()
+    
+    if key != current_password:
         return {"status": "error", "is_admin": False, "message": "Şifre hatalı!"}
     
     if email not in [e.lower() for e in ADMIN_EMAILS]:
@@ -1279,7 +1282,7 @@ async def admin_verify(data: dict):
 
 @app.post("/admin/change-password")
 async def admin_change_password(data: dict):
-    """Admin şifre değiştirme"""
+    """Admin şifre değiştirme - Kalıcı"""
     admin_email = data.get("admin_email")
     current_password = data.get("current_password")
     new_password = data.get("new_password")
@@ -1290,18 +1293,32 @@ async def admin_change_password(data: dict):
     if not current_password or not new_password:
         return {"status": "error", "message": "Mevcut ve yeni şifre gerekli"}
     
-    # Verify current password
-    global ADMIN_KEY
-    if current_password != ADMIN_KEY:
+    # Get current password from database
+    current_stored_password = await get_admin_password()
+    
+    if current_password != current_stored_password:
         return {"status": "error", "message": "Mevcut şifre yanlış"}
     
     if len(new_password) < 8:
         return {"status": "error", "message": "Yeni şifre en az 8 karakter olmalı"}
     
-    # Update password (in-memory only, persists until restart)
-    ADMIN_KEY = new_password
+    # Update password in database (persistent)
+    await settings_collection.update_one(
+        {"key": "admin_password"},
+        {"$set": {"value": new_password, "updated_at": datetime.utcnow()}},
+        upsert=True
+    )
     
-    return {"status": "success", "message": "Şifre başarıyla değiştirildi"}
+    return {"status": "success", "message": "Şifre başarıyla değiştirildi ve kaydedildi"}
+
+async def get_admin_password():
+    """Veritabanından admin şifresini çeker"""
+    password_doc = await settings_collection.find_one({"key": "admin_password"})
+    if password_doc and "value" in password_doc:
+        return password_doc["value"]
+    # Varsayılan şifre
+    return ADMIN_KEY
+
 
 @app.post("/admin/users")
 async def admin_get_users(data: dict):
