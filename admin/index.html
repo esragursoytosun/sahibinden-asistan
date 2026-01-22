@@ -187,9 +187,24 @@
                         <button id="refreshDbBtn" class="btn-primary" style="width: auto;">Verileri Getir</button>
                     </div>
                 </header>
-                <div class="table-card">
-                    <div id="jsonViewer"
-                        style="white-space: pre-wrap; font-family: 'Consolas', monospace; color: #a8b3cf; font-size: 13px; max-height: 500px; overflow-y: auto;">
+
+                <!-- Category Filter (Only for Listings) -->
+                <div id="listingFilters"
+                    style="display:none; padding: 10px 20px; background: #15202b; border-bottom: 1px solid #38444d;">
+                    <span style="color:#8899a6; font-size:12px; margin-right:10px;">Filtrele:</span>
+                    <button class="filter-btn active" data-filter="all"
+                        style="background:#1da1f2; color:white; border:none; padding:6px 12px; border-radius:4px; margin-right:5px; cursor:pointer;">Tümü</button>
+                    <button class="filter-btn" data-filter="konut"
+                        style="background:#253341; color:#8899a6; border:none; padding:6px 12px; border-radius:4px; margin-right:5px; cursor:pointer;">🏠
+                        Konut</button>
+                    <button class="filter-btn" data-filter="araba"
+                        style="background:#253341; color:#8899a6; border:none; padding:6px 12px; border-radius:4px; margin-right:5px; cursor:pointer;">🚗
+                        Araç</button>
+                    <span id="filterCount" style="color:#8899a6; font-size:11px; margin-left:15px;"></span>
+                </div>
+
+                <div class="table-card" style="max-height: 600px; overflow-y: auto;">
+                    <div id="jsonViewer" style="font-family: 'Consolas', monospace; color: #a8b3cf; font-size: 13px;">
                         Verileri görmek için seçim yapıp "Verileri Getir" butonuna basın.
                     </div>
                 </div>

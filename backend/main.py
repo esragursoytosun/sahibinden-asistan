@@ -676,6 +676,7 @@ async def admin_db_preview(data: dict):
     admin_email = data.get("admin_email")
     collection_name = data.get("collection")
     limit = data.get("limit", 20)
+    skip = data.get("skip", 0)
     
     if not await verify_admin(admin_email):
         return {"status": "error", "message": "Yetkisiz erişim"}
@@ -691,14 +692,16 @@ async def admin_db_preview(data: dict):
         return {"status": "error", "message": "Geçersiz koleksiyon"}
         
     coll = valid_collections[collection_name]
-    cursor = coll.find({}).sort("_id", -1).limit(limit)
+    
+    total_count = await coll.count_documents({})
+    cursor = coll.find({}).sort("_id", -1).skip(skip).limit(limit)
     documents = await cursor.to_list(length=limit)
     
     # ObjectId to string serialization
     for doc in documents:
         doc["_id"] = str(doc["_id"])
         
-    return {"status": "success", "data": documents}
+    return {"status": "success", "data": documents, "total": total_count}
 
 # 🟢 ADMIN PANEL STATIC FILES
 ADMIN_DIR = Path(__file__).parent.parent / "admin"
