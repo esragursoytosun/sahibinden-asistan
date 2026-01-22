@@ -1,25 +1,14 @@
-// BAI Bilmiş Admin Panel - JavaScript
-
 const API_URL = "https://sahiden.onrender.com";
 
 // State
 let currentAdmin = null;
-let currentPage = 1;
-let totalUsers = 0;
-const USERS_PER_PAGE = 20;
+let charts = {};
 
 // DOM Elements
 const loginScreen = document.getElementById('loginScreen');
 const adminPanel = document.getElementById('adminPanel');
 const loginBtn = document.getElementById('loginBtn');
 const logoutBtn = document.getElementById('logoutBtn');
-const searchInput = document.getElementById('searchInput');
-const searchBtn = document.getElementById('searchBtn');
-const refreshBtn = document.getElementById('refreshBtn');
-const usersTableBody = document.getElementById('usersTableBody');
-const prevPageBtn = document.getElementById('prevPage');
-const nextPageBtn = document.getElementById('nextPage');
-const pageInfo = document.getElementById('pageInfo');
 const toast = document.getElementById('toast');
 
 // Initialize
@@ -31,21 +20,37 @@ document.addEventListener('DOMContentLoaded', () => {
 function setupEventListeners() {
     loginBtn.addEventListener('click', login);
     logoutBtn.addEventListener('click', logout);
-    searchBtn.addEventListener('click', searchUsers);
-    refreshBtn.addEventListener('click', () => loadUsers(currentPage));
-    prevPageBtn.addEventListener('click', () => changePage(-1));
-    nextPageBtn.addEventListener('click', () => changePage(1));
 
-    searchInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') searchUsers();
+    // Tab Switching
+    document.querySelectorAll('.nav-item').forEach(item => {
+        item.addEventListener('click', (e) => {
+            e.preventDefault();
+            const tabId = item.dataset.tab;
+            switchTab(tabId);
+        });
     });
 
-    // Enter tuşu ile giriş
+    document.getElementById('refreshStatsBtn').addEventListener('click', loadStats);
+
+    // Login on Enter
     document.getElementById('adminKey').addEventListener('keypress', (e) => {
         if (e.key === 'Enter') login();
     });
 }
 
+function switchTab(tabId) {
+    // Nav Active State
+    document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+    document.querySelector(`.nav-item[data-tab="${tabId}"]`).classList.add('active');
+
+    // Content Show/Hide
+    document.querySelectorAll('.content-tab').forEach(c => c.style.display = 'none');
+    document.getElementById(`tab-${tabId}`).style.display = 'block';
+
+    if (tabId === 'users') loadUsers(1);
+}
+
+// AUTH FUNCTIONS
 function checkExistingLogin() {
     const stored = localStorage.getItem('bai_admin');
     if (stored) {
@@ -58,98 +63,145 @@ function checkExistingLogin() {
     }
 }
 
-// Email + Key Login
 async function login() {
     const email = document.getElementById('adminEmail').value.trim();
     const key = document.getElementById('adminKey').value.trim();
 
-    if (!email) {
-        showToast('Email girin', 'error');
-        return;
-    }
-    if (!key) {
-        showToast('Şifre girin', 'error');
-        return;
-    }
+    if (!email || !key) return showToast('Tüm alanları doldurun', 'error');
 
-    loginBtn.innerHTML = '⏳ Kontrol ediliyor...';
+    loginBtn.innerHTML = '🔄 Kontrol ediliyor...';
     loginBtn.disabled = true;
 
     try {
-        // Backend'e admin doğrulaması yap
         const res = await fetch(`${API_URL}/admin/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: email, key: key })
+            body: JSON.stringify({ email, key })
         });
-
         const data = await res.json();
 
         if (data.status === 'success' && data.is_admin) {
-            currentAdmin = {
-                email: email,
-                name: email.split('@')[0]
-            };
+            currentAdmin = { email, name: email.split('@')[0] };
             localStorage.setItem('bai_admin', JSON.stringify(currentAdmin));
+            showToast('Giriş başarılı!', 'success');
             showAdminPanel();
-            showToast('Hoş geldin! 👋', 'success');
         } else {
-            showToast('❌ ' + (data.message || 'Giriş başarısız!'), 'error');
-            resetLoginButton();
+            showToast(data.message || 'Giriş başarısız', 'error');
         }
     } catch (e) {
-        showToast('Sunucu hatası: ' + e.message, 'error');
-        resetLoginButton();
+        showToast('Sunucu hatası', 'error');
+    } finally {
+        loginBtn.innerHTML = 'Giriş Yap';
+        loginBtn.disabled = false;
     }
-}
-
-function resetLoginButton() {
-    loginBtn.innerHTML = '🔐 Giriş Yap';
-    loginBtn.disabled = false;
 }
 
 function logout() {
-    if (confirm('Çıkış yapmak istediğinize emin misiniz?')) {
-        localStorage.removeItem('bai_admin');
-        currentAdmin = null;
-        adminPanel.style.display = 'none';
-        loginScreen.style.display = 'flex';
-        document.getElementById('adminEmail').value = '';
-        document.getElementById('adminKey').value = '';
-    }
+    localStorage.removeItem('bai_admin');
+    location.reload();
 }
 
 function showAdminPanel() {
     loginScreen.style.display = 'none';
-    adminPanel.style.display = 'block';
-
-    document.getElementById('adminName').textContent = currentAdmin.email;
-
+    adminPanel.style.display = 'flex';
+    document.getElementById('adminNameDisplay').textContent = currentAdmin.name;
     loadStats();
-    loadUsers(1);
 }
 
-// Load Stats
+// STATS & CHARTS
 async function loadStats() {
     try {
         const res = await fetch(`${API_URL}/admin/stats?admin_email=${encodeURIComponent(currentAdmin.email)}`);
         const data = await res.json();
 
         if (data.status === 'success') {
-            document.getElementById('totalUsers').textContent = data.stats.total_users;
-            document.getElementById('premiumUsers').textContent = data.stats.premium_users;
+            // Update KPIs
+            animateValue('totalUsers', data.stats.total_users);
+            animateValue('premiumUsers', data.stats.premium_users);
+            animateValue('activeToday', data.stats.active_today);
             document.getElementById('totalListings').textContent = data.stats.total_listings.toLocaleString('tr-TR');
-            document.getElementById('activeToday').textContent = data.stats.active_today;
+
+            // Check Last Updated
+            const now = new Date();
+            document.getElementById('lastUpdated').textContent = `Son güncelleme: ${now.toLocaleTimeString()}`;
+
+            // Render Charts
+            if (data.charts) {
+                renderCharts(data.charts);
+            }
         }
     } catch (e) {
-        console.error('Stats yüklenemedi:', e);
+        console.error(e);
+        showToast('Veriler yüklenemedi', 'error');
     }
 }
 
-// Load Users
+function renderCharts(chartData) {
+    const ctx1 = document.getElementById('queriesChart').getContext('2d');
+    const ctx2 = document.getElementById('usersChart').getContext('2d');
+
+    // Destroy existing charts to update
+    if (charts.queries) charts.queries.destroy();
+    if (charts.users) charts.users.destroy();
+
+    // Common Chart Options
+    const commonOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: { display: false }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                grid: { color: '#38444d' },
+                ticks: { color: '#8899a6' }
+            },
+            x: {
+                grid: { display: false },
+                ticks: { color: '#8899a6' }
+            }
+        }
+    };
+
+    // 1. Queries Chart (Line)
+    charts.queries = new Chart(ctx1, {
+        type: 'line',
+        data: {
+            labels: chartData.labels,
+            datasets: [{
+                label: 'Günlük Sorgu',
+                data: chartData.queries,
+                borderColor: '#1da1f2',
+                backgroundColor: 'rgba(29, 161, 242, 0.1)',
+                borderWidth: 2,
+                tension: 0.4,
+                fill: true
+            }]
+        },
+        options: commonOptions
+    });
+
+    // 2. Active Users Chart (Bar)
+    charts.users = new Chart(ctx2, {
+        type: 'bar',
+        data: {
+            labels: chartData.labels,
+            datasets: [{
+                label: 'Aktif Kullanıcı',
+                data: chartData.active_users,
+                backgroundColor: '#00ba7c',
+                borderRadius: 4
+            }]
+        },
+        options: commonOptions
+    });
+}
+
+// USERS TABLE (Simplified implementation)
 async function loadUsers(page) {
-    usersTableBody.innerHTML = '<tr><td colspan="6" class="loading-row">⏳ Yükleniyor...</td></tr>';
-    currentPage = page;
+    const tbody = document.getElementById('usersTableBody');
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center">Yükleniyor...</td></tr>';
 
     try {
         const res = await fetch(`${API_URL}/admin/users`, {
@@ -157,106 +209,51 @@ async function loadUsers(page) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 admin_email: currentAdmin.email,
-                limit: USERS_PER_PAGE,
-                skip: (page - 1) * USERS_PER_PAGE
+                limit: 20,
+                skip: (page - 1) * 20
             })
         });
-
         const data = await res.json();
 
         if (data.status === 'success') {
-            totalUsers = data.total;
-            renderUsers(data.users);
-            updatePagination();
-        } else {
-            throw new Error(data.message);
+            if (data.users.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center">Kullanıcı bulunamadı.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = data.users.map(u => `
+                <tr>
+                    <td>
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            <img src="${u.picture || ''}" style="width:30px;height:30px;border-radius:50%;background:#333;">
+                            <div>
+                                <div>${u.name}</div>
+                                <div style="font-size:11px;color:#888;">${u.email}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td><span class="badge ${u.plan}">${u.plan}</span></td>
+                    <td>${u.daily_usage}</td>
+                    <td>${u.last_login ? new Date(u.last_login).toLocaleDateString() : '-'}</td>
+                    <td>
+                        <button class="btn-sm" onclick="togglePlan('${u.id}', '${u.plan}')">
+                            ${u.plan === 'premium' ? 'Free Yap' : 'Premium Yap'}
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+
+            document.getElementById('pageIndicator').textContent = `Sayfa ${page}`;
         }
     } catch (e) {
-        usersTableBody.innerHTML = `<tr><td colspan="6" class="loading-row">❌ Hata: ${e.message}</td></tr>`;
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger">Hata oluştu.</td></tr>';
     }
 }
 
-// Search Users
-async function searchUsers() {
-    const query = searchInput.value.trim();
-    if (!query) {
-        loadUsers(1);
-        return;
-    }
-
-    if (query.length < 2) {
-        showToast('En az 2 karakter girin', 'error');
-        return;
-    }
-
-    usersTableBody.innerHTML = '<tr><td colspan="6" class="loading-row">🔍 Aranıyor...</td></tr>';
-
-    try {
-        const res = await fetch(`${API_URL}/admin/search`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                admin_email: currentAdmin.email,
-                query: query
-            })
-        });
-
-        const data = await res.json();
-
-        if (data.status === 'success') {
-            renderUsers(data.users);
-            pageInfo.textContent = `${data.count} sonuç`;
-            prevPageBtn.disabled = true;
-            nextPageBtn.disabled = true;
-        } else {
-            throw new Error(data.message);
-        }
-    } catch (e) {
-        usersTableBody.innerHTML = `<tr><td colspan="6" class="loading-row">❌ Arama hatası: ${e.message}</td></tr>`;
-    }
-}
-
-// Render Users Table
-function renderUsers(users) {
-    if (!users || users.length === 0) {
-        usersTableBody.innerHTML = '<tr><td colspan="6" class="loading-row">Kullanıcı bulunamadı</td></tr>';
-        return;
-    }
-
-    usersTableBody.innerHTML = users.map(user => `
-        <tr>
-            <td>
-                <div class="user-cell">
-                    <img src="${user.picture || 'https://via.placeholder.com/40'}" alt="" class="user-avatar">
-                    <span class="user-name">
-                        ${escapeHtml(user.name)}
-                        ${user.is_admin ? '<span class="admin-tag">ADMIN</span>' : ''}
-                    </span>
-                </div>
-            </td>
-            <td>${escapeHtml(user.email)}</td>
-            <td>
-                <span class="plan-badge ${user.plan}">${user.plan === 'premium' ? '⭐ Premium' : 'Ücretsiz'}</span>
-            </td>
-            <td>${user.daily_usage}/5</td>
-            <td>${formatDate(user.last_login)}</td>
-            <td>
-                ${user.plan === 'premium'
-            ? `<button class="action-btn free-btn" onclick="changePlan('${user.id}', 'free')">Ücretsiz Yap</button>`
-            : `<button class="action-btn premium-btn" onclick="changePlan('${user.id}', 'premium')">⭐ Premium Yap</button>`
-        }
-            </td>
-        </tr>
-    `).join('');
-}
-
-// Change User Plan
-async function changePlan(userId, newPlan) {
-    const actionText = newPlan === 'premium' ? 'Premium yapmak' : 'Ücretsiz yapmak';
-
-    if (!confirm(`Bu kullanıcıyı ${actionText} istediğinize emin misiniz?`)) {
-        return;
-    }
+// ACTIONS
+async function togglePlan(userId, currentPlan) {
+    const newPlan = currentPlan === 'premium' ? 'free' : 'premium';
+    if (!confirm(`Kullanıcıyı ${newPlan} paketine geçirmek istiyor musunuz?`)) return;
 
     try {
         const res = await fetch(`${API_URL}/admin/set-plan`, {
@@ -268,69 +265,29 @@ async function changePlan(userId, newPlan) {
                 plan: newPlan
             })
         });
-
         const data = await res.json();
-
         if (data.status === 'success') {
-            showToast('✅ ' + data.message, 'success');
-            loadUsers(currentPage);
-            loadStats();
-        } else {
-            throw new Error(data.message);
+            showToast('Paket güncellendi', 'success');
+            loadUsers(1); // Reload table
+            loadStats();  // Reload KPIs
         }
     } catch (e) {
-        showToast('❌ Hata: ' + e.message, 'error');
+        showToast('İşlem başarısız', 'error');
     }
 }
 
-// Pagination
-function changePage(delta) {
-    const newPage = currentPage + delta;
-    const maxPage = Math.ceil(totalUsers / USERS_PER_PAGE);
-
-    if (newPage >= 1 && newPage <= maxPage) {
-        loadUsers(newPage);
-    }
+// UTILS
+function showToast(msg, type = 'success') {
+    toast.textContent = msg;
+    toast.className = `toast show ${type}`;
+    setTimeout(() => toast.className = 'toast', 3000);
 }
 
-function updatePagination() {
-    const maxPage = Math.ceil(totalUsers / USERS_PER_PAGE);
+function animateValue(id, end) {
+    const obj = document.getElementById(id);
+    if (!obj) return;
+    if (end === undefined || end === null) { obj.textContent = '-'; return; }
 
-    prevPageBtn.disabled = currentPage <= 1;
-    nextPageBtn.disabled = currentPage >= maxPage;
-    pageInfo.textContent = `Sayfa ${currentPage} / ${maxPage} (${totalUsers} kullanıcı)`;
-}
-
-// Helpers
-function escapeHtml(str) {
-    if (!str) return '';
-    return str.replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
-}
-
-function formatDate(dateStr) {
-    if (!dateStr) return '-';
-    try {
-        const date = new Date(dateStr);
-        return date.toLocaleDateString('tr-TR', {
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
-    } catch (e) {
-        return dateStr;
-    }
-}
-
-function showToast(message, type = 'success') {
-    toast.textContent = message;
-    toast.className = 'toast show ' + type;
-
-    setTimeout(() => {
-        toast.className = 'toast';
-    }, 3000);
+    // Simple set for now
+    obj.textContent = end.toLocaleString('tr-TR');
 }

@@ -19,6 +19,7 @@ listings_collection = db["listings"]
 # Google ile giriş yapan üyelerin kaydedileceği yer
 users_collection = db["users"] 
 area_insights_collection = db["area_insights"] # Bölge haberleri ve analizi için 
+stats_collection = db["statistics"] # Günlük istatistik geçmişi için 
 
 async def get_db():
     return db
