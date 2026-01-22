@@ -701,7 +701,11 @@
             document.getElementById('loginBtn').addEventListener('click', login);
             document.getElementById('logoutBtn').addEventListener('click', logout);
             document.getElementById('searchBtn').addEventListener('click', searchUsers);
-            document.getElementById('refreshBtn').addEventListener('click', () => loadUsers(currentPage));
+            document.getElementById('refreshBtn').addEventListener('click', () => {
+                alert("Yenileniyor... (Kod: v1.1 Active)");
+                loadStats();
+                loadUsers(currentPage);
+            });
             document.getElementById('prevPage').addEventListener('click', () => changePage(-1));
             document.getElementById('nextPage').addEventListener('click', () => changePage(1));
             document.getElementById('searchInput').addEventListener('keypress', (e) => { if (e.key === 'Enter') searchUsers(); });
@@ -780,15 +784,28 @@
 
         async function loadStats() {
             try {
+                // Debugging için alert (GEÇİCİ)
+                // alert("İstatistikler yükleniyor..."); 
                 const res = await fetch(`${API_URL}/admin/stats?admin_email=${encodeURIComponent(currentAdmin.email)}`);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const data = await res.json();
+
                 if (data.status === 'success') {
                     document.getElementById('totalUsers').textContent = data.stats.total_users;
                     document.getElementById('premiumUsers').textContent = data.stats.premium_users;
                     document.getElementById('totalListings').textContent = data.stats.total_listings.toLocaleString('tr-TR');
                     document.getElementById('activeToday').textContent = data.stats.active_today;
+                } else {
+                    console.error('Stats Hatası:', data.message);
+                    alert("Stats Hatası: " + data.message); // Kullanıcı görsün
+                    // Hata toast'ı gösterme (çok rahatsız etmesin diye, ama debug için açabiliriz)
+                    document.getElementById('totalUsers').textContent = "Hata";
                 }
-            } catch (e) { console.error('Stats yüklenemedi:', e); }
+            } catch (e) {
+                console.error('Stats yüklenemedi:', e);
+                alert("Stats Yüklenemedi: " + e.message); // Kullanıcı görsün
+                document.getElementById('totalUsers').textContent = "Err";
+            }
         }
 
         async function loadUsers(page) {
@@ -805,7 +822,10 @@
                 const data = await res.json();
                 if (data.status === 'success') { totalUsers = data.total; renderUsers(data.users); updatePagination(); }
                 else throw new Error(data.message);
-            } catch (e) { tbody.innerHTML = `<tr><td colspan="6" class="loading-row">❌ Hata: ${e.message}</td></tr>`; }
+            } catch (e) {
+                tbody.innerHTML = `<tr><td colspan="6" class="loading-row">❌ Hata: ${e.message}</td></tr>`;
+                alert("Tablo Hatası: " + e.message);
+            }
         }
 
         async function searchUsers() {
