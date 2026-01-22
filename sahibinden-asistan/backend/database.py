@@ -1,0 +1,26 @@
+import os
+from motor.motor_asyncio import AsyncIOMotorClient
+from dotenv import load_dotenv
+
+# Localde çalışırken .env dosyasındaki şifreleri yükler
+load_dotenv()
+
+# MongoDB Bağlantı Ayarları
+MONGO_URL = os.getenv("MONGO_URL", "mongodb://localhost:27017")
+DB_NAME = "smart_buyer"  # Veritabanı adın bu, gayet güzel.
+
+client = AsyncIOMotorClient(MONGO_URL)
+db = client[DB_NAME]
+
+# İlanların kaydedileceği yer
+listings_collection = db["listings"]
+
+# --- YENİ EKLENEN KISIM ---
+# Google ile giriş yapan üyelerin kaydedileceği yer
+users_collection = db["users"] 
+area_insights_collection = db["area_insights"] # Bölge haberleri ve analizi için 
+stats_collection = db["statistics"] # Günlük istatistik geçmişi için 
+settings_collection = db["settings"] # Sistem ayarları ve limitler için 
+
+async def get_db():
+    return db
