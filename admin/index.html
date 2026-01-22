@@ -208,6 +208,35 @@
                         Verileri görmek için seçim yapıp "Verileri Getir" butonuna basın.
                     </div>
                 </div>
+
+                <!-- Pagination -->
+                <div class="pagination"
+                    style="margin-top: 15px; display: flex; justify-content: center; gap: 15px; align-items: center;">
+                    <button id="prevDbPage" class="btn-sm"
+                        style="background:#253341; border:1px solid #38444d; color:white; padding:8px 15px; cursor:pointer;"
+                        disabled>« Önceki</button>
+                    <span id="dbPageIndicator" style="color:#8899a6; font-size:13px;">Sayfa 1</span>
+                    <button id="nextDbPage" class="btn-sm"
+                        style="background:#253341; border:1px solid #38444d; color:white; padding:8px 15px; cursor:pointer;"
+                        disabled>Sonraki »</button>
+                </div>
+            </div>
+
+            <!-- Edit Modal -->
+            <div id="editModal"
+                style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:9999; justify-content:center; align-items:center;">
+                <div
+                    style="background:#192734; padding:20px; border-radius:12px; width:400px; border:1px solid #38444d; box-shadow:0 10px 40px rgba(0,0,0,0.5);">
+                    <h3 style="margin-top:0; color:#fff; border-bottom:1px solid #38444d; padding-bottom:10px;">Kayıt
+                        Düzenle</h3>
+                    <div id="editForm" style="display:flex; flex-direction:column; gap:10px; margin:20px 0;"></div>
+                    <div style="display:flex; justify-content:flex-end; gap:10px;">
+                        <button onclick="document.getElementById('editModal').style.display='none'"
+                            style="background:transparent; border:1px solid #8899a6; color:#8899a6; padding:8px 16px; border-radius:4px; cursor:pointer;">İptal</button>
+                        <button id="saveEditBtn"
+                            style="background:#1da1f2; border:none; color:white; padding:8px 16px; border-radius:4px; cursor:pointer;">Kaydet</button>
+                    </div>
+                </div>
             </div>
 
             <!-- Settings Tab -->
