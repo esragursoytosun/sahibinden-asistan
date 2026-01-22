@@ -29,7 +29,7 @@ app.add_middleware(
 )
 
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY")
-FREE_DAILY_LIMIT = 5
+FREE_DAILY_LIMIT_DEFAULT = 5
 ADMIN_EMAILS = ["cemerentosun@gmail.com", "esragursoytosun@gmail.com"]
 
 # --- GOOGLE AI AYARLARI (YENİ SDK) ---
@@ -606,6 +606,100 @@ async def admin_get_stats(admin_email: str):
         print(f"Stats Error: {e}")
         return {"status": "error", "message": str(e)}
 
+# 🟢 ADMIN: SİSTEM AYARLARI 🟢
+class SystemSettings(BaseModel):
+    free_daily_limit: int = 5
+    maintenance_mode: bool = False
+    new_user_registration: bool = True
+
+@app.get("/admin/settings")
+async def get_system_settings(admin_email: str):
+    if not await verify_admin(admin_email):
+        return {"status": "error", "message": "Yetkisiz erişim"}
+    
+    from backend.database import settings_collection
+    settings = await settings_collection.find_one({"_id": "system_settings"})
+    
+    if not settings:
+        # Varsayılan ayarları oluştur
+        default_settings = {
+            "_id": "system_settings", 
+            "free_daily_limit": FREE_DAILY_LIMIT_DEFAULT,
+            "maintenance_mode": False,
+            "new_user_registration": True
+        }
+        await settings_collection.insert_one(default_settings)
+        settings = default_settings
+        
+    return {"status": "success", "settings": settings}
+
+@app.post("/admin/settings")
+async def update_system_settings(data: dict):
+    admin_email = data.get("admin_email")
+    new_settings = data.get("settings")
+    
+    if not await verify_admin(admin_email):
+        return {"status": "error", "message": "Yetkisiz erişim"}
+        
+    from backend.database import settings_collection
+    await settings_collection.update_one(
+        {"_id": "system_settings"}, 
+        {"$set": new_settings}, 
+        upsert=True
+    )
+    return {"status": "success"}
+
+# 🟢 ADMIN: MANUEL TETİKLEYİCİLER 🟢
+@app.post("/admin/trigger-job")
+async def trigger_admin_job(data: dict):
+    admin_email = data.get("admin_email")
+    job_type = data.get("job_type")
+    
+    if not await verify_admin(admin_email):
+        return {"status": "error", "message": "Yetkisiz erişim"}
+
+    if job_type == "check_prices":
+        from backend.scheduler import check_price_drops
+        await check_price_drops() # Execute immediately (await)
+        return {"status": "success", "message": "Fiyat kontrolü başlatıldı."}
+        
+    elif job_type == "reset_limits":
+        from backend.scheduler import reset_daily_limits
+        await reset_daily_limits()
+        return {"status": "success", "message": "Limitler sıfırlandı."}
+        
+    return {"status": "error", "message": "Geçersiz işlem"}
+
+# 🟢 ADMIN: VERİTABANI YÖNETİMİ 🟢
+@app.post("/admin/db-preview")
+async def admin_db_preview(data: dict):
+    admin_email = data.get("admin_email")
+    collection_name = data.get("collection")
+    limit = data.get("limit", 20)
+    
+    if not await verify_admin(admin_email):
+        return {"status": "error", "message": "Yetkisiz erişim"}
+    
+    valid_collections = {
+        "users": users_collection,
+        "listings": listings_collection,
+        "statistics": stats_collection,
+        "settings": settings_collection
+    }
+    
+    if collection_name not in valid_collections:
+        return {"status": "error", "message": "Geçersiz koleksiyon"}
+        
+    coll = valid_collections[collection_name]
+    cursor = coll.find({}).sort("_id", -1).limit(limit)
+    documents = await cursor.to_list(length=limit)
+    
+    # ObjectId to string serialization
+    for doc in documents:
+        doc["_id"] = str(doc["_id"])
+        
+    return {"status": "success", "data": documents}
+
 # 🟢 ADMIN PANEL STATIC FILES
 ADMIN_DIR = Path(__file__).parent.parent / "admin"
 
@@ -688,10 +782,16 @@ async def ask_ai(data: ListingData):
     if not GEMINI_KEY: return {"status": "error", "message": "API Key Eksik!"}
     if not data.user_id: return {"status": "login_required", "message": "Giriş yapın."}
 
+    
+    # 🟢 SİSTEM AYARLARINI GETİR 🟢
+    from backend.database import settings_collection
+    settings = await settings_collection.find_one({"_id": "system_settings"})
+    free_limit = settings.get("free_daily_limit", FREE_DAILY_LIMIT_DEFAULT) if settings else FREE_DAILY_LIMIT_DEFAULT
+
     user = await users_collection.find_one({"_id": data.user_id})
     if user:
-        if user.get("plan") != "premium" and user.get("daily_usage", 0) >= FREE_DAILY_LIMIT:
-            return {"status": "limit_reached", "message": "Günlük limit doldu."}
+        if user.get("plan") != "premium" and user.get("daily_usage", 0) >= free_limit:
+            return {"status": "limit_reached", "message": f"Günlük limit ({free_limit} hak) doldu."}
         
         # Kullanım miktarını artır VE son görülme zamanını güncelle (Admin istatistikleri için)
         await users_collection.update_one(

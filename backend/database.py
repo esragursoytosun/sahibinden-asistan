@@ -20,6 +20,7 @@ listings_collection = db["listings"]
 users_collection = db["users"] 
 area_insights_collection = db["area_insights"] # Bölge haberleri ve analizi için 
 stats_collection = db["statistics"] # Günlük istatistik geçmişi için 
+settings_collection = db["settings"] # Sistem ayarları ve limitler için 
 
 async def get_db():
     return db

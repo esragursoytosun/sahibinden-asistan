@@ -32,6 +32,9 @@ function setupEventListeners() {
 
     document.getElementById('refreshStatsBtn').addEventListener('click', loadStats);
 
+    document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
+    document.getElementById('refreshDbBtn').addEventListener('click', loadDbData);
+
     // Login on Enter
     document.getElementById('adminKey').addEventListener('keypress', (e) => {
         if (e.key === 'Enter') login();
@@ -48,6 +51,7 @@ function switchTab(tabId) {
     document.getElementById(`tab-${tabId}`).style.display = 'block';
 
     if (tabId === 'users') loadUsers(1);
+    if (tabId === 'settings') loadSettings();
 }
 
 // AUTH FUNCTIONS
@@ -273,6 +277,96 @@ async function togglePlan(userId, currentPlan) {
         }
     } catch (e) {
         showToast('İşlem başarısız', 'error');
+    }
+}
+
+/* SYSTEM SETTINGS */
+async function loadSettings() {
+    try {
+        const res = await fetch(`${API_URL}/admin/settings?admin_email=${encodeURIComponent(currentAdmin.email)}`);
+        const data = await res.json();
+
+        if (data.status === 'success') {
+            document.getElementById('settingFreeLimit').value = data.settings.free_daily_limit;
+            document.getElementById('settingMaintenance').checked = data.settings.maintenance_mode;
+        }
+    } catch (e) {
+        showToast('Ayarlar yüklenemedi', 'error');
+    }
+}
+
+async function saveSettings() {
+    const freeLimit = parseInt(document.getElementById('settingFreeLimit').value);
+    const maintenance = document.getElementById('settingMaintenance').checked;
+
+    try {
+        const res = await fetch(`${API_URL}/admin/settings`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                admin_email: currentAdmin.email,
+                settings: {
+                    free_daily_limit: freeLimit,
+                    maintenance_mode: maintenance
+                }
+            })
+        });
+        const data = await res.json();
+        if (data.status === 'success') {
+            showToast('Ayarlar kaydedildi', 'success');
+        } else {
+            showToast(data.message || 'Hata', 'error');
+        }
+    } catch (e) {
+        showToast('Kaydedilemedi', 'error');
+    }
+}
+
+async function triggerJob(jobType) {
+    if (!confirm('Bu işlemi manuel başlatmak istediğinize emin misiniz?')) return;
+
+    try {
+        const res = await fetch(`${API_URL}/admin/trigger-job`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                admin_email: currentAdmin.email,
+                job_type: jobType
+            })
+        });
+        const data = await res.json();
+        showToast(data.message, data.status === 'success' ? 'success' : 'error');
+    } catch (e) {
+        showToast('İşlem hatası', 'error');
+    }
+}
+
+/* DATA INSPECTOR */
+async function loadDbData() {
+    const collection = document.getElementById('dbCollectionSelect').value;
+    const viewer = document.getElementById('jsonViewer');
+
+    viewer.textContent = 'Veriler çekiliyor...';
+
+    try {
+        const res = await fetch(`${API_URL}/admin/db-preview`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                admin_email: currentAdmin.email,
+                collection: collection,
+                limit: 50
+            })
+        });
+        const data = await res.json();
+
+        if (data.status === 'success') {
+            viewer.textContent = JSON.stringify(data.data, null, 2);
+        } else {
+            viewer.textContent = 'Hata: ' + data.message;
+        }
+    } catch (e) {
+        viewer.textContent = 'Bağlantı hatası.';
     }
 }
 

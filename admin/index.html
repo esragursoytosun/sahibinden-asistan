@@ -55,6 +55,9 @@
                 <a href="#" class="nav-item" data-tab="users">
                     <span class="icon">👥</span> Kullanıcılar
                 </a>
+                <a href="#" class="nav-item" data-tab="data">
+                    <span class="icon">💾</span> Veri Yönetimi
+                </a>
                 <a href="#" class="nav-item" data-tab="settings">
                     <span class="icon">⚙️</span> Ayarlar
                 </a>
@@ -169,13 +172,67 @@
                 </div>
             </div>
 
+            <!-- Data Management Tab -->
+            <div id="tab-data" class="content-tab" style="display: none;">
+                <header class="top-bar">
+                    <h2>Veri Yönetimi</h2>
+                    <div class="actions">
+                        <select id="dbCollectionSelect" class="settings-input"
+                            style="width: 200px; padding: 10px; background: #192734; border: 1px solid #38444d; color: white; border-radius: 8px;">
+                            <option value="users">👤 Kullanıcılar (users)</option>
+                            <option value="listings">🏠 İlanlar (listings)</option>
+                            <option value="statistics">📊 İstatistikler (statistics)</option>
+                            <option value="settings">⚙️ Ayarlar (settings)</option>
+                        </select>
+                        <button id="refreshDbBtn" class="btn-primary" style="width: auto;">Verileri Getir</button>
+                    </div>
+                </header>
+                <div class="table-card">
+                    <div id="jsonViewer"
+                        style="white-space: pre-wrap; font-family: 'Consolas', monospace; color: #a8b3cf; font-size: 13px; max-height: 500px; overflow-y: auto;">
+                        Verileri görmek için seçim yapıp "Verileri Getir" butonuna basın.
+                    </div>
+                </div>
+            </div>
+
             <!-- Settings Tab -->
             <div id="tab-settings" class="content-tab" style="display: none;">
                 <header class="top-bar">
                     <h2>Sistem Ayarları</h2>
                 </header>
-                <div class="settings-card">
-                    <p>Şu an için yapılandırılabilir ayar bulunmuyor.</p>
+
+                <div class="charts-grid">
+                    <!-- Config Card -->
+                    <div class="chart-card">
+                        <h3>⚙️ Genel Yapılandırma</h3>
+                        <div class="input-group">
+                            <label>Ücretsiz Üye Günlük Limit</label>
+                            <input type="number" id="settingFreeLimit" value="5">
+                        </div>
+                        <div class="input-group" style="display: flex; align-items: center; gap: 10px;">
+                            <input type="checkbox" id="settingMaintenance" style="width: 20px;">
+                            <label style="margin: 0;">Bakım Modu (Servis Dışı)</label>
+                        </div>
+                        <button id="saveSettingsBtn" class="btn-primary">Kaydet</button>
+                    </div>
+
+                    <!-- Actions Card -->
+                    <div class="chart-card">
+                        <h3>⚡ Manuel İşlemler</h3>
+                        <p style="color: #8899a6; font-size: 13px; margin-bottom: 20px;">Zamanlayıcıyı beklemeden
+                            işlemleri tetikleyin.</p>
+
+                        <div style="display: flex; flex-direction: column; gap: 10px;">
+                            <button class="btn-logout" style="background: rgba(29, 161, 242, 0.15); color: #1da1f2;"
+                                onclick="triggerJob('check_prices')">
+                                🕵️ Fiyat Kontrolünü Başlat
+                            </button>
+                            <button class="btn-logout" style="background: rgba(234, 179, 8, 0.15); color: #eab308;"
+                                onclick="triggerJob('reset_limits')">
+                                🔄 Günlük Limitleri Sıfırla
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
 
