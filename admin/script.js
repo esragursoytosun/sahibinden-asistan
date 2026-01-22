@@ -344,9 +344,9 @@ async function triggerJob(jobType) {
 /* DATA INSPECTOR */
 async function loadDbData() {
     const collection = document.getElementById('dbCollectionSelect').value;
-    const viewer = document.getElementById('jsonViewer');
+    const container = document.getElementById('jsonViewer'); // Using the same container but changing content
 
-    viewer.textContent = 'Veriler çekiliyor...';
+    container.innerHTML = '<div class="text-center" style="padding:20px;">Veriler yükleniyor...</div>';
 
     try {
         const res = await fetch(`${API_URL}/admin/db-preview`, {
@@ -361,13 +361,71 @@ async function loadDbData() {
         const data = await res.json();
 
         if (data.status === 'success') {
-            viewer.textContent = JSON.stringify(data.data, null, 2);
+            if (!data.data || data.data.length === 0) {
+                container.innerHTML = '<div class="text-center" style="padding:20px;">Veri bulunamadı.</div>';
+                return;
+            }
+            renderDataTable(data.data, collection, container);
         } else {
-            viewer.textContent = 'Hata: ' + data.message;
+            container.innerHTML = `<div class="text-center text-danger" style="padding:20px;">Hata: ${data.message}</div>`;
         }
     } catch (e) {
-        viewer.textContent = 'Bağlantı hatası.';
+        container.innerHTML = '<div class="text-center text-danger" style="padding:20px;">Bağlantı hatası.</div>';
     }
+}
+
+function renderDataTable(data, collection, container) {
+    let columns = [];
+
+    // Koleksiyona göre özel sütunlar belirle
+    if (collection === 'listings') {
+        columns = [
+            { key: 'title', label: 'Başlık', render: val => `<span style="font-weight:600; color:white;">${val || '-'}</span>` },
+            { key: 'price', label: 'Fiyat', render: val => val ? `${val.toLocaleString()} TL` : '-' },
+            { key: 'location', label: 'Konum' },
+            { key: 'year', label: 'Yıl' },
+            { key: 'last_update', label: 'Tarih', render: val => val ? new Date(val).toLocaleDateString() : '-' }
+        ];
+    } else if (collection === 'users') {
+        columns = [
+            { key: 'name', label: 'İsim' },
+            { key: 'email', label: 'E-posta' },
+            { key: 'plan', label: 'Paket', render: val => `<span class="badge ${val}">${val}</span>` },
+            { key: 'daily_usage', label: 'Kullanım' }
+        ];
+    } else {
+        // Genel (Generic) Tablo: İlk kaydın anahtarlarını al (ID hariç)
+        const keys = Object.keys(data[0]).filter(k => k !== '_id' && typeof data[0][k] !== 'object');
+        columns = keys.slice(0, 5).map(k => ({ key: k, label: k.charAt(0).toUpperCase() + k.slice(1) }));
+    }
+
+    let html = `
+        <table class="data-table" style="width:100%;">
+            <thead>
+                <tr>
+                    ${columns.map(col => `<th>${col.label}</th>`).join('')}
+                    <th>JSON</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${data.map(row => `
+                    <tr>
+                        ${columns.map(col => {
+        const val = row[col.key];
+        return `<td>${col.render ? col.render(val) : (val || '-')}</td>`;
+    }).join('')}
+                        <td>
+                            <button class="btn-sm" onclick='alert(${JSON.stringify(JSON.stringify(row, null, 2))})' style="font-size:10px; padding:4px 8px;">
+                                🔍 Detay
+                            </button>
+                        </td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    `;
+
+    container.innerHTML = html;
 }
 
 // UTILS
