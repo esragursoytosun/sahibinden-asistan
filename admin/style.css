@@ -471,40 +471,87 @@ body {
 
 /* ACTION BUTTONS */
 .btn-sm {
-    padding: 8px 16px;
-    border-radius: 8px;
+    padding: 6px 14px;
+    border-radius: 6px;
     font-weight: 600;
-    font-size: 12px;
+    font-size: 11px;
     cursor: pointer;
     transition: all 0.2s ease;
     border: 1px solid transparent;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
 }
 
 .btn-upgrade {
-    background: linear-gradient(135deg, rgba(255, 208, 0, 0.1), rgba(255, 208, 0, 0.2));
+    background: rgba(255, 208, 0, 0.1);
     color: #FFD000;
-    border-color: rgba(255, 208, 0, 0.3);
+    border-color: rgba(255, 208, 0, 0.2);
 }
 
 .btn-upgrade:hover {
-    background: linear-gradient(135deg, rgba(255, 208, 0, 0.2), rgba(255, 208, 0, 0.3));
-    box-shadow: 0 0 10px rgba(255, 208, 0, 0.2);
+    background: rgba(255, 208, 0, 0.2);
+    box-shadow: 0 0 10px rgba(255, 208, 0, 0.15);
     transform: translateY(-1px);
+    border-color: #FFD000;
 }
 
 .btn-downgrade {
     background: rgba(136, 153, 166, 0.1);
     color: #8899a6;
-    border-color: rgba(136, 153, 166, 0.3);
+    border-color: rgba(136, 153, 166, 0.2);
 }
 
 .btn-downgrade:hover {
     background: rgba(136, 153, 166, 0.2);
-    color: #fff;
-    border-color: rgba(255, 255, 255, 0.3);
+    color: #fcebeb;
+    border-color: rgba(136, 153, 166, 0.4);
 }
 
-/* RESPONSIVE */
+.btn-icon-sm {
+    width: 32px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    background: transparent;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: 0.2s;
+    font-size: 14px;
+}
+
+.btn-icon-sm:hover {
+    background: var(--bg-hover);
+    border-color: var(--border);
+}
+
+.btn-icon-sm.delete:hover {
+    background: rgba(249, 24, 128, 0.1);
+    color: var(--danger);
+    border-color: rgba(249, 24, 128, 0.3);
+}
+
+/* CUSTOM SCROLLBAR */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--bg-dark);
+}
+
+::-webkit-scrollbar-thumb {
+    background: #38444d;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #5c6e7e;
+}
+
 @media (max-width: 1024px) {
     .charts-grid {
         grid-template-columns: 1fr;

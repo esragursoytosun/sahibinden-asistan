@@ -159,48 +159,98 @@ async function loadStats() {
 
 async function loadUsers(page = 1) {
     const tbody = document.getElementById('usersTableBody');
-    tbody.innerHTML = '<tr><td colspan="5" class="text-center">Yükleniyor...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center">Yükleniyor...</td></tr>';
 
     try {
         const res = await fetch(`${API_URL}/admin/users?page=${page}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ admin_email: currentAdmin.email })
+            body: JSON.stringify({ admin_email: currentAdmin.email, limit: 100 })
         });
         const data = await res.json();
 
         if (data.status === 'success') {
             tbody.innerHTML = '';
-            data.users.forEach(user => {
+
+            // Kullanıcıları sırala: Önce premiumlar, sonra en son girenler
+            const sortedUsers = data.users.sort((a, b) => {
+                if (a.plan === 'premium' && b.plan !== 'premium') return -1;
+                if (a.plan !== 'premium' && b.plan === 'premium') return 1;
+                return new Date(b.last_login || 0) - new Date(a.last_login || 0);
+            });
+
+            sortedUsers.forEach(user => {
+                const isPremium = user.plan === 'premium';
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td>
                         <div class="user-cell">
-                            <div class="avatar">${user.name.charAt(0).toUpperCase()}</div>
+                            <div class="avatar" style="background:${isPremium ? 'linear-gradient(135deg, #FFD000, #F5A623)' : '#8899a6'}">
+                                ${user.name ? user.name.charAt(0).toUpperCase() : '?'}
+                            </div>
                             <div>
-                                <div class="font-medium">${user.name}</div>
-                                <div class="text-muted">${user.email}</div>
+                                <div class="font-medium">${user.name || 'İsimsiz'} ${user.is_admin ? '👑' : ''}</div>
+                                <div class="text-muted" style="font-size:11px;">${user.email}</div>
                             </div>
                         </div>
                     </td>
                     <td>
-                        <span class="badge ${user.is_premium ? 'badge-premium' : 'badge-free'}">
-                            ${user.is_premium ? 'Premium' : 'Ücretsiz'}
+                        <span class="badge ${isPremium ? 'premium' : 'free'}">
+                            ${isPremium ? 'PREMIUM ÜYE' : 'ÜCRETSİZ'}
                         </span>
                     </td>
-                    <td>${user.usage_count || 0} / ${user.daily_limit || 5}</td>
-                    <td>${formatDate(user.last_login)}</td>
                     <td>
-                        <button class="btn-icon-sm" onclick="editUser('${user.user_id}')">✏️</button>
-                        <button class="btn-icon-sm delete" onclick="deleteUser('${user.user_id}')">🗑️</button>
+                        <div style="font-weight:600; color:${user.usage_count > user.daily_limit ? 'var(--danger)' : 'inherit'}">
+                            ${user.usage_count || 0} / ${user.daily_limit || 5}
+                        </div>
+                    </td>
+                    <td class="text-muted" style="font-size:12px;">
+                        ${user.last_login ? new Date(user.last_login).toLocaleString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-'}
+                    </td>
+                    <td>
+                        ${!user.is_admin ? `
+                            <button class="btn-sm ${isPremium ? 'btn-downgrade' : 'btn-upgrade'}" 
+                                onclick="toggleUserPlan('${user.id}', '${isPremium ? 'free' : 'premium'}')">
+                                ${isPremium ? '⬇️ Ücretsiz Yap' : '⭐ Premium Yap'}
+                            </button>
+                        ` : '<span class="text-muted">-</span>'}
+                    </td>
+                    <td>
+                        <button class="btn-icon-sm delete" onclick="deleteUser('${user.id}')" title="Kullanıcıyı Sil">🗑️</button>
                     </td>
                 `;
                 tbody.appendChild(tr);
             });
-            // Update pagination buttons if needed
         }
     } catch (e) {
-        tbody.innerHTML = `<tr><td colspan="5" class="text-center error">Hata: ${e.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6" class="text-center error">Hata: ${e.message}</td></tr>`;
+    }
+}
+
+// 🟢 KULLANICI PLANI DEĞİŞTİRME
+async function toggleUserPlan(userId, newPlan) {
+    if (!confirm(`Kullanıcıyı ${newPlan.toUpperCase()} paketine geçirmek istiyor musunuz?`)) return;
+
+    try {
+        const res = await fetch(`${API_URL}/admin/set-plan`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                admin_email: currentAdmin.email,
+                user_id: userId,
+                plan: newPlan
+            })
+        });
+        const data = await res.json();
+
+        if (data.status === 'success') {
+            showToast(data.message, 'success');
+            loadUsers(); // Tabloyu yenile
+        } else {
+            showToast(data.message, 'error');
+        }
+    } catch (e) {
+        showToast('İşlem başarısız: ' + e.message, 'error');
     }
 }
 
