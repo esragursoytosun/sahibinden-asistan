@@ -81,7 +81,7 @@ def clean_number(value):
     clean_val = re.sub(r'[^\d]', '', str(value))
     return int(clean_val) if clean_val else 0
 
-async def calculate_valuation(title, current_price, current_id, current_year, category_path=None, listing_type=None, location=None, room_count=None, area_m2=None):
+async def calculate_valuation(title, current_price, current_id, current_year, category_path=None, listing_type=None, location=None, room_count=None, area_m2=None, transmission=None):
     """Araç ve emlak ilanları için piyasa değerlemesi yapar"""
     if not title or not current_price: return None
     try:
@@ -135,6 +135,7 @@ async def calculate_valuation(title, current_price, current_id, current_year, ca
             item_type = item.get("listing_type", "")
             item_room = item.get("room_count", "")
             item_area = clean_number(item.get("area_m2", 0))
+            item_transmission = item.get("transmission", "")
             
             # 🏠 EMLAK İÇİN SIKI FİLTRELEME (MAHALLE + ODA + m²) 🏠
             if is_real_estate:
@@ -202,6 +203,20 @@ async def calculate_valuation(title, current_price, current_id, current_year, ca
                 if not category_match:
                     continue
 
+                # VİTES TİPİ KONTROLÜ (Manuel vs Otomatik)
+                # Eğer hedef araçta vites bilgisi varsa, filtrele
+                if transmission and item_transmission:
+                    tr_target = transmission.lower()
+                    tr_item = item_transmission.lower()
+                    
+                    # Manuel ise sadece Manuel ile eşleşsin
+                    if "manuel" in tr_target:
+                        if "manuel" not in tr_item: continue
+                    
+                    # Otomatik veya Yarı Otomatik ise, Manuel olmasın
+                    elif "otomatik" in tr_target:
+                        if "manuel" in tr_item: continue
+
                 # YIL EŞLEŞMESİ (±1 YIL TOLERANS - önceden tam eşleşme istiyordu)
                 if target_year > 1900 and y > 1900:
                     if abs(y - target_year) > 1:  # ±1 yıl tolerans
@@ -243,8 +258,10 @@ async def calculate_valuation(title, current_price, current_id, current_year, ca
             if room_count:
                 info_msg += f" [{room_count}]"
         else:
+        else:
             info_msg = f"{len(valid_prices)} benzer ilan ({target_year} Model)"
-            if use_category_filter: info_msg += " [Kategori]"
+            if transmission: info_msg += f" [{transmission}]" # Vites bilgisini de göster
+            elif use_category_filter: info_msg += " [Kategori]"
         
         # m² fiyatı ve benzer ilanlar GİZLENSİN (Kullanıcı talebi)
         m2_price = None
@@ -1033,7 +1050,8 @@ async def ask_ai(data: ListingData):
         listing_type=listing_type,
         location=data.location,
         room_count=data.room_count,
-        area_m2=data.area_m2
+        area_m2=data.area_m2,
+        transmission=data.transmission
     )
     user_notes = await get_user_notes(data.id)
     
