@@ -540,8 +540,17 @@ async def root():
 
 # 🟢 ADMIN STATS API (MUST BE BEFORE STATIC HANDLER) 🟢
 @app.get("/admin/stats")
-async def admin_get_stats(admin_email: str):
+@app.post("/admin/stats")
+async def admin_get_stats(request: Request = None, admin_email: str = None):
     """Genel istatistikleri ve geçmiş verileri döndürür (Admin only)"""
+    # POST body'den admin_email al
+    if request and request.method == "POST":
+        try:
+            body = await request.json()
+            admin_email = body.get("admin_email", admin_email)
+        except:
+            pass
+    
     if not await verify_admin(admin_email):
         return {"status": "error", "message": "Yetkiniz yok!"}
     
@@ -753,6 +762,128 @@ async def admin_update_record(data: dict):
     try:
         # Güvenlik: _id değiştirilemez
         if "_id" in update_data: del update_data["_id"]
+        
+        result = await valid_collections[collection_name].update_one(
+            {"_id": record_id},
+            {"$set": update_data}
+        )
+        
+        if result.modified_count > 0:
+            return {"status": "success", "message": "Kayıt güncellendi"}
+        else:
+            return {"status": "warning", "message": "Değişiklik yapılmadı veya kayıt yok"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+# 🟢 ADMIN: VERİ API'LERİ (Frontend İçin Alias) 🟢
+@app.post("/admin/data")
+async def admin_data(data: dict):
+    """Veri yönetimi - collection verilerini listele (Frontend uyumlu)"""
+    admin_email = data.get("admin_email")
+    collection_name = data.get("collection")
+    page = data.get("page", 1)
+    limit = data.get("limit", 50)
+    
+    if not await verify_admin(admin_email):
+        return {"status": "error", "message": "Yetkisiz erişim"}
+    
+    valid_collections = {
+        "users": users_collection,
+        "listings": listings_collection,
+        "statistics": stats_collection,
+        "settings": settings_collection
+    }
+    
+    if collection_name not in valid_collections:
+        return {"status": "error", "message": "Geçersiz koleksiyon"}
+    
+    coll = valid_collections[collection_name]
+    skip = (page - 1) * limit
+    
+    total_count = await coll.count_documents({})
+    cursor = coll.find({}).sort("_id", -1).skip(skip).limit(limit)
+    documents = await cursor.to_list(length=limit)
+    
+    # ObjectId ve datetime serialization
+    for doc in documents:
+        doc["_id"] = str(doc["_id"])
+        # Önemli alanları düzelt
+        if collection_name == "listings":
+            doc["id"] = doc["_id"]
+            doc["price"] = doc.get("current_price", doc.get("price", 0))
+        elif collection_name == "users":
+            doc["id"] = doc["_id"]
+            doc["user_id"] = doc["_id"]
+            doc["is_premium"] = doc.get("plan") == "premium"
+            doc["usage_count"] = doc.get("daily_usage", 0)
+            doc["daily_limit"] = 999 if doc.get("plan") == "premium" else 5
+    
+    total_pages = (total_count + limit - 1) // limit
+    
+    return {
+        "status": "success",
+        "data": documents,
+        "total": total_count,
+        "pagination": {
+            "current_page": page,
+            "total_pages": total_pages,
+            "has_prev": page > 1,
+            "has_next": page < total_pages
+        }
+    }
+
+@app.post("/admin/data/delete")
+async def admin_data_delete(data: dict):
+    """Kayıt sil (Frontend uyumlu alias)"""
+    admin_email = data.get("admin_email")
+    collection_name = data.get("collection")
+    record_id = data.get("id")
+    
+    if not await verify_admin(admin_email):
+        return {"status": "error", "message": "Yetkisiz erişim"}
+    
+    valid_collections = {
+        "users": users_collection,
+        "listings": listings_collection
+    }
+    
+    if collection_name not in valid_collections:
+        return {"status": "error", "message": "Geçersiz koleksiyon"}
+    
+    try:
+        query = {"_id": record_id}
+        result = await valid_collections[collection_name].delete_one(query)
+        
+        if result.deleted_count > 0:
+            return {"status": "success", "message": "Kayıt silindi"}
+        else:
+            return {"status": "error", "message": "Kayıt bulunamadı"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/admin/data/update")
+async def admin_data_update(data: dict):
+    """Kayıt güncelle (Frontend uyumlu alias)"""
+    admin_email = data.get("admin_email")
+    collection_name = data.get("collection")
+    record_id = data.get("id")
+    update_data = data.get("data", {})
+    
+    if not await verify_admin(admin_email):
+        return {"status": "error", "message": "Yetkisiz erişim"}
+    
+    valid_collections = {
+        "users": users_collection,
+        "listings": listings_collection
+    }
+    
+    if collection_name not in valid_collections:
+        return {"status": "error", "message": "Geçersiz koleksiyon"}
+    
+    try:
+        # Güvenlik: _id değiştirilemez
+        if "_id" in update_data: 
+            del update_data["_id"]
         
         result = await valid_collections[collection_name].update_one(
             {"_id": record_id},
