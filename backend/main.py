@@ -258,7 +258,6 @@ async def calculate_valuation(title, current_price, current_id, current_year, ca
             if room_count:
                 info_msg += f" [{room_count}]"
         else:
-        else:
             info_msg = f"{len(valid_prices)} benzer ilan ({target_year} Model)"
             if transmission: info_msg += f" [{transmission}]" # Vites bilgisini de göster
             elif use_category_filter: info_msg += " [Kategori]"
