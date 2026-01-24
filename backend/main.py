@@ -962,7 +962,13 @@ async def admin_static(filename: str):
         }
         suffix = file_path.suffix.lower()
         media_type = content_types.get(suffix, "application/octet-stream")
-        return FileResponse(file_path, media_type=media_type)
+        
+        headers = {
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0"
+        }
+        return FileResponse(file_path, media_type=media_type, headers=headers)
     raise HTTPException(status_code=404, detail="Dosya bulunamadı")
 
 # 🟢 YENİ EKLENDİ: Arka Plan Görevleri (404 Hatasını Çözer) 🟢
