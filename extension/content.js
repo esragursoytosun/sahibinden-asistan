@@ -16,23 +16,70 @@ function getUser() {
 let userId = localStorage.getItem("sahibinden_userid");
 if (!userId) { userId = "uid_" + Math.random().toString(36).substr(2, 9); localStorage.setItem("sahibinden_userid", userId); }
 
-// 🟢 1. KATEGORİ YOLUNU OKUMA (Breadcrumb)
-// HTML yapısı: <ul> <li class="bc-item"> <a ...> <span>Renault</span> </a> </li> ... </ul>
+// 🟢 1. KATEGORİ YOLUNU OKUMA (Breadcrumb) - GÜÇLENDİRİLMİŞ
+// Birden fazla selector deneyerek sahibinden'in değişen HTML yapısına uyum sağlar
 function getCategoryPath() {
     try {
-        // Senin gönderdiğin HTML'deki yapıya birebir uygun seçici:
-        const items = document.querySelectorAll('li.bc-item > a > span');
+        // 1. YENİ YAPILAR İÇİN SELECTOR'LAR
+        const selectors = [
+            'li.bc-item > a > span',                    // Klasik yapı
+            '.breadcrumb-item a span',                  // Bootstrap tarzı
+            'nav.breadcrumb li span',                   // Nav tabanlı
+            '.classified-breadcrumb a',                 // İlan breadcrumb
+            '[class*="breadcrumb"] a',                  // Herhangi bir breadcrumb
+            '.categoryPath a',                          // Kategori yolu
+            '#breadcrumb a',                            // ID ile
+            'ol.breadcrumb li a'                        // Sıralı liste
+        ];
 
-        if (items.length > 0) {
-            // Span içindeki metinleri alıp ">" ile birleştiriyoruz
-            const path = Array.from(items)
-                .map(item => item.innerText.trim())
-                .filter(text => text.length > 0) // Boşlukları temizle
+        for (const selector of selectors) {
+            const items = document.querySelectorAll(selector);
+            if (items.length > 0) {
+                const path = Array.from(items)
+                    .map(item => {
+                        // Span varsa onu al, yoksa elementin kendisini
+                        const span = item.querySelector('span');
+                        return (span ? span.innerText : item.innerText).trim();
+                    })
+                    .filter(text => text.length > 0 && text !== 'Ana Sayfa' && text !== 'Sahibinden')
+                    .join(' > ');
+
+                if (path.length > 3) {
+                    console.log("BAI BILMIS: Algılanan Kategori ->", path, "(selector:", selector, ")");
+                    return path;
+                }
+            }
+        }
+
+        // 2. URL'DEN KATEGORİ ÇIKAR (Yedek plan)
+        // Örnek: /otomobil-renault-megane -> Otomobil > Renault > Megane
+        const url = window.location.pathname;
+        const urlParts = url.split('/').filter(p => p.length > 2);
+        if (urlParts.length > 0) {
+            // İlk parçayı formatla (otomobil -> Otomobil, konut-daire -> Konut > Daire)
+            const formattedPath = urlParts
+                .map(part => part.split('-')
+                    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                    .join(' > ')
+                )
                 .join(' > ');
 
-            console.log("BAI BILMIS: Algılanan Kategori ->", path);
-            return path;
+            if (formattedPath.length > 3) {
+                console.log("BAI BILMIS: URL'den Kategori ->", formattedPath);
+                return formattedPath;
+            }
         }
+
+        // 3. SAYFA BAŞLIĞINDAN (Son çare)
+        const title = document.title;
+        if (title.includes(' - ')) {
+            const titleParts = title.split(' - ').slice(0, -1); // Son parça genelde "sahibinden.com"
+            if (titleParts.length > 0) {
+                console.log("BAI BILMIS: Başlıktan Kategori ->", titleParts.join(' > '));
+                return titleParts.join(' > ');
+            }
+        }
+
     } catch (e) { console.error("Kategori okuma hatası:", e); }
     return null;
 }

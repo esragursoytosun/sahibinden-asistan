@@ -107,8 +107,14 @@ async def calculate_valuation(title, current_price, current_id, current_year, ca
         if location and is_real_estate:
             location_parts = [p.strip().lower() for p in location.replace(">", ",").split(",") if len(p.strip()) > 2]
         
-        # Yedek plan için başlık kelimeleri
-        keywords = [k.lower() for k in title.split() if len(k) > 2][:4]
+        # Yedek plan için başlık kelimeleri (marka + model gibi)
+        keywords = [k.lower() for k in title.split() if len(k) > 2][:5]
+        
+        # Kategori parçaları için yardımcı fonksiyon
+        def get_category_parts(cat_path):
+            if not cat_path:
+                return []
+            return [p.strip().lower() for p in cat_path.split(">") if len(p.strip()) > 2]
         
         for item in all_listings:
             if str(item.get("_id")) == str(current_id): continue
@@ -172,18 +178,33 @@ async def calculate_valuation(title, current_price, current_id, current_year, ca
                     
                 if not location_match: continue
                         
-            # 🚗 ARAÇ İÇİN KATEGORİ/BAŞLIK FİLTRELEME 🚗
+            # 🚗 ARAÇ İÇİN ESNEK KATEGORİ/BAŞLIK FİLTRELEME 🚗
             else:
+                # Kategori parçalarını karşılaştır (Vasıta > Otomobil > Renault ile Vasıta > Otomobil > Renault > Megane eşleşmeli)
+                category_match = False
                 if use_category_filter and item_cat:
-                    if category_path not in item_cat and item_cat not in category_path:
-                        continue
+                    current_parts = get_category_parts(category_path)
+                    item_parts = get_category_parts(item_cat)
+                    
+                    # En az 2 ortak kategori parçası olmalı (örn: Vasıta ve Otomobil)
+                    common_parts = set(current_parts) & set(item_parts)
+                    if len(common_parts) >= 2:
+                        category_match = True
+                    # Veya biri diğerinin alt kümesi olmalı
+                    elif set(current_parts[:3]).issubset(set(item_parts)) or set(item_parts[:3]).issubset(set(current_parts)):
+                        category_match = True
                 else:
+                    # Kategori yoksa başlık eşleşmesi yap
                     match_count = sum(1 for k in keywords if k in t)
-                    if match_count < 2: continue
+                    if match_count >= 1:  # En az 1 anahtar kelime eşleşmeli (önceden 2 idi)
+                        category_match = True
+                
+                if not category_match:
+                    continue
 
-                # TAM YIL EŞLEŞMESİ (Araçlar için)
+                # YIL EŞLEŞMESİ (±1 YIL TOLERANS - önceden tam eşleşme istiyordu)
                 if target_year > 1900 and y > 1900:
-                    if y != target_year: 
+                    if abs(y - target_year) > 1:  # ±1 yıl tolerans
                         continue 
 
             # Fiyat Mantık Kontrolü
